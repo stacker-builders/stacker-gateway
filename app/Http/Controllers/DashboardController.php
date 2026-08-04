@@ -9,7 +9,6 @@ use App\Models\Product;
 use App\Support\DashboardBannerSettings;
 use App\Support\SqlDialect;
 use Carbon\Carbon;
-use App\Services\AccountManagerAssignmentService;
 use App\Services\AffiliateCommissionQuery;
 use App\Services\Checkout\CheckoutAbandonmentMetrics;
 use App\Services\TeamAccessService;
@@ -136,15 +135,6 @@ class DashboardController extends Controller
         $data['has_affiliate_enrollments'] = $hasAffiliateEnrollments;
         $data['affiliate_stats'] = null;
         $data['affiliate_recent_sales'] = [];
-
-        $authUser = auth()->user();
-        $merchantForCard = $authUser;
-        if ($authUser?->isTeam() && $authUser->tenant_id) {
-            $merchantForCard = \App\Models\User::query()->find($authUser->tenant_id) ?? $authUser;
-        }
-        $data['account_manager'] = $merchantForCard
-            ? app(AccountManagerAssignmentService::class)->publicCardForMerchant($merchantForCard)
-            : null;
 
         event(new DashboardLoading($data));
 

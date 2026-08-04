@@ -7,6 +7,7 @@ import ConquistasWidget from '@/components/layout/ConquistasWidget.vue';
 import UserMenu from '@/components/layout/UserMenu.vue';
 import KawaiiHeaderRevenue from '@/components/kawaii/KawaiiHeaderRevenue.vue';
 import LocaleThemeControls from '@/components/layout/LocaleThemeControls.vue';
+import AccountManagerCard from '@/components/dashboard/AccountManagerCard.vue';
 import { useI18n } from '@/composables/useI18n';
 import { useSellerDashboardTemplate } from '@/composables/useSellerDashboardTemplate';
 import { useThemedPageHeading } from '@/composables/useThemedPageHeading';
@@ -136,6 +137,10 @@ const dashboardGreetingSubtitleClass = computed(() => {
         <div class="flex shrink-0 items-center gap-2">
             <KawaiiHeaderRevenue v-if="isKawaii && isDashboard && !customerPanel" />
             <ConquistasWidget v-if="!customerPanel && !themedShell && (!isDashboard || !isMobile)" />
+            <AccountManagerCard
+                v-if="!customerPanel"
+                :variant="controlsVariant"
+            />
             <LocaleThemeControls
                 language-only
                 :variant="controlsVariant"

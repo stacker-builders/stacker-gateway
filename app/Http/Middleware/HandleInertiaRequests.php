@@ -321,6 +321,11 @@ class HandleInertiaRequests extends Middleware
             'seller_panel_support' => $user && $user->canAccessSellerPanel()
                 ? SellerPanelSupportSettings::publicConfig()
                 : null,
+            'account_manager' => ($user && $user->canAccessSellerPanel() && ! $customerPanel)
+                ? $sharedCache->accountManagerCard(
+                    (int) ($user->isTeam() && $user->tenant_id ? $user->tenant_id : $user->id)
+                )
+                : null,
             'referral_program' => $user && $user->canAccessSellerPanel()
                 ? ReferralProgramSettings::publicConfig()
                 : ['enabled' => false],

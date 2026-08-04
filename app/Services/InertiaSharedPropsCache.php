@@ -26,6 +26,8 @@ class InertiaSharedPropsCache
 
     private const LEGAL_LINKS_TTL = 600;
 
+    private const ACCOUNT_MANAGER_TTL = 60;
+
     /**
      * @return array<string, string>
      */
@@ -152,5 +154,35 @@ class InertiaSharedPropsCache
     public static function forgetLegalPublicLinks(): void
     {
         Cache::forget('inertia.legal.public_links');
+    }
+
+    /**
+     * Card público do gerente de conta do merchant (painel seller).
+     *
+     * @return array<string, mixed>|null
+     */
+    public function accountManagerCard(int $merchantUserId): ?array
+    {
+        if ($merchantUserId < 1) {
+            return null;
+        }
+
+        $key = 'inertia.account_manager.'.$merchantUserId;
+
+        return Cache::remember($key, self::ACCOUNT_MANAGER_TTL, function () use ($merchantUserId) {
+            $merchant = \App\Models\User::query()->find($merchantUserId);
+            if (! $merchant) {
+                return null;
+            }
+
+            return app(AccountManagerAssignmentService::class)->publicCardForMerchant($merchant);
+        });
+    }
+
+    public static function forgetAccountManagerCard(int $merchantUserId): void
+    {
+        if ($merchantUserId > 0) {
+            Cache::forget('inertia.account_manager.'.$merchantUserId);
+        }
     }
 }

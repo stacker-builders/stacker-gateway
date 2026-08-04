@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AccountManager;
 use App\Models\AccountManagerAssignment;
 use App\Models\User;
+use App\Services\InertiaSharedPropsCache;
 use App\Support\AccountManagerSettings;
 use App\Support\SellerPanelSupportSettings;
 use Illuminate\Http\Request;
@@ -162,6 +163,8 @@ class AccountManagerAssignmentService
                 'reason' => $reason,
             ], $request);
         });
+
+        InertiaSharedPropsCache::forgetAccountManagerCard((int) $merchant->id);
     }
 
     /**
