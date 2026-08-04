@@ -40,22 +40,42 @@ GETFY_APP_DEBUG=false
 GETFY_COMPOSE_PROJECT_NAME=$(basename "$ROOT_DIR")
 EOF
 else
-  if grep -Eq '^\s*GETFY_DB_USERNAME\s*=\s*$' "$ENV_FILE" || grep -Eq '^\s*GETFY_DB_PASSWORD\s*=\s*$' "$ENV_FILE" \
-    || grep -Eq '^\s*GETFY_DB_USERNAME\s*=\s*getfy\s*$' "$ENV_FILE" || grep -Eq '^\s*GETFY_DB_PASSWORD\s*=\s*getfy\s*$' "$ENV_FILE"; then
+  # Instalação existente: só preenche se user/senha estiverem ausentes ou vazios.
+  # Nunca regenera só por ainda serem o default "getfy" — o volume Postgres já foi
+  # inicializado com essas credenciais; trocá-las no stack.env derruba a origem (521/522).
+  NEED_U=0
+  NEED_P=0
+  if ! grep -Eq '^\s*GETFY_DB_USERNAME\s*=\s*\S' "$ENV_FILE"; then
+    NEED_U=1
+  fi
+  if ! grep -Eq '^\s*GETFY_DB_PASSWORD\s*=\s*\S' "$ENV_FILE"; then
+    NEED_P=1
+  fi
+  if [ "$NEED_U" = "1" ] || [ "$NEED_P" = "1" ]; then
     U="getfy_$(tr -dc 'a-z0-9' < /dev/urandom | head -c 8)"
     P="$(tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)"
     TMP="$(mktemp)"
-    awk -v U="$U" -v P="$P" '
+    awk -v U="$U" -v P="$P" -v need_u="$NEED_U" -v need_p="$NEED_P" '
       BEGIN { u=0; p=0 }
-      $0 ~ /^GETFY_DB_USERNAME=/ { print "GETFY_DB_USERNAME=" U; u=1; next }
-      $0 ~ /^GETFY_DB_PASSWORD=/ { print "GETFY_DB_PASSWORD=" P; p=1; next }
+      $0 ~ /^GETFY_DB_USERNAME=/ {
+        if (need_u == "1") { print "GETFY_DB_USERNAME=" U; u=1; next }
+        print; u=1; next
+      }
+      $0 ~ /^GETFY_DB_PASSWORD=/ {
+        if (need_p == "1") { print "GETFY_DB_PASSWORD=" P; p=1; next }
+        print; p=1; next
+      }
       { print }
       END {
-        if (!u) print "GETFY_DB_USERNAME=" U
-        if (!p) print "GETFY_DB_PASSWORD=" P
+        if (need_u == "1" && !u) print "GETFY_DB_USERNAME=" U
+        if (need_p == "1" && !p) print "GETFY_DB_PASSWORD=" P
       }
     ' "$ENV_FILE" > "$TMP"
     mv "$TMP" "$ENV_FILE"
+    echo "Aviso: GETFY_DB_USERNAME/PASSWORD estavam vazios em $ENV_FILE — valores gerados." >&2
+  elif grep -Eq '^\s*GETFY_DB_USERNAME\s*=\s*getfy\s*$' "$ENV_FILE" \
+    || grep -Eq '^\s*GETFY_DB_PASSWORD\s*=\s*getfy\s*$' "$ENV_FILE"; then
+    echo "Aviso: $ENV_FILE ainda usa GETFY_DB_USERNAME/PASSWORD default (getfy). Mantido para não quebrar o Postgres existente." >&2
   fi
 fi
 
