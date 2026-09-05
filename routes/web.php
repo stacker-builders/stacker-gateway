@@ -650,6 +650,11 @@ Route::prefix('plataforma')->name('plataforma.')->group(function () {
 
         Route::get('/log-infoprodutor', [\App\Http\Controllers\Platform\SellerActivityLogsController::class, 'index'])
             ->name('seller-activity-logs.index');
+        Route::get('/log-sistema', [\App\Http\Controllers\Platform\SystemLogsController::class, 'index'])
+            ->name('system-logs.index');
+        Route::get('/log-sistema/feed', [\App\Http\Controllers\Platform\SystemLogsController::class, 'feed'])
+            ->middleware('throttle:30,1')
+            ->name('system-logs.feed');
         Route::get('/webhooks', [\App\Http\Controllers\Platform\InboundWebhooksController::class, 'index'])
             ->name('webhooks.index');
 

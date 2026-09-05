@@ -233,6 +233,7 @@ class LocalPlatformTransactionsSeeder extends Seeder
                 ['Pedido reembolso pendente (filtro Reembolsos)', '#'.$pendingRefundOrder->id.' — '.$helena->email],
                 ['Status Reembolso manual (já feito)', '#'.$offlineRefunded->fresh()->id.' — '.$gabriela->email],
                 ['Log Infoprodutor', url('/plataforma/log-infoprodutor')],
+                ['Log sistema', url('/plataforma/log-sistema')],
                 ['Transações', url('/plataforma/transacoes')],
             ]
         );

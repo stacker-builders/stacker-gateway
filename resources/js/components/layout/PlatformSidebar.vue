@@ -26,6 +26,7 @@ import {
     Plug,
     Gift,
     ScrollText,
+    Logs,
     ContactRound,
     ChartNoAxesCombined,
     Webhook,
@@ -133,6 +134,7 @@ const navGroupsCore = [
             { name: 'Saúde UTMify', href: '/plataforma/ops/saude-utmify', icon: Activity },
             { name: 'Webhooks', href: '/plataforma/webhooks', icon: Webhook },
             { name: 'Log Infoprodutor', href: '/plataforma/log-infoprodutor', icon: ScrollText },
+            { name: 'Log sistema', href: '/plataforma/log-sistema', icon: Logs },
             { name: 'Plugins', href: '/plataforma/gerenciar-plugins', icon: Puzzle },
         ],
     },
@@ -218,6 +220,12 @@ function isActive(href) {
     }
     if (href === '/plataforma/ops/saude-utmify') {
         return url === '/plataforma/ops/saude-utmify' || url.startsWith('/plataforma/ops/saude-utmify/');
+    }
+    if (href === '/plataforma/log-infoprodutor') {
+        return url === '/plataforma/log-infoprodutor' || url.startsWith('/plataforma/log-infoprodutor/');
+    }
+    if (href === '/plataforma/log-sistema') {
+        return url === '/plataforma/log-sistema' || url.startsWith('/plataforma/log-sistema/');
     }
     if (href === '/plataforma/webhooks') {
         return url === '/plataforma/webhooks' || url.startsWith('/plataforma/webhooks/');
