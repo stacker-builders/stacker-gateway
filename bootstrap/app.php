@@ -215,6 +215,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('settlement:release')->everyFiveMinutes();
         $schedule->command('schedule:heartbeat')->everyMinute();
         $schedule->command('push:process-schedule')->everyMinute();
+        $schedule->command('backup:database')->everyMinute()->withoutOverlapping(30);
         $schedule->command('conquistas:reconcile')->dailyAt('03:30');
         $schedule->command('metrics:aggregate-daily --sync')->dailyAt('01:15');
         // Logs: daily + a cada 6h (evita flood diurno encher disco antes do prune noturno).

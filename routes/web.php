@@ -460,6 +460,19 @@ Route::prefix('plataforma')->name('plataforma.')->group(function () {
         Route::post('/configuracoes/storage/migrate', [\App\Http\Controllers\StorageMigrateController::class, '__invoke'])
             ->withoutMiddleware([\App\Http\Middleware\HandleInertiaRequests::class])
             ->name('settings.storage.migrate');
+        Route::post('/configuracoes/backup/run', [\App\Http\Controllers\Platform\DatabaseBackupController::class, 'run'])
+            ->middleware('throttle:3,1')
+            ->withoutMiddleware([\App\Http\Middleware\HandleInertiaRequests::class])
+            ->name('settings.backup.run');
+        Route::post('/configuracoes/backup/download', [\App\Http\Controllers\Platform\DatabaseBackupController::class, 'download'])
+            ->middleware('throttle:3,1')
+            ->withoutMiddleware([\App\Http\Middleware\HandleInertiaRequests::class])
+            ->name('settings.backup.download');
+        Route::get('/configuracoes/backup/arquivos/{filename}', [\App\Http\Controllers\Platform\DatabaseBackupController::class, 'file'])
+            ->where('filename', 'stacker-[A-Za-z0-9.-]+\.sql\.gz')
+            ->middleware('throttle:20,1')
+            ->withoutMiddleware([\App\Http\Middleware\HandleInertiaRequests::class])
+            ->name('settings.backup.file');
         Route::get('/configuracoes/idiomas/data', [\App\Http\Controllers\Platform\LanguageSettingsController::class, 'data'])->name('settings.languages.data');
         Route::post('/configuracoes/idiomas/languages', [\App\Http\Controllers\Platform\LanguageSettingsController::class, 'addLanguage'])->name('settings.languages.add');
         Route::put('/configuracoes/idiomas/languages/{platformLanguage}', [\App\Http\Controllers\Platform\LanguageSettingsController::class, 'updateLanguage'])->name('settings.languages.update');

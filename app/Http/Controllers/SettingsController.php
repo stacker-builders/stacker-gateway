@@ -22,6 +22,8 @@ use App\Support\ProductApprovalSettings;
 use App\Support\KycRequirementSettings;
 use App\Support\SellerPanelSupportSettings;
 use App\Support\PlatformCompanySettings;
+use App\Support\DatabaseBackupSettings;
+use App\Services\Platform\DatabaseBackupService;
 use App\Support\BrazilianDocuments;
 use App\Services\InstallationPublicUrlService;
 use App\Services\Stacker\ContainerRestartRequestService;
@@ -100,6 +102,7 @@ class SettingsController extends Controller
             && trim($storageS3SecretRaw) === '';
 
         $legalForm = app(LegalDocumentsService::class)->forAdminForm();
+        $backupService = app(DatabaseBackupService::class);
 
         return Inertia::render('Settings/Index', [
             'current_version' => $currentVersion,
@@ -159,7 +162,17 @@ class SettingsController extends Controller
                     'legal_privacy_contact_email' => $legalForm['legal_privacy_contact_email'],
                     'legal_cookie_banner_enabled' => $legalForm['legal_cookie_banner_enabled'],
                 ] : []),
+                ...($tenantId === null ? DatabaseBackupSettings::forSettingsForm() : []),
             ],
+            'backup_files' => $tenantId === null ? $backupService->listBackups() : [],
+            'backup_status' => $tenantId === null ? DatabaseBackupSettings::lastRun() : null,
+            'backup_storage' => $tenantId === null ? [
+                'provider' => $backupService->destinationProvider(),
+                'is_remote' => $backupService->destinationIsRemote(),
+                'label' => $backupService->destinationLabel(),
+                'prefix' => DatabaseBackupSettings::destinationPrefix(),
+                'independent_from_media' => true,
+            ] : null,
             'legal_defaults' => $tenantId === null ? ($legalForm['legal_defaults'] ?? []) : [],
             'seller_integrations_catalog' => $tenantId === null ? SellerIntegrationVisibility::catalog() : [],
         ]);
@@ -250,6 +263,7 @@ class SettingsController extends Controller
             ],
             'platform_checkout_notice_enabled' => ['nullable', 'boolean'],
             'platform_checkout_notice' => ['nullable', 'string', 'max:5000'],
+            ...DatabaseBackupSettings::validationRules(),
         ]);
 
         $tenantId = PlatformConfigContext::settingsTenantId();
@@ -341,6 +355,7 @@ class SettingsController extends Controller
             SellerPanelSupportSettings::persistFromValidated($validated);
             PlatformCompanySettings::persistFromValidated($validated);
             KycRequirementSettings::persistFromValidated($validated);
+            DatabaseBackupSettings::persistFromValidated($validated, $request);
         }
 
         if ($tenantId === null && array_key_exists('physical_products_enabled', $validated)) {
@@ -412,6 +427,7 @@ class SettingsController extends Controller
             'kyc_require_company_address_proof',
             'kyc_require_company_constitution',
         ];
+        $backupKeys = DatabaseBackupSettings::FORM_KEYS;
         // Handle passwords separately (encrypt)
         if (array_key_exists('smtp_password', $validated) && $validated['smtp_password'] !== null && $validated['smtp_password'] !== '') {
             Setting::set('smtp_password', encrypt($validated['smtp_password']), $tenantId);
@@ -459,6 +475,9 @@ class SettingsController extends Controller
                 continue;
             }
             if (in_array($key, $kycRequirementKeys, true)) {
+                continue;
+            }
+            if (in_array($key, $backupKeys, true)) {
                 continue;
             }
             if (in_array($key, $brandingKeys, true)) {

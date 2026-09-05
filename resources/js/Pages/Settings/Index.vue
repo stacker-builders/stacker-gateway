@@ -22,6 +22,7 @@ import {
     Scale,
     PlayCircle,
     Headset,
+    DatabaseBackup,
     Puzzle,
     Globe,
     Building2,
@@ -40,6 +41,7 @@ import KycTab from '@/Pages/Settings/Tabs/KycTab.vue';
 import DemoTab from '@/Pages/Settings/Tabs/DemoTab.vue';
 import LegalTab from '@/Pages/Settings/Tabs/LegalTab.vue';
 import SellerPanelSupportTab from '@/Pages/Settings/Tabs/SellerPanelSupportTab.vue';
+import BackupTab from '@/Pages/Settings/Tabs/BackupTab.vue';
 import PublicUrlTab from '@/Pages/Settings/Tabs/PublicUrlTab.vue';
 import PlatformDataTab from '@/Pages/Settings/Tabs/PlatformDataTab.vue';
 import SellerIntegrationsTab from '@/Pages/Settings/Tabs/SellerIntegrationsTab.vue';
@@ -106,10 +108,22 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    backup_files: {
+        type: Array,
+        default: () => [],
+    },
+    backup_status: {
+        type: Object,
+        default: null,
+    },
+    backup_storage: {
+        type: Object,
+        default: () => ({}),
+    },
 });
 
 function allAllowedTabIds() {
-    const core = ['email', 'storage', 'personalizacao', 'banners_dashboard', 'template_dashboard', 'idiomas', 'traducoes', 'moedas', 'recursos', 'suporte_painel', 'seguranca', 'kyc', 'lgpd', 'integracoes', 'dados_plataforma', 'url_publica', 'cron', 'update', 'demo'];
+    const core = ['email', 'storage', 'backup', 'personalizacao', 'banners_dashboard', 'template_dashboard', 'idiomas', 'traducoes', 'moedas', 'recursos', 'suporte_painel', 'seguranca', 'kyc', 'lgpd', 'integracoes', 'dados_plataforma', 'url_publica', 'cron', 'update', 'demo'];
     const extra = (props.settings_plugin_tabs || []).map((t) => t.id).filter(Boolean);
     return [...core, ...extra];
 }
@@ -188,6 +202,19 @@ const form = useForm({
     storage_s3_region: props.settings.storage_provider === 'r2' ? 'auto' : (props.settings.storage_s3_region ?? 'us-east-1'),
     storage_s3_endpoint: props.settings.storage_s3_endpoint ?? '',
     storage_s3_url: props.settings.storage_s3_url ?? '',
+    backup_enabled: props.settings.backup_enabled ?? '0',
+    backup_daily_at: props.settings.backup_daily_at ?? '03:00',
+    backup_retention_days: Number(props.settings.backup_retention_days ?? 7) || 7,
+    backup_destination_provider: props.settings.backup_destination_provider ?? 'local',
+    backup_destination_s3_key: props.settings.backup_destination_s3_key ?? '',
+    backup_destination_s3_secret: '',
+    backup_destination_s3_bucket: props.settings.backup_destination_s3_bucket ?? '',
+    backup_destination_s3_region: props.settings.backup_destination_provider === 'r2'
+        ? 'auto'
+        : (props.settings.backup_destination_s3_region ?? 'us-east-1'),
+    backup_destination_s3_endpoint: props.settings.backup_destination_s3_endpoint ?? '',
+    backup_destination_prefix: props.settings.backup_destination_prefix ?? 'backups/db',
+    backup_destination_secret_configured: Boolean(props.settings.backup_destination_secret_configured),
     physical_products_enabled: Boolean(props.settings.physical_products_enabled),
     integration_webhook_enabled: props.settings.integration_webhook_enabled !== false,
     integration_utmify_enabled: props.settings.integration_utmify_enabled !== false,
@@ -242,6 +269,7 @@ const sendTestSending = vueRef(false);
 const coreTabsStatic = [
     { id: 'email', label: 'E-mail', icon: Mail, group: 'comunicacao' },
     { id: 'storage', label: 'Storage', icon: HardDrive, group: 'operacao' },
+    { id: 'backup', label: 'Backup', icon: DatabaseBackup, group: 'operacao' },
     { id: 'personalizacao', label: 'Personalização', icon: Palette, group: 'aparencia' },
     { id: 'banners_dashboard', label: 'Banners do dashboard', icon: Images, group: 'aparencia' },
     { id: 'template_dashboard', label: 'Template do dashboard', icon: LayoutGrid, group: 'aparencia' },
@@ -743,6 +771,20 @@ function buildSettingsPayload() {
             legal_terms_of_use_html: data.legal_terms_of_use_html,
             legal_privacy_contact_email: data.legal_privacy_contact_email,
             legal_cookie_banner_enabled: data.legal_cookie_banner_enabled,
+        };
+    }
+    if (activeTab.value === 'backup') {
+        return {
+            backup_enabled: data.backup_enabled,
+            backup_daily_at: data.backup_daily_at,
+            backup_retention_days: data.backup_retention_days,
+            backup_destination_provider: data.backup_destination_provider,
+            backup_destination_s3_key: data.backup_destination_s3_key,
+            backup_destination_s3_secret: data.backup_destination_s3_secret,
+            backup_destination_s3_bucket: data.backup_destination_s3_bucket,
+            backup_destination_s3_region: data.backup_destination_s3_region,
+            backup_destination_s3_endpoint: data.backup_destination_s3_endpoint,
+            backup_destination_prefix: data.backup_destination_prefix,
         };
     }
     if (activeTab.value === 'recursos') {
@@ -1300,6 +1342,25 @@ const selectClass =
                             </div>
                         </div>
                     </section>
+                </div>
+            </Transition>
+
+            <!-- Aba Backup -->
+            <Transition
+                enter-active-class="transition duration-200 ease-out"
+                enter-from-class="opacity-0"
+                enter-to-class="opacity-100"
+                leave-active-class="transition duration-150 ease-in"
+                leave-from-class="opacity-100"
+                leave-to-class="opacity-0"
+            >
+                <div v-show="activeTab === 'backup'" class="space-y-6">
+                    <BackupTab
+                        :form="form"
+                        :files="backup_files"
+                        :status="backup_status"
+                        :storage="backup_storage"
+                    />
                 </div>
             </Transition>
 
