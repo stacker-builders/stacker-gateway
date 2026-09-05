@@ -11,7 +11,15 @@ final class VersellPayoutStatuses
     {
         $status = strtoupper(trim($status));
 
-        return in_array($status, ['SETTLED', 'PAID', 'COMPLETED', 'SUCCESS', 'SUCCEEDED'], true);
+        // LIQUIDATED = status real do webhook TRANSFER da Versell quando o PIX liquidou.
+        return in_array($status, [
+            'LIQUIDATED',
+            'SETTLED',
+            'PAID',
+            'COMPLETED',
+            'SUCCESS',
+            'SUCCEEDED',
+        ], true);
     }
 
     public static function isFailedStatus(string $status): bool
