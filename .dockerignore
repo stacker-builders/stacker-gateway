@@ -8,6 +8,8 @@
 /storage/framework
 /agent/node_modules
 /dist-releases
+/.stacker-update-staging
+/getfy-gateway.zip
 .git
 # Symlink storage:link — no Windows o BuildKit falha com "invalid file request public/storage"
 /public/storage
