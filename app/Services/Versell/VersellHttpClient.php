@@ -334,6 +334,89 @@ class VersellHttpClient
     }
 
     /**
+     * POST multipart (defesa MED com arquivos).
+     *
+     * @param  array<string, mixed>  $credentials
+     * @param  list<array{name: string, contents: mixed, filename?: string}>  $multipart
+     */
+    public function requestMultipart(
+        string $api,
+        array $credentials,
+        string $method,
+        string $path,
+        array $multipart,
+    ): Response {
+        $api = $this->normalizeApi($api);
+        $token = $this->getAccessToken($api, $credentials, false);
+        $response = $this->sendMultipart($api, $credentials, $method, $path, $token, $multipart);
+        if ($response->status() !== 401) {
+            return $response;
+        }
+
+        $this->forgetToken($api, $credentials);
+        $fresh = $this->getAccessToken($api, $credentials, true);
+
+        return $this->sendMultipart($api, $credentials, $method, $path, $fresh, $multipart);
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     * @param  list<array{name: string, contents: mixed, filename?: string}>  $multipart
+     */
+    private function sendMultipart(
+        string $api,
+        array $credentials,
+        string $method,
+        string $path,
+        string $token,
+        array $multipart,
+    ): Response {
+        $mtls = $this->mtlsOptions($api, $credentials);
+        $pending = Http::acceptJson()
+            ->timeout(self::REQUEST_TIMEOUT_SECONDS)
+            ->withOptions(array_merge($mtls, ['connect_timeout' => self::CONNECT_TIMEOUT_SECONDS]))
+            ->withToken($token);
+
+        foreach ($multipart as $part) {
+            $name = (string) ($part['name'] ?? 'file');
+            $contents = $part['contents'] ?? '';
+            $filename = isset($part['filename']) ? (string) $part['filename'] : null;
+            $pending = $filename !== null && $filename !== ''
+                ? $pending->attach($name, $contents, $filename)
+                : $pending->attach($name, $contents);
+        }
+
+        $url = $this->url($api, $path);
+        $method = strtoupper($method);
+        $started = microtime(true);
+        try {
+            $response = match ($method) {
+                'PUT' => $pending->put($url),
+                'PATCH' => $pending->patch($url),
+                default => $pending->post($url),
+            };
+        } catch (\Throwable $e) {
+            Log::warning('Versell HTTP multipart failed', [
+                'gateway' => 'versell',
+                'api' => $api,
+                'endpoint' => $path,
+                'error' => $this->sanitizeLogMessage($e->getMessage()),
+            ]);
+            throw $e;
+        }
+
+        Log::info('Versell HTTP multipart response', [
+            'gateway' => 'versell',
+            'api' => $api,
+            'endpoint' => $path,
+            'status' => $response->status(),
+            'elapsed_ms' => (int) round((microtime(true) - $started) * 1000),
+        ]);
+
+        return $response;
+    }
+
+    /**
      * @param  array<string, mixed>  $credentials
      */
     private function basePending(string $api, array $credentials): PendingRequest

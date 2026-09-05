@@ -7,6 +7,7 @@ use App\Models\MedDispute;
 use App\Services\CajuPay\CajuPayMedService;
 use App\Services\Med\MedDefenseDossierService;
 use App\Services\SellerActivityLogService;
+use App\Services\Versell\VersellMedService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -19,6 +20,7 @@ class SellerMedDisputesController extends Controller
 
     public function __construct(
         protected CajuPayMedService $medService,
+        protected VersellMedService $versellMedService,
         protected MedDefenseDossierService $dossierService,
     ) {}
 
@@ -64,11 +66,19 @@ class SellerMedDisputesController extends Controller
         ]);
 
         try {
-            $this->medService->submitDefense(
-                $dispute,
-                $validated['text'],
-                $request->file('attachments', []) ?? []
-            );
+            if (VersellMedService::isVersellDispute($dispute)) {
+                $this->versellMedService->submitDefense(
+                    $dispute,
+                    $validated['text'],
+                    $request->file('attachments', []) ?? []
+                );
+            } else {
+                $this->medService->submitDefense(
+                    $dispute,
+                    $validated['text'],
+                    $request->file('attachments', []) ?? []
+                );
+            }
         } catch (\Throwable $e) {
             report($e);
 
@@ -81,7 +91,7 @@ class SellerMedDisputesController extends Controller
         ]);
 
         return redirect()->route('disputas.show', $dispute)
-            ->with('success', 'Defesa enviada à CajuPay.');
+            ->with('success', 'Defesa enviada ao gateway.');
     }
 
     public function generateDossier(Request $request, MedDispute $dispute): RedirectResponse
