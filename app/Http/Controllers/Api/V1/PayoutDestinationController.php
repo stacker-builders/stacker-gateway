@@ -51,7 +51,7 @@ class PayoutDestinationController extends Controller
             'persisted_to_merchant' => false,
         ];
 
-        if ($slug === 'cajupay' && ($result['key_owner_document'] ?? '') !== '') {
+        if (in_array($slug, ['cajupay', 'versell'], true) && ($result['key_owner_document'] ?? '') !== '') {
             $response['key_owner_document_masked'] = PayoutDestinationValidator::maskDocument($result['key_owner_document']);
         }
 

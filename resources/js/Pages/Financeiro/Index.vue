@@ -362,12 +362,12 @@ function syncPayoutPixFormFromProps() {
     if (props.payout_pix_setup === 'label_and_key') {
         payoutPixForm.label = (s.payout_pix_label || s.cajupay_pix_label || '').trim();
         payoutPixForm.pix_key_type = s.cajupay_pix_key_type || s.payout_pix_key_type || 'cpf';
-        const rawKey = (s.cajupay_pix_key || '').trim();
+        const rawKey = (s.cajupay_pix_key || s.payout_pix_key || '').trim();
         payoutPixForm.pix_key =
             payoutPixForm.pix_key_type === 'cpf' || payoutPixForm.pix_key_type === 'cnpj'
                 ? formatCpfCnpjMask(rawKey, payoutPixForm.pix_key_type)
                 : rawKey;
-        const savedDoc = (s.cajupay_pix_key_owner_document || '').replace(/\D/g, '');
+        const savedDoc = (s.cajupay_pix_key_owner_document || s.payout_pix_key_owner_document || '').replace(/\D/g, '');
         const hint = (props.caju_pix_owner_document_hint || '').replace(/\D/g, '');
         const doc = savedDoc || hint || '';
         payoutPixForm.key_owner_document = doc
@@ -579,7 +579,7 @@ const settlementCards = computed(() => {
 const hasPayoutPixRegistered = computed(() => {
     const s = props.payout_settings || {};
     if (props.payout_pix_setup === 'label_and_key') {
-        return !!(s.cajupay_pix_key_id || s.cajupay_pix_key);
+        return !!(s.cajupay_pix_key_id || s.cajupay_pix_key || s.payout_pix_key);
     }
     if (props.payout_pix_setup === 'key_and_receiver' || props.payout_pix_setup === 'pix_key_only') {
         const k = (s.payout_pix_key || s.spacepag_pix_key || s.woovi_pix_key || '').trim();

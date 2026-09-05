@@ -68,7 +68,7 @@ class PayoutDestinationValidator
             return ['ok' => false, 'field' => 'pix_key', 'message' => 'Saque automático não configurado na plataforma.'];
         }
 
-        if ($slug === 'cajupay') {
+        if ($slug === 'cajupay' || $slug === 'versell') {
             if (! in_array($pixKeyType, self::API_PIX_KEY_TYPES, true)) {
                 return ['ok' => false, 'field' => 'pix_key_type', 'message' => 'Tipo de chave PIX inválido.'];
             }
@@ -104,7 +104,7 @@ class PayoutDestinationValidator
             ];
         }
 
-        if ($slug === 'spacepag' || $slug === 'woovi') {
+        if (in_array($slug, ['spacepag', 'woovi', 'bspay', 'onlyup'], true)) {
             if (! in_array($pixKeyType, ['cpf', 'cnpj', 'email', 'phone', 'evp', 'random'], true)) {
                 return ['ok' => false, 'field' => 'pix_key_type', 'message' => 'Tipo de chave PIX inválido.'];
             }
@@ -137,7 +137,7 @@ class PayoutDestinationValidator
 
         $settings = is_array($owner->payout_settings) ? $owner->payout_settings : [];
 
-        if ($slug === 'cajupay') {
+        if ($slug === 'cajupay' || $slug === 'versell') {
             $pixKey = PayoutUserSettings::cajuPixKey($settings);
             $pixKeyType = PayoutUserSettings::cajuPixKeyType($settings);
             $ownerDoc = PayoutUserSettings::cajuPixOwnerDocument($settings);
@@ -169,7 +169,7 @@ class PayoutDestinationValidator
             return ['ok' => true];
         }
 
-        if ($slug === 'spacepag' || $slug === 'woovi') {
+        if (in_array($slug, ['spacepag', 'woovi', 'bspay', 'onlyup'], true)) {
             $pixKey = PayoutUserSettings::pixKey($settings);
             if ($pixKey === '') {
                 return [
