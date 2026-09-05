@@ -104,6 +104,7 @@ class VersellCashOutTest extends TestCase
     public function test_status_mapping(): void
     {
         $this->assertSame('paid', VersellPayoutStatuses::mapToLocal('SETTLED'));
+        $this->assertSame('paid', VersellPayoutStatuses::mapToLocal('LIQUIDATED'));
         $this->assertSame('failed', VersellPayoutStatuses::mapToLocal('CANCELED'));
         $this->assertSame('pending', VersellPayoutStatuses::mapToLocal('ON_QUEUE'));
         $this->assertSame('refunded', VersellPayoutStatuses::mapToLocal('REFUNDED'));
@@ -357,6 +358,45 @@ class VersellCashOutTest extends TestCase
         $response = app(VersellPayoutWebhookController::class)->handle($request);
         $this->assertSame(200, $response->getStatusCode());
         $this->assertSame('paid', $w->fresh()->status);
+    }
+
+    public function test_transfer_webhook_liquidated_nested_payload_marks_paid(): void
+    {
+        if (! Schema::hasTable('withdrawals')) {
+            $this->markTestSkipped('withdrawals table');
+        }
+
+        $seller = User::factory()->create(['role' => User::ROLE_INFOPRODUTOR]);
+        $w = Withdrawal::query()->create([
+            'tenant_id' => $seller->id,
+            'user_id' => $seller->id,
+            'amount' => 52.97,
+            'fee_amount' => 0,
+            'net_amount' => 52.97,
+            'bucket' => 'pix',
+            'status' => 'processing',
+            'currency' => 'BRL',
+            'payout_provider' => 'versell',
+            'payout_external_id' => 'W67VC6321EA65F8A8D8D',
+            'payout_meta' => ['idempotency_key' => 'W67VC6321EA65F8A8D8D'],
+        ]);
+
+        $request = Request::create('/webhooks/gateways/versell/transfer', 'POST', [
+            'type' => 'TRANSFER',
+            'data' => [
+                'id' => 33580434,
+                'status' => 'LIQUIDATED',
+                'endToEndId' => 'E372939302026090500152188817ca3d',
+                'idempotencyKey' => 'W67VC6321EA65F8A8D8D',
+                'remittanceInformation' => 'Saque #67',
+            ],
+        ]);
+
+        $response = app(VersellPayoutWebhookController::class)->handle($request);
+        $this->assertSame(200, $response->getStatusCode());
+        $fresh = $w->fresh();
+        $this->assertSame('paid', $fresh->status);
+        $this->assertSame('E372939302026090500152188817ca3d', $fresh->payout_external_id);
     }
 
     public function test_cashout_webhook_marks_failed(): void
