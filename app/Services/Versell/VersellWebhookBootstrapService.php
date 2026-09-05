@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Log;
 /**
  * Registra webhooks Versell:
  * - Cash In: PUT /webhook/{chave} (notifica em {url}/pix)
- * - Cash Out: POST /webhooks/transfer e /webhooks/cashout
+ * - Cash Out: POST /webhooks/transfer, /cashout e /infractions (MED)
  */
 class VersellWebhookBootstrapService
 {
@@ -122,6 +122,7 @@ class VersellWebhookBootstrapService
         $types = [
             'transfer' => GatewayWebhookUrl::forGateway('versell.transfer'),
             'cashout' => GatewayWebhookUrl::forGateway('versell.cashout'),
+            'infractions' => GatewayWebhookUrl::forGateway('versell.infractions'),
         ];
 
         $failed = [];
