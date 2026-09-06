@@ -865,6 +865,8 @@ class Product extends Model
      */
     public function sumCoproducerPercentOnAffiliateSales(): float
     {
+        ProductCoproducer::expireOverdue();
+
         return round((float) $this->coproducers()
             ->whereIn('status', [ProductCoproducer::STATUS_PENDING, ProductCoproducer::STATUS_ACTIVE])
             ->where('commission_on_affiliate_sales', true)

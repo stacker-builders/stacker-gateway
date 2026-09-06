@@ -9,6 +9,7 @@ use App\Models\WalletTransaction;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
 
 class CoproductionCommissionQuery
@@ -58,14 +59,33 @@ class CoproductionCommissionQuery
             $query->where('wallet_transactions.created_at', '<=', $end);
         }
 
-        $productId = trim((string) $request->query('product_id', ''));
-        if ($productId !== '') {
-            $allowedProductIds = self::productIdsForCoproducer($user);
-            if (! in_array($productId, $allowedProductIds, true)) {
+        $productIds = $request->query('product_ids');
+        $allowedProductIds = self::productIdsForCoproducer($user);
+        if (is_array($productIds) && $productIds !== []) {
+            $ids = array_values(array_filter(array_map(
+                fn ($id) => trim((string) $id),
+                $productIds
+            ), fn ($id) => $id !== ''));
+            $ids = array_values(array_intersect($ids, $allowedProductIds));
+            if ($ids === []) {
                 $query->whereRaw('1 = 0');
             } else {
-                $query->whereHas('order', fn (Builder $oq) => $oq->where('product_id', $productId));
+                $query->whereHas('order', fn (Builder $oq) => $oq->whereIn('product_id', $ids));
             }
+        } else {
+            $productId = trim((string) $request->query('product_id', ''));
+            if ($productId !== '') {
+                if (! in_array($productId, $allowedProductIds, true)) {
+                    $query->whereRaw('1 = 0');
+                } else {
+                    $query->whereHas('order', fn (Builder $oq) => $oq->where('product_id', $productId));
+                }
+            }
+        }
+
+        $paymentMethod = trim((string) $request->query('payment_method', ''));
+        if ($paymentMethod !== '' && $paymentMethod !== 'all') {
+            $query->whereHas('order', fn (Builder $oq) => $oq->where('payment_method', $paymentMethod));
         }
 
         $status = trim((string) $request->query('status', 'all'));
@@ -193,6 +213,8 @@ class CoproductionCommissionQuery
             return [];
         }
 
+        ProductCoproducer::expireOverdue();
+
         $email = ProductCoproducer::normalizeEmail((string) $user->email);
         $storage = app(StorageService::class);
 
@@ -208,7 +230,14 @@ class CoproductionCommissionQuery
             ->orderByRaw("CASE status WHEN 'pending' THEN 0 WHEN 'active' THEN 1 ELSE 2 END")
             ->orderByDesc('accepted_at')
             ->orderByDesc('updated_at')
-            ->get();
+            ->get()
+            ->filter(function (ProductCoproducer $row) {
+                if ($row->status === ProductCoproducer::STATUS_PENDING) {
+                    return true;
+                }
+
+                return $row->status === ProductCoproducer::STATUS_ACTIVE && $row->isActiveNow();
+            });
 
         return $rows->map(function (ProductCoproducer $row) use ($storage) {
             $product = $row->product;
@@ -285,9 +314,91 @@ class CoproductionCommissionQuery
             'customer_name' => $order?->user?->name,
             'customer_email' => $order?->email ?? $order?->user?->email,
             'product_coproducer_id' => $meta['product_coproducer_id'] ?? null,
+            'commission_percent' => isset($meta['commission_percent']) ? (float) $meta['commission_percent'] : null,
             'clears_at' => $clearsAt,
             'created_at' => $tx->created_at?->toIso8601String(),
             'order_amount' => $order ? (float) $order->amount : null,
+        ];
+    }
+
+    /**
+     * Agrupa transações de um pedido em uma linha unificada de /vendas.
+     *
+     * @param  Collection<int, WalletTransaction>  $transactions
+     * @return array<string, mixed>|null
+     */
+    public static function toUnifiedVendaListItem(Collection $transactions): ?array
+    {
+        if ($transactions->isEmpty()) {
+            return null;
+        }
+
+        $first = $transactions->first();
+        $order = $first->order;
+        $product = $order?->product;
+        $meta = is_array($first->meta) ? $first->meta : [];
+
+        $hasPending = $transactions->contains(
+            fn (WalletTransaction $tx) => $tx->type === WalletTransaction::TYPE_CREDIT_SALE_PENDING
+        );
+        $status = $hasPending ? 'pending' : 'available';
+        $statusLabel = $status === 'available' ? 'Disponível' : 'Em liquidação';
+
+        $gross = round((float) $transactions->sum('amount_gross'), 2);
+        $fee = round((float) $transactions->sum('amount_fee'), 2);
+        $net = round((float) $transactions->sum('amount_net'), 2);
+        $percent = isset($meta['commission_percent']) ? (float) $meta['commission_percent'] : null;
+
+        $createdAt = $transactions
+            ->map(fn (WalletTransaction $tx) => $tx->created_at)
+            ->filter()
+            ->sort()
+            ->first();
+
+        return [
+            'id' => $first->id,
+            'list_key' => 'coproduction:'.($first->order_id ?? $first->id),
+            'order_id' => $first->order_id,
+            'order_public_reference' => $order?->public_reference,
+            'status' => $status,
+            'status_label' => $statusLabel,
+            'product_id' => $product?->id ?? $order?->product_id,
+            'product_name' => $product?->name ?? '—',
+            'product_display_name' => $product?->name ?? '—',
+            'sale_gross' => $order ? (float) $order->amount : $gross,
+            'commission_percent' => $percent,
+            'commission_gross' => $gross,
+            'commission_fee' => $fee,
+            'commission_net' => $net,
+            'amount_net' => $net,
+            'payment_method' => $order?->payment_method,
+            'payment_method_label' => $order?->paymentMethodDisplayLabel(),
+            'gateway_label' => $order?->paymentMethodDisplayLabel() ?? '—',
+            'producer_name' => $order?->tenantOwner?->name ?? '—',
+            'customer_name' => $order?->user?->name,
+            'customer_email' => $order?->email ?? $order?->user?->email,
+            'user' => [
+                'name' => $order?->user?->name,
+                'email' => $order?->email ?? $order?->user?->email,
+            ],
+            'email' => $order?->email ?? $order?->user?->email,
+            'created_at' => $createdAt?->toIso8601String() ?? $first->created_at?->toIso8601String(),
+            'is_affiliate_commission' => false,
+            'is_coproduction_commission' => true,
+        ];
+    }
+
+    /**
+     * @param  Collection<int, WalletTransaction>  $transactions
+     * @return array{vendas_encontradas: int, valor_liquido: float}
+     */
+    public static function vendasStatsContribution(Collection $transactions): array
+    {
+        $grouped = $transactions->groupBy('order_id');
+
+        return [
+            'vendas_encontradas' => $grouped->count(),
+            'valor_liquido' => round((float) $transactions->sum('amount_net'), 2),
         ];
     }
 

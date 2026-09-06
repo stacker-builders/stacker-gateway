@@ -144,6 +144,55 @@ class BspayDriver implements GatewayDriver
         ];
     }
 
+    /**
+     * Defesa MED: POST /v2/account/infractions/reply (multipart).
+     *
+     * @param  array<string, mixed>  $credentials
+     * @param  list<\Illuminate\Http\UploadedFile>  $attachments
+     * @return array<string, mixed>
+     *
+     * @see https://dev.bspay.co/disputes/reply
+     */
+    public function submitInfractionReply(array $credentials, string $infractionId, string $message, array $attachments = []): array
+    {
+        $token = $this->getToken($credentials);
+        if ($token === null) {
+            throw new \RuntimeException('BSPay: falha na autenticação (Client ID/Secret).');
+        }
+
+        $response = $this->requestWithAuthRetry($credentials, $token, function (string $bearer) use ($infractionId, $message, $attachments) {
+            $request = Http::acceptJson()
+                ->timeout(30)
+                ->withOptions(['connect_timeout' => 8])
+                ->withToken($bearer);
+
+            foreach ($attachments as $i => $file) {
+                $path = $file->getRealPath();
+                if (! is_string($path) || $path === '') {
+                    continue;
+                }
+                $request = $request->attach(
+                    'files[]',
+                    fopen($path, 'r'),
+                    $file->getClientOriginalName() ?: ('evidence-'.$i.'.bin')
+                );
+            }
+
+            return $request->post($this->url('/v2/account/infractions/reply'), [
+                'id' => $infractionId,
+                'message' => $message,
+            ]);
+        });
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('BSPay: '.$this->errorMessage($response->json(), 'Erro ao enviar defesa da infração.'));
+        }
+
+        $payload = $response->json();
+
+        return is_array($payload) ? $payload : [];
+    }
+
     public function getTransactionStatus(string $transactionId, array $credentials): ?string
     {
         return $this->mapListedStatus($this->lookupListedStatus($transactionId, $credentials, 'cashin'));

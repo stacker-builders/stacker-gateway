@@ -44,6 +44,7 @@ const props = defineProps({
             boleto_generated: true,
             withdrawal_paid: true,
             affiliate_sale_approved: true,
+            coproduction_sale_approved: true,
             affiliate_enrollment_approved: true,
             daily_summary: true,
             system: true,
@@ -77,6 +78,7 @@ const pushForm = useForm({
     boleto_generated: !!props.push_preferences.boleto_generated,
     withdrawal_paid: !!props.push_preferences.withdrawal_paid,
     affiliate_sale_approved: !!props.push_preferences.affiliate_sale_approved,
+    coproduction_sale_approved: props.push_preferences.coproduction_sale_approved !== false,
     affiliate_enrollment_approved: !!props.push_preferences.affiliate_enrollment_approved,
     daily_summary: !!props.push_preferences.daily_summary,
     system: !!props.push_preferences.system,
@@ -757,6 +759,7 @@ function cancelConversion() {
                     <div class="grid gap-3 sm:grid-cols-2">
                         <label class="flex items-center gap-2 text-sm"><input v-model="pushForm.withdrawal_paid" type="checkbox" class="rounded" /> Saque pago</label>
                         <label class="flex items-center gap-2 text-sm"><input v-model="pushForm.affiliate_sale_approved" type="checkbox" class="rounded" /> Comissão de afiliado</label>
+                        <label class="flex items-center gap-2 text-sm"><input v-model="pushForm.coproduction_sale_approved" type="checkbox" class="rounded" /> Comissão de co-produção</label>
                         <label class="flex items-center gap-2 text-sm"><input v-model="pushForm.affiliate_enrollment_approved" type="checkbox" class="rounded" /> Afiliação aprovada</label>
                         <label class="flex items-center gap-2 text-sm"><input v-model="pushForm.daily_summary" type="checkbox" class="rounded" /> Resumo diário de vendas</label>
                         <label class="flex items-center gap-2 text-sm"><input v-model="pushForm.system" type="checkbox" class="rounded" /> Comunicados administrativos</label>

@@ -79,14 +79,51 @@ class ProdutosController extends Controller
 
     public function index(Request $request): Response
     {
-        $tenantId = auth()->user()->tenant_id;
+        $user = auth()->user();
+        $tenantId = $user->tenant_id;
         $rates = config('products.rates', ['brl_eur' => 0.16, 'brl_usd' => 0.18]);
         $query = Product::forTenant($tenantId)->orderBy('name');
-        if (auth()->user()->isTeam()) {
-            $allowed = app(TeamAccessService::class)->allowedProductIdsFor(auth()->user());
+        if ($user->isTeam()) {
+            $allowed = app(TeamAccessService::class)->allowedProductIdsFor($user);
             $query->whereIn('id', $allowed ?: ['__none__']);
         }
-        $products = $query->paginate(20)->withQueryString()->through(fn (Product $p) => $this->productToArray($p, $rates));
+
+        $coproIds = [];
+        $coproPercents = [];
+        if (! $user->isTeam()) {
+            ProductCoproducer::expireOverdue();
+            $coproRows = ProductCoproducer::query()
+                ->where('co_producer_user_id', $user->id)
+                ->where('status', ProductCoproducer::STATUS_ACTIVE)
+                ->where(function ($q) {
+                    $q->whereNull('starts_at')->orWhere('starts_at', '<=', now());
+                })
+                ->where(function ($q) {
+                    $q->whereNull('ends_at')->orWhere('ends_at', '>', now());
+                })
+                ->get(['product_id', 'commission_percent']);
+            $coproIds = $coproRows->pluck('product_id')->map(fn ($id) => (string) $id)->unique()->values()->all();
+            foreach ($coproRows as $row) {
+                $coproPercents[(string) $row->product_id] = (float) $row->commission_percent;
+            }
+        }
+
+        if ($coproIds !== []) {
+            $ownIds = (clone $query)->pluck('id')->map(fn ($id) => (string) $id)->all();
+            $allIds = array_values(array_unique(array_merge($ownIds, $coproIds)));
+            $query = Product::query()->whereIn('id', $allIds ?: ['__none__'])->orderBy('name');
+        }
+
+        $products = $query->paginate(20)->withQueryString()->through(function (Product $p) use ($rates, $tenantId, $coproPercents) {
+            $arr = $this->productToArray($p, $rates);
+            $isCoproduction = (int) $p->tenant_id !== (int) $tenantId;
+            $arr['is_coproduction'] = $isCoproduction;
+            $arr['coproduction_percent'] = $isCoproduction
+                ? ($coproPercents[(string) $p->id] ?? null)
+                : null;
+
+            return $arr;
+        });
 
         $productTypes = collect(PhysicalProductAccess::filterTypeConfig(Product::typeConfig()))->map(fn ($config, $value) => [
             'value' => $value,
@@ -296,7 +333,7 @@ class ProdutosController extends Controller
 
     public function edit(Product $produto): Response
     {
-        $this->authorizeProduct($produto);
+        $this->authorizeProduct($produto, manage: false);
         $produto->load('users:id,name,email', 'offers', 'subscriptionPlans', 'orderBumps');
 
         $rates = config('products.rates', ['brl_eur' => 0.16, 'brl_usd' => 0.18]);
@@ -445,6 +482,8 @@ class ProdutosController extends Controller
                 ->all()
             : [];
 
+        ProductCoproducer::expireOverdue();
+
         $produtoArray['coproducers'] = $produto->coproducers()
             ->with('coProducer:id,name,email')
             ->orderByDesc('id')
@@ -523,8 +562,12 @@ class ProdutosController extends Controller
             ->values()
             ->all();
 
+        $coproductionReadonly = ProductCoproducer::isActiveCoproducerOf((int) auth()->id(), (string) $produto->id)
+            && (int) $produto->tenant_id !== (int) $tenantId;
+
         return Inertia::render('Produtos/Edit', [
             'produto' => $produtoArray,
+            'coproduction_readonly' => $coproductionReadonly,
             'productTypes' => $productTypes,
             'billingTypes' => $billingTypes,
             'productCategories' => Product::categoriesForSelect(),
@@ -1068,6 +1111,7 @@ class ProdutosController extends Controller
         $maxPosition = $produto->offers()->max('position') ?? 0;
         $validated['position'] = $maxPosition + 1;
         $validated['checkout_slug'] = ProductOffer::generateUniqueCheckoutSlug();
+        $validated['affiliate_share_enabled'] = true;
         ProductOffer::create($validated);
 
         $this->logSellerActivity(SellerActivityLogService::PRODUCT_OFFER_CREATED, $produto, [
@@ -1305,19 +1349,26 @@ class ProdutosController extends Controller
         ];
     }
 
-    private function authorizeProduct(Product $produto): void
+    private function authorizeProduct(Product $produto, bool $manage = true): void
     {
-        $tenantId = auth()->user()->tenant_id;
-        if ($produto->tenant_id !== $tenantId) {
-            abort(403);
+        $user = auth()->user();
+        $tenantId = $user->tenant_id;
+        if ((int) $produto->tenant_id === (int) $tenantId) {
+            if ($user->isTeam()) {
+                $allowed = app(TeamAccessService::class)->allowedProductIdsFor($user);
+                if (! in_array($produto->id, $allowed, true)) {
+                    abort(403);
+                }
+            }
+
+            return;
         }
 
-        if (auth()->user()->isTeam()) {
-            $allowed = app(TeamAccessService::class)->allowedProductIdsFor(auth()->user());
-            if (! in_array($produto->id, $allowed, true)) {
-                abort(403);
-            }
+        if (! $manage && ProductCoproducer::isActiveCoproducerOf((int) $user->id, (string) $produto->id)) {
+            return;
         }
+
+        abort(403);
     }
 
     /**

@@ -11,6 +11,7 @@ use App\Services\MinimumChargeService;
 use App\Services\PaymentService;
 use App\Services\PixGoAccess;
 use App\Support\FakeConsumerData;
+use App\Support\SaleOrigin;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -38,6 +39,7 @@ class PixGoChargeService
 
         $metadata = [
             'source' => 'pixgo',
+            'sale_origin' => SaleOrigin::PIXGO,
             'checkout_payment_method' => 'pix',
             'consumer_name' => $consumer['name'],
             'reconcile_until' => now()->addHours(24)->toIso8601String(),
@@ -56,6 +58,7 @@ class PixGoChargeService
             'gateway' => null,
             'gateway_id' => null,
             'payment_method' => 'pix',
+            'sale_origin' => SaleOrigin::PIXGO,
             'cajupay_account_id' => app(CajuPayAccountResolver::class)->accountIdForTenant($tenantId),
             'metadata' => $metadata,
         ]);

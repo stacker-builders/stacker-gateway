@@ -97,6 +97,8 @@ class CoproductionInviteController extends Controller
             return back()->withErrors(['email' => 'Você não pode aceitar co-produção do próprio produto.']);
         }
 
+        ProductCoproducer::expireOverdue();
+
         if (ProductCoproducer::query()
             ->where('product_id', $invitation->product_id)
             ->where('co_producer_user_id', $user->id)
@@ -114,6 +116,7 @@ class CoproductionInviteController extends Controller
             'product_name' => $invitation->product?->name,
         ]);
 
-        return redirect()->route('dashboard')->with('success', 'Co-produção aceita. Suas comissões serão creditadas na carteira conforme as vendas.');
+        return redirect()->route('coproducao.index', ['tab' => 'participacoes'])
+            ->with('success', 'Co-produção aceita. Você já pode acompanhar o produto e as comissões em Co-produção e em Vendas.');
     }
 }

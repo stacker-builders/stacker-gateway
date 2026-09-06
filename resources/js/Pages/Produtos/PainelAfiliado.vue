@@ -123,7 +123,9 @@ function formatOfferPrice(link) {
 }
 
 function linkCopyKey(link) {
-    return link?.type === 'offer' ? `offer-${link.id}` : 'main';
+    if (link?.type === 'offer') return `offer-${link.id}`;
+    if (link?.type === 'plan') return `plan-${link.id}`;
+    return 'main';
 }
 </script>
 
@@ -160,7 +162,7 @@ function linkCopyKey(link) {
                     {{ t('products.affiliate_link_section', 'Link de afiliação') }}
                 </h2>
                 <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                    {{ t('products.affiliate_links_hint', 'Use o link principal ou os links de ofertas liberados pelo produtor.') }}
+                    {{ t('products.affiliate_links_hint', 'Use o link principal, das ofertas ou dos planos do produto.') }}
                 </p>
             </div>
             <div class="space-y-4 p-6">
@@ -177,6 +179,18 @@ function linkCopyKey(link) {
                                 class="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200"
                             >
                                 {{ t('products.affiliate_link_main_badge', 'Principal') }}
+                            </span>
+                            <span
+                                v-else-if="link.type === 'offer'"
+                                class="ml-2 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-800 dark:bg-sky-950/50 dark:text-sky-200"
+                            >
+                                Oferta
+                            </span>
+                            <span
+                                v-else-if="link.type === 'plan'"
+                                class="ml-2 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-800 dark:bg-violet-950/50 dark:text-violet-200"
+                            >
+                                Plano
                             </span>
                         </p>
                         <p v-if="formatOfferPrice(link)" class="text-xs text-zinc-500 dark:text-zinc-400">

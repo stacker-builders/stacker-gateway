@@ -149,6 +149,8 @@ class CoproducerMetricsTrackingController extends Controller
         [$start, $end] = $this->analytics->resolveDateRange($request, $period);
         $filters = $this->analytics->filtersFromRequest($request);
 
+        ProductCoproducer::expireOverdue();
+
         $rows = ProductCoproducer::query()
             ->where('co_producer_user_id', $userId)
             ->where('status', ProductCoproducer::STATUS_ACTIVE)
@@ -156,7 +158,7 @@ class CoproducerMetricsTrackingController extends Controller
                 $q->whereNull('starts_at')->orWhere('starts_at', '<=', now());
             })
             ->where(function ($q) {
-                $q->whereNull('ends_at')->orWhere('ends_at', '>=', now());
+                $q->whereNull('ends_at')->orWhere('ends_at', '>', now());
             })
             ->get(['product_id']);
 

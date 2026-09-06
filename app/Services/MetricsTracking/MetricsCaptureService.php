@@ -528,7 +528,7 @@ class MetricsCaptureService
                 $q->whereNull('starts_at')->orWhere('starts_at', '<=', now());
             })
             ->where(function ($q) {
-                $q->whereNull('ends_at')->orWhere('ends_at', '>=', now());
+                $q->whereNull('ends_at')->orWhere('ends_at', '>', now());
             })
             ->orderByDesc('accepted_at')
             ->value('co_producer_user_id');

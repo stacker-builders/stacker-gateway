@@ -108,16 +108,24 @@ const props = defineProps({
         default: () => ({ pix: false, card: false, boleto: false, pix_auto: false, apple_pay: false, google_pay: false, paypal: false }),
     },
     shipping_stores: { type: Array, default: () => [] },
+    coproduction_readonly: { type: Boolean, default: false },
 });
 
 const page = usePage();
+const coproductionReadonly = computed(() => !!props.coproduction_readonly);
+const visibleTabs = computed(() => {
+    if (!coproductionReadonly.value) {
+        return TABS;
+    }
+    return TABS.filter((tab) => !['member_builder', 'coproducao', 'afiliados', 'order_bump', 'upsell_downsell'].includes(tab.id));
+});
 const currentTab = computed(() => {
     const url = page.url;
     const idx = url.indexOf('?');
     const search = idx !== -1 ? url.slice(idx) : '';
     const q = new URLSearchParams(search);
     const t = q.get('tab');
-    return TABS.some((tab) => tab.id === t) ? t : 'geral';
+    return visibleTabs.value.some((tab) => tab.id === t) ? t : 'geral';
 });
 
 function setTab(tabId) {
@@ -251,12 +259,18 @@ const affiliateForm = useForm({
     affiliate_support_email: props.produto.affiliate_support_email ?? '',
     affiliate_showcase_description: props.produto.affiliate_showcase_description ?? '',
     affiliate_hide_customer_data: Boolean(props.produto.affiliate_hide_customer_data),
-    affiliate_shared_offer_ids: (props.produto.offers || [])
-        .filter((o) => o.affiliate_share_enabled)
-        .map((o) => Number(o.id)),
+    affiliate_shared_offer_ids: (() => {
+        const offers = props.produto.offers || [];
+        const shared = offers.filter((o) => o.affiliate_share_enabled).map((o) => Number(o.id));
+        if (shared.length) {
+            return shared;
+        }
+        return offers.map((o) => Number(o.id)).filter((id) => id > 0);
+    })(),
 });
 
 const affiliateShareableOffers = computed(() => props.produto.offers || []);
+const affiliateShareablePlans = computed(() => props.produto.subscription_plans || []);
 
 function isAffiliateOfferShared(offerId) {
     const id = Number(offerId);
@@ -1279,6 +1293,9 @@ const submitErrorMessage = computed(() => {
 });
 
 function submit() {
+    if (coproductionReadonly.value) {
+        return;
+    }
     const baseUrl = `/produtos/${props.produto.id}`;
     const tab = currentTab.value && currentTab.value !== 'geral' ? `?tab=${currentTab.value}` : '';
     const url = baseUrl + tab;
@@ -1297,6 +1314,13 @@ function submit() {
 </script>
 
 <template>
+    <div class="space-y-4">
+        <div
+            v-if="coproductionReadonly"
+            class="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-100"
+        >
+            Você é co-produtor deste produto. A edição fica com o produtor; aqui você consulta checkout, links e as informações da oferta.
+        </div>
     <div class="flex flex-col lg:flex-row lg:gap-6 space-y-6 lg:space-y-0 lg:pl-2">
         <!-- Desktop: sidebar vertical de abas (alinhado à esquerda junto ao sidebar principal) -->
         <aside
@@ -1304,7 +1328,7 @@ function submit() {
             aria-label="Menu de edição do produto"
         >
             <nav class="flex flex-col gap-0.5">
-                <template v-for="tab in TABS" :key="tab.id">
+                <template v-for="tab in visibleTabs" :key="tab.id">
                     <a
                         v-if="tab.linkOnly && tab.id === 'member_builder' && produto.type === 'area_membros'"
                         :href="`/produtos/${produto.id}/member-builder`"
@@ -1341,7 +1365,7 @@ function submit() {
             class="flex gap-2 overflow-x-auto pb-2 snap-x snap-mandatory no-scrollbar lg:hidden rounded-xl bg-zinc-100/80 p-1 dark:bg-zinc-800/80"
             aria-label="Abas de edição do produto"
         >
-            <template v-for="tab in TABS" :key="tab.id">
+                <template v-for="tab in visibleTabs" :key="tab.id">
                 <a
                     v-if="tab.linkOnly && tab.id === 'member_builder' && produto.type === 'area_membros'"
                     :href="`/produtos/${produto.id}/member-builder`"
@@ -1814,7 +1838,7 @@ function submit() {
                 </section>
 
                 <div class="flex flex-wrap items-center gap-3">
-                    <Button type="submit" :disabled="form.processing">{{ t('products.edit.save_changes', 'Salvar alterações') }}</Button>
+                    <Button v-if="!coproductionReadonly" type="submit" :disabled="form.processing">{{ t('products.edit.save_changes', 'Salvar alterações') }}</Button>
                     <Link
                         href="/produtos"
                         class="inline-flex items-center rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
@@ -2425,7 +2449,7 @@ function submit() {
                     </div>
                 </section>
                 <div class="flex flex-wrap items-center gap-3">
-                    <Button type="submit" :disabled="form.processing">{{ t('products.edit.save_changes', 'Salvar alterações') }}</Button>
+                    <Button v-if="!coproductionReadonly" type="submit" :disabled="form.processing">{{ t('products.edit.save_changes', 'Salvar alterações') }}</Button>
                     <Link
                         href="/produtos"
                         class="inline-flex items-center rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
@@ -2525,7 +2549,7 @@ function submit() {
                     </section>
                 </div>
                 <div class="flex flex-wrap items-center gap-3">
-                    <Button type="submit" :disabled="form.processing">{{ t('products.edit.save_changes', 'Salvar alterações') }}</Button>
+                    <Button v-if="!coproductionReadonly" type="submit" :disabled="form.processing">{{ t('products.edit.save_changes', 'Salvar alterações') }}</Button>
                     <Link
                         href="/produtos"
                         class="inline-flex items-center rounded-xl border border-zinc-200 px-4 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
@@ -3275,7 +3299,7 @@ function submit() {
                                 {{ t('products.edit.affiliate_shared_offers', 'Links de ofertas para afiliados') }}
                             </p>
                             <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                                {{ t('products.edit.affiliate_shared_offers_hint', 'O link principal do checkout sempre fica disponível. Marque as ofertas extras que os afiliados poderão copiar no painel.') }}
+                                {{ t('products.edit.affiliate_shared_offers_hint', 'Todas as ofertas do produto ficam disponíveis para o afiliado. Desmarque só as que não quiser compartilhar.') }}
                             </p>
                             <ul class="mt-3 space-y-2">
                                 <li
@@ -3294,6 +3318,25 @@ function submit() {
                             <p v-if="affiliateForm.errors.affiliate_shared_offer_ids" class="mt-2 text-sm text-red-600">
                                 {{ affiliateForm.errors.affiliate_shared_offer_ids }}
                             </p>
+                        </div>
+                        <div v-if="affiliateShareablePlans.length" class="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-600 dark:bg-zinc-900/40">
+                            <p class="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                                {{ t('products.edit.affiliate_shared_plans', 'Planos de assinatura para afiliados') }}
+                            </p>
+                            <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                                {{ t('products.edit.affiliate_shared_plans_hint', 'Todos os planos deste produto ficam com link próprio no painel do afiliado.') }}
+                            </p>
+                            <ul class="mt-3 space-y-2">
+                                <li
+                                    v-for="plan in affiliateShareablePlans"
+                                    :key="plan.id"
+                                    class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+                                >
+                                    {{ plan.name || ('Plano #' + plan.id) }}
+                                    —
+                                    {{ Number(plan.price || 0).toLocaleString('pt-BR', { style: 'currency', currency: plan.currency || 'BRL' }) }}
+                                </li>
+                            </ul>
                         </div>
                         <div class="flex justify-end">
                             <Button type="submit" :disabled="affiliateForm.processing">{{ affiliateForm.processing ? 'Salvando…' : t('common.save', 'Salvar') }}</Button>
@@ -3360,5 +3403,6 @@ function submit() {
             </div>
         </template>
         </div>
+    </div>
     </div>
 </template>

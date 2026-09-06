@@ -29,7 +29,9 @@ function formatDate(value) {
             <div class="fixed inset-0 bg-zinc-900/50" aria-hidden="true" @click="close" />
             <aside class="relative flex h-full w-full max-w-md flex-col rounded-l-2xl bg-white shadow-2xl dark:bg-zinc-900">
                 <div class="flex items-center justify-between px-5 py-5">
-                    <h2 class="text-lg font-semibold text-zinc-900 dark:text-white">Detalhes da comissão</h2>
+                    <h2 class="text-lg font-semibold text-zinc-900 dark:text-white">
+                        {{ venda?.is_coproduction_commission ? 'Detalhes da co-produção' : 'Detalhes da comissão' }}
+                    </h2>
                     <button type="button" class="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100" aria-label="Fechar" @click="close">
                         <X class="h-5 w-5" />
                     </button>
@@ -41,6 +43,10 @@ function formatDate(value) {
                     <div class="space-y-1">
                         <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">ID da venda</p>
                         <p class="font-mono text-sm">{{ venda.order_id }}</p>
+                    </div>
+                    <div class="space-y-1">
+                        <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">Tipo</p>
+                        <p class="text-sm">{{ venda.is_coproduction_commission ? 'Co-produção' : 'Afiliado' }}</p>
                     </div>
                     <div class="space-y-1">
                         <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">Status da comissão</p>
@@ -85,12 +91,12 @@ function formatDate(value) {
                         <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">Data</p>
                         <p class="text-sm">{{ formatDate(venda.created_at) }}</p>
                     </div>
-                    <div v-if="venda.affiliate_ref" class="space-y-1">
+                    <div v-if="venda.affiliate_ref && !venda.is_coproduction_commission" class="space-y-1">
                         <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">Ref. afiliado</p>
                         <p class="font-mono text-sm">{{ venda.affiliate_ref }}</p>
                     </div>
                     <a
-                        v-if="venda.affiliate_link"
+                        v-if="venda.affiliate_link && !venda.is_coproduction_commission"
                         :href="venda.affiliate_link"
                         target="_blank"
                         rel="noopener noreferrer"

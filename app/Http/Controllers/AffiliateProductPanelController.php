@@ -86,7 +86,10 @@ class AffiliateProductPanelController extends Controller
         $user = $request->user();
         $enrollment = $this->approvedEnrollmentOrAbort($user->id, $produto);
 
-        $produto->loadMissing(['offers' => fn ($q) => $q->orderBy('position')->orderBy('id')]);
+        $produto->loadMissing([
+            'offers' => fn ($q) => $q->orderBy('position')->orderBy('id'),
+            'subscriptionPlans' => fn ($q) => $q->orderBy('position')->orderBy('id'),
+        ]);
         $offerLinks = AffiliateCheckoutLinks::linksForEnrollment($produto, $enrollment);
         $mainLink = collect($offerLinks)->firstWhere('type', 'main');
         $affiliateLink = is_array($mainLink) ? ($mainLink['url'] ?? null) : null;

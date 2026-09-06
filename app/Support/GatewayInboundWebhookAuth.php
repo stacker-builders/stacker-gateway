@@ -77,12 +77,12 @@ final class GatewayInboundWebhookAuth
     }
 
     /**
-     * BSPay: HMAC SHA-256 do raw body em X-BSPay-Signature + timestamp ±300s.
+     * BSPay: HMAC SHA-256 do raw body em X-Webhook-Signature / X-BSPay-Signature + timestamp ±300s.
      */
     public static function verifyBspay(Request $request, ?int $tenantId): bool
     {
         $secret = self::webhookSecret('bspay', $tenantId);
-        $signature = $request->header('X-BSPay-Signature');
+        $signature = $request->header('X-Webhook-Signature') ?: $request->header('X-BSPay-Signature');
         $hasSignature = is_string($signature) && $signature !== '';
 
         // Cashin BSPay não usa HMAC inbound. Só valida se ainda houver secret legado e header.
@@ -90,7 +90,7 @@ final class GatewayInboundWebhookAuth
             return true;
         }
 
-        $timestamp = $request->header('X-BSPay-Timestamp');
+        $timestamp = $request->header('X-Webhook-Timestamp') ?: $request->header('X-BSPay-Timestamp');
         if (! is_string($timestamp) || ! ctype_digit($timestamp)) {
             return false;
         }

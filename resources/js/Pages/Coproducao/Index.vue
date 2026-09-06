@@ -35,8 +35,20 @@ const panelHref = '/coproducao';
 
 const activeTab = computed(() => (props.tab === 'participacoes' ? 'participacoes' : 'painel'));
 
+function participationIsLive(row) {
+    if (row.status !== 'active') {
+        return false;
+    }
+    if (!row.ends_at) {
+        return true;
+    }
+    const ends = Date.parse(row.ends_at);
+
+    return Number.isFinite(ends) && ends > Date.now();
+}
+
 const activeParticipations = computed(() =>
-    (props.participations ?? []).filter((row) => row.status === 'active')
+    (props.participations ?? []).filter(participationIsLive)
 );
 const pendingParticipations = computed(() =>
     (props.participations ?? []).filter((row) => row.status === 'pending')
@@ -360,6 +372,13 @@ function openInvitePage(token) {
                         >
                             Ver transações deste produto
                         </button>
+                        <Link
+                            v-if="row.product?.id"
+                            :href="'/produtos/' + row.product.id + '/edit'"
+                            class="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-[var(--color-primary)] hover:underline"
+                        >
+                            Abrir produto
+                        </Link>
                         <a
                             v-if="row.product?.checkout_slug"
                             :href="'/c/' + row.product.checkout_slug"
