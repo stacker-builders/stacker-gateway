@@ -19,6 +19,7 @@ const fallbackPlaceholders = [
     { token: '{plataforma}', label: 'Nome da plataforma' },
     { token: '{infoprodutor}', label: 'Nome do infoprodutor vendedor' },
     { token: '{email_infoprodutor}', label: 'E-mail do infoprodutor vendedor' },
+    { token: '{email_suporte_produto}', label: 'E-mail para suporte configurado no produto' },
     { token: '{empresa}', label: 'Nome comercial (Empresa) do infoprodutor' },
     { token: '{termos}', label: 'Link clicável “Termos” para /termos-de-uso' },
     { token: '{privacidade}', label: 'Link clicável “Privacidade” para /politica-privacidade' },
@@ -72,6 +73,7 @@ function previewReplace(template) {
     let text = String(template || '');
     const vars = [
         ['{email_infoprodutor}', 'email.infoprodutor@exemplo.com'],
+        ['{email_suporte_produto}', 'suporte.produto@exemplo.com'],
         ['{nome do infoprodutor}', 'Nome do infoprodutor'],
         ['{razao_social}', props.form.platform_legal_name || 'Razão social'],
         ['{razão_social}', props.form.platform_legal_name || 'Razão social'],

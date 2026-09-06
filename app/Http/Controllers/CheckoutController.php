@@ -451,7 +451,7 @@ class CheckoutController extends Controller
         $payload['affiliate_ref'] = $affiliateRef;
         $payload['meta_tracking_debug'] = config('meta_tracking.debug');
         $payload['turnstile'] = CheckoutTurnstileSettings::publicConfig();
-        $payload['platform_checkout_notice'] = PlatformCompanySettings::resolvedCheckoutNoticeForTenant($product->tenant_id);
+        $payload['platform_checkout_notice'] = PlatformCompanySettings::resolvedCheckoutNoticeForTenant($product->tenant_id, $product);
 
         return Inertia::render('Checkout/Show', $payload);
     }
