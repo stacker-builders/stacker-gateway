@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Webhooks;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\Withdrawal;
+use App\Services\Bspay\BspayMedService;
 use App\Services\MerchantWithdrawalService;
 use App\Support\GatewayInboundWebhookAuth;
 use App\Support\PaymentWebhookDispatcher;
@@ -17,6 +18,11 @@ class BspayWebhookController extends Controller
     public function handle(Request $request): JsonResponse
     {
         $event = $this->eventName($request);
+
+        if (str_starts_with($event, 'chargeback.')) {
+            return $this->handleChargeback($request, $event);
+        }
+
         $transactionId = $this->transactionId($request);
         if ($transactionId === null) {
             return response()->json(['message' => 'transaction_id required'], 400);
@@ -35,20 +41,7 @@ class BspayWebhookController extends Controller
             return response()->json(['received' => true, 'ignored' => true]);
         }
 
-        $order = Order::query()
-            ->where('gateway', 'bspay')
-            ->where('gateway_id', $transactionId)
-            ->first();
-
-        if ($order === null) {
-            $externalId = $this->scalar($request, 'external_id');
-            if ($externalId !== null) {
-                $order = Order::query()
-                    ->where('gateway', 'bspay')
-                    ->where('id', $externalId)
-                    ->first();
-            }
-        }
+        $order = $this->findBspayOrder($request, $transactionId);
 
         if ($order === null) {
             return response()->json(['message' => 'Order not found'], 404);
@@ -67,6 +60,77 @@ class BspayWebhookController extends Controller
         );
 
         return response()->json(['received' => true]);
+    }
+
+    private function handleChargeback(Request $request, string $event): JsonResponse
+    {
+        $transactionId = $this->transactionId($request);
+        $order = $this->findBspayOrder($request, $transactionId);
+
+        if ($order === null) {
+            Log::warning('Bspay webhook: order not found for chargeback', [
+                'event' => $event,
+                'transaction_id' => $transactionId,
+                'infraction_id' => $this->scalar($request, 'infraction_id'),
+            ]);
+
+            return response()->json(['message' => 'Order not found'], 404);
+        }
+
+        if (! GatewayInboundWebhookAuth::verifyBspay($request, $order->tenant_id)) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        try {
+            app(BspayMedService::class)->handleWebhookEvent($event, $request->all(), $order);
+        } catch (\Throwable $e) {
+            Log::warning('Bspay webhook: falha ao processar MED', [
+                'event' => $event,
+                'order_id' => $order->id,
+                'error' => mb_substr($e->getMessage(), 0, 300),
+            ]);
+
+            return response()->json(['message' => 'MED processing failed'], 500);
+        }
+
+        return response()->json(['received' => true]);
+    }
+
+    private function findBspayOrder(Request $request, ?string $transactionId): ?Order
+    {
+        if ($transactionId !== null && $transactionId !== '') {
+            $byTx = Order::query()
+                ->where('gateway', 'bspay')
+                ->where('gateway_id', $transactionId)
+                ->first();
+            if ($byTx !== null) {
+                return $byTx;
+            }
+        }
+
+        $externalId = $this->scalar($request, 'external_id');
+        if ($externalId !== null) {
+            $byExternal = Order::query()
+                ->where('gateway', 'bspay')
+                ->where('id', $externalId)
+                ->first();
+            if ($byExternal !== null) {
+                return $byExternal;
+            }
+        }
+
+        $e2e = $this->scalar($request, 'e2e_id');
+        if ($e2e !== null) {
+            return Order::query()
+                ->where('gateway', 'bspay')
+                ->where(function ($q) use ($e2e) {
+                    $q->where('metadata->e2e_id', $e2e)
+                        ->orWhere('metadata->end_to_end_id', $e2e);
+                })
+                ->first();
+        }
+
+        return null;
     }
 
     private function handleCashout(Request $request, string $event, string $transactionId): JsonResponse

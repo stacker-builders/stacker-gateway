@@ -6,9 +6,11 @@ use App\Models\AffiliateCommission;
 use App\Models\CheckoutSession;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\ProductCoproducer;
 use App\Models\ProductOffer;
 use App\Models\User;
 use App\Services\AffiliateCommissionQuery;
+use App\Services\CoproductionCommissionQuery;
 use App\Services\AccessEmailService;
 use App\Services\ManualOrderRefundService;
 use App\Services\Med\MedPolicyService;
@@ -430,6 +432,7 @@ class VendasController extends Controller
             'producer_id' => $this->normalizeString($request->query('producer_id')),
             'commission_status' => $this->normalizeString($request->query('commission_status')) ?? 'all',
             'affiliate_user' => (int) auth()->id(),
+            'coproducer_user' => (int) auth()->id(),
             'team' => auth()->user()?->isTeam() ? app(TeamAccessService::class)->allowedProductIdsFor(auth()->user()) : null,
         ]));
 
@@ -446,7 +449,9 @@ class VendasController extends Controller
         [$statsQuery, $statusFilter] = $this->buildFilteredQuery($request, $tenantId);
         $userId = (int) auth()->id();
         $hasAffiliateEnrollments = AffiliateCommissionQuery::userHasApprovedEnrollments($userId);
+        $hasCoproduction = ProductCoproducer::userHasParticipations($userId);
         $mergeAffiliate = $this->shouldMergeAffiliateCommissions($request, $statusFilter, $hasAffiliateEnrollments);
+        $mergeCoproduction = $this->shouldMergeCoproductionCommissions($request, $statusFilter, $hasCoproduction);
 
         $vendasEncontradas = (clone $statsQuery)->count();
 
@@ -467,6 +472,14 @@ class VendasController extends Controller
             );
             $vendasEncontradas += $affiliateContribution['vendas_encontradas'];
             $valorLiquido += $affiliateContribution['valor_liquido'];
+        }
+
+        if ($mergeCoproduction) {
+            $coproductionContribution = CoproductionCommissionQuery::vendasStatsContribution(
+                $this->buildCoproductionCommissionQuery($request, auth()->user(), $statusFilter)->get()
+            );
+            $vendasEncontradas += $coproductionContribution['vendas_encontradas'];
+            $valorLiquido += $coproductionContribution['valor_liquido'];
         }
 
         $vendasPix = (clone $statsQuery)
@@ -522,11 +535,13 @@ class VendasController extends Controller
         }
 
         $tenantId = $user->tenant_id;
+        $hasCoproduction = ProductCoproducer::userHasParticipations((int) $user->id);
         [$filteredQuery, $statusFilter] = $this->buildFilteredQuery($request, $tenantId);
         $mergeAffiliate = $this->shouldMergeAffiliateCommissions($request, $statusFilter, $hasAffiliateEnrollments);
+        $mergeCoproduction = $this->shouldMergeCoproductionCommissions($request, $statusFilter, $hasCoproduction);
 
-        $vendas = $mergeAffiliate
-            ? $this->paginateUnifiedVendas($request, $filteredQuery, (int) $user->id, $statusFilter)
+        $vendas = ($mergeAffiliate || $mergeCoproduction)
+            ? $this->paginateUnifiedVendas($request, $filteredQuery, (int) $user->id, $statusFilter, $mergeAffiliate, $mergeCoproduction)
             : $filteredQuery
                 ->with([
                     'product:id,name,slug,checkout_slug,affiliate_commission_percent,affiliate_enabled,affiliate_hide_customer_data',
@@ -553,6 +568,17 @@ class VendasController extends Controller
             $productsQuery->whereIn('id', $allowed ?: ['__none__']);
         }
         $products = $productsQuery->get(['id', 'name']);
+        if ($hasCoproduction) {
+            $coproProductIds = CoproductionCommissionQuery::productIdsForCoproducer($user);
+            if ($coproProductIds !== []) {
+                $ownedIds = $products->pluck('id')->map(fn ($id) => (string) $id)->all();
+                $missing = array_values(array_diff($coproProductIds, $ownedIds));
+                if ($missing !== []) {
+                    $extra = Product::query()->whereIn('id', $missing)->orderBy('name')->get(['id', 'name']);
+                    $products = $products->concat($extra)->sortBy('name')->values();
+                }
+            }
+        }
         $offers = ProductOffer::query()
             ->whereHas('product', fn ($q) => $q->forTenant($tenantId))
             ->with('product:id,name')
@@ -576,6 +602,7 @@ class VendasController extends Controller
         return Inertia::render('Vendas/Index', [
             'view' => 'own',
             'has_affiliate_enrollments' => $hasAffiliateEnrollments,
+            'has_coproduction' => $hasCoproduction,
             'vendas' => $vendas,
             'stats' => $stats,
             'status_filter' => $statusFilter,
@@ -609,6 +636,43 @@ class VendasController extends Controller
                 ['value' => AffiliateCommission::STATUS_REFUNDED, 'label' => 'Estornada'],
             ] : [],
         ]);
+    }
+
+    private function shouldMergeCoproductionCommissions(Request $request, string $statusFilter, bool $hasCoproduction): bool
+    {
+        if (! $hasCoproduction) {
+            return false;
+        }
+
+        if ($statusFilter === 'med') {
+            return false;
+        }
+
+        if ($this->normalizeString($request->query('offer_id'))) {
+            return false;
+        }
+
+        if ($this->normalizeString($request->query('utm_source'))) {
+            return false;
+        }
+
+        if ($this->normalizeString($request->query('utm_medium'))) {
+            return false;
+        }
+
+        if ($this->normalizeString($request->query('utm_campaign'))) {
+            return false;
+        }
+
+        if ($this->normalizeString($request->query('sale_channel'))) {
+            return false;
+        }
+
+        if (in_array($this->normalizeString($request->query('affiliate')), ['1', 'yes'], true)) {
+            return false;
+        }
+
+        return true;
     }
 
     private function shouldMergeAffiliateCommissions(Request $request, string $statusFilter, bool $hasAffiliateEnrollments): bool
@@ -680,7 +744,14 @@ class VendasController extends Controller
         return $query;
     }
 
-    private function paginateUnifiedVendas(Request $request, $filteredQuery, int $userId, string $statusFilter): LengthAwarePaginator
+    private function paginateUnifiedVendas(
+        Request $request,
+        $filteredQuery,
+        int $userId,
+        string $statusFilter,
+        bool $mergeAffiliate = true,
+        bool $mergeCoproduction = false,
+    ): LengthAwarePaginator
     {
         $perPage = 20;
         $page = max(1, (int) $request->query('page', 1));
@@ -694,17 +765,38 @@ class VendasController extends Controller
                 'ts' => $order->created_at?->getTimestamp() ?? 0,
             ]);
 
-        $commissionStubs = $this->buildAffiliateCommissionQuery($request, $userId, $statusFilter)
-            ->select(['affiliate_commissions.id', 'affiliate_commissions.created_at'])
-            ->get()
-            ->map(fn (AffiliateCommission $commission) => [
-                'kind' => 'commission',
-                'id' => $commission->id,
-                'ts' => $commission->created_at?->getTimestamp() ?? 0,
-            ]);
+        $commissionStubs = collect();
+        if ($mergeAffiliate) {
+            $commissionStubs = $this->buildAffiliateCommissionQuery($request, $userId, $statusFilter)
+                ->select(['affiliate_commissions.id', 'affiliate_commissions.created_at'])
+                ->get()
+                ->map(fn (AffiliateCommission $commission) => [
+                    'kind' => 'commission',
+                    'id' => $commission->id,
+                    'ts' => $commission->created_at?->getTimestamp() ?? 0,
+                ]);
+        }
+
+        $coproductionStubs = collect();
+        if ($mergeCoproduction) {
+            $coproductionStubs = $this->buildCoproductionCommissionQuery($request, auth()->user(), $statusFilter)
+                ->get(['wallet_transactions.id', 'wallet_transactions.order_id', 'wallet_transactions.created_at'])
+                ->groupBy('order_id')
+                ->map(function ($group, $orderId) {
+                    $first = $group->sortBy('created_at')->first();
+
+                    return [
+                        'kind' => 'coproduction',
+                        'id' => (int) $orderId,
+                        'ts' => $first?->created_at?->getTimestamp() ?? 0,
+                    ];
+                })
+                ->values();
+        }
 
         $merged = $orderStubs
             ->concat($commissionStubs)
+            ->concat($coproductionStubs)
             ->sortByDesc('ts')
             ->values();
 
@@ -713,6 +805,7 @@ class VendasController extends Controller
 
         $orderIds = $pageItems->where('kind', 'order')->pluck('id')->all();
         $commissionIds = $pageItems->where('kind', 'commission')->pluck('id')->all();
+        $coproductionOrderIds = $pageItems->where('kind', 'coproduction')->pluck('id')->all();
 
         $ordersById = $orderIds === []
             ? collect()
@@ -746,8 +839,16 @@ class VendasController extends Controller
                 ->get()
                 ->keyBy('id');
 
+        $coproductionByOrderId = collect();
+        if ($coproductionOrderIds !== []) {
+            $coproductionByOrderId = $this->buildCoproductionCommissionQuery($request, auth()->user(), $statusFilter)
+                ->whereIn('wallet_transactions.order_id', $coproductionOrderIds)
+                ->get()
+                ->groupBy('order_id');
+        }
+
         $items = $pageItems
-            ->map(function (array $stub) use ($ordersById, $commissionsById) {
+            ->map(function (array $stub) use ($ordersById, $commissionsById, $coproductionByOrderId) {
                 if ($stub['kind'] === 'order') {
                     $order = $ordersById->get($stub['id']);
                     if (! $order) {
@@ -755,6 +856,15 @@ class VendasController extends Controller
                     }
 
                     return $this->orderToVendaArray($order);
+                }
+
+                if ($stub['kind'] === 'coproduction') {
+                    $group = $coproductionByOrderId->get($stub['id']);
+                    if (! $group || $group->isEmpty()) {
+                        return null;
+                    }
+
+                    return CoproductionCommissionQuery::toUnifiedVendaListItem($group);
                 }
 
                 $commission = $commissionsById->get($stub['id']);
@@ -778,6 +888,63 @@ class VendasController extends Controller
                 'query' => $request->query(),
             ]
         );
+    }
+
+    private function buildCoproductionCommissionQuery(Request $request, $user, string $statusFilter)
+    {
+        $coproRequest = $this->coproductionRequestFromVendas($request);
+        $query = CoproductionCommissionQuery::applyFilters(
+            CoproductionCommissionQuery::baseQuery(CoproductionCommissionQuery::tenantIdForUser($user)),
+            $coproRequest,
+            $user
+        );
+
+        $paymentStatus = $this->normalizeString($request->query('payment_status'));
+        if ($paymentStatus !== null && $paymentStatus !== 'all' && $paymentStatus !== 'completed') {
+            $query->whereRaw('1 = 0');
+        }
+
+        return $query;
+    }
+
+    private function coproductionRequestFromVendas(Request $request): Request
+    {
+        $period = $this->normalizeString($request->query('period')) ?? 'all';
+        $dateFrom = $this->normalizeString($request->query('date_from'));
+        $dateTo = $this->normalizeString($request->query('date_to'));
+        $productIds = $this->normalizeProductIds($request);
+
+        $coproPeriod = match ($period) {
+            'today' => 'hoje',
+            'yesterday' => 'ontem',
+            '7d' => '7dias',
+            '30d' => 'mes',
+            'this_month' => 'mes',
+            'last_month' => 'personalizado',
+            'custom' => 'personalizado',
+            default => 'total',
+        };
+
+        if ($period === 'last_month') {
+            $dateFrom = now()->subMonth()->startOfMonth()->toDateString();
+            $dateTo = now()->subMonth()->endOfMonth()->toDateString();
+        }
+
+        $params = [
+            'period' => $coproPeriod,
+            'q' => $request->query('q', ''),
+            'product_id' => count($productIds) === 1 ? $productIds[0] : $request->query('product_id', ''),
+            'product_ids' => $productIds,
+            'status' => 'all',
+            'payment_method' => $request->query('payment_method', 'all'),
+        ];
+
+        if ($coproPeriod === 'personalizado') {
+            $params['date_from'] = $dateFrom;
+            $params['date_to'] = $dateTo;
+        }
+
+        return Request::create('/', 'GET', $params);
     }
 
     private function affiliateRequestFromVendas(Request $request): Request

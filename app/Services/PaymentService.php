@@ -665,7 +665,19 @@ class PaymentService
             return true;
         }
 
-        return ! in_array(SaleOrigin::resolveForOrder($order), [SaleOrigin::API, SaleOrigin::PIXGO], true);
+        if ($order->isPixGoSale()) {
+            return false;
+        }
+
+        $origin = SaleOrigin::resolveForOrder($order);
+        if (in_array($origin, [SaleOrigin::API, SaleOrigin::PIXGO], true)) {
+            return false;
+        }
+
+        $meta = is_array($order->metadata) ? $order->metadata : [];
+        $source = is_string($meta['source'] ?? null) ? $meta['source'] : '';
+
+        return ! in_array($source, ['api', 'pixgo'], true);
     }
 
     private function webhookUrlForGateway(string $gatewaySlug): string

@@ -61,11 +61,18 @@ final class SaleOrigin
             return $context['sale_origin'];
         }
 
+        $meta = is_array($order->metadata) ? $order->metadata : [];
+        $source = is_string($meta['source'] ?? null) ? $meta['source'] : null;
+        if ($source === 'pixgo') {
+            return self::PIXGO;
+        }
+        if (in_array($source, ['api', 'api_checkout_pro'], true)) {
+            return $source === 'api_checkout_pro' ? self::API_CHECKOUT : self::API;
+        }
+
         if ($order->sale_origin) {
             return (string) $order->sale_origin;
         }
-
-        $meta = is_array($order->metadata) ? $order->metadata : [];
 
         if (! empty($meta['sale_origin']) && is_string($meta['sale_origin'])) {
             return $meta['sale_origin'];
@@ -81,14 +88,6 @@ final class SaleOrigin
 
         if ($order->api_application_id) {
             return self::API;
-        }
-
-        $source = is_string($meta['source'] ?? null) ? $meta['source'] : null;
-        if ($source === 'pixgo') {
-            return self::PIXGO;
-        }
-        if (in_array($source, ['api', 'api_checkout_pro'], true)) {
-            return $source === 'api_checkout_pro' ? self::API_CHECKOUT : self::API;
         }
 
         if (! empty($meta[self::MEMBER_MODULE_RENEWAL])) {

@@ -7,6 +7,7 @@ use App\Events\OrderCompleted;
 use App\Events\OrderRejected;
 use App\Events\PixGenerated;
 use App\Listeners\CreditTenantWalletOnOrderCompleted;
+use App\Listeners\NotifyCoproducersOnOrderCompleted;
 use App\Listeners\RecordAffiliateCommissionOnOrderCompleted;
 use App\Listeners\RecordReferralCommissionOnOrderCompleted;
 use App\Listeners\ForgetInertiaSharedCacheOnOrderCompleted;
@@ -231,6 +232,7 @@ class AppServiceProvider extends ServiceProvider
 
         Event::listen(OrderCompleted::class, SendPanelPushOnOrderCompleted::class, 100);
         Event::listen(OrderCompleted::class, CreditTenantWalletOnOrderCompleted::class);
+        Event::listen(OrderCompleted::class, NotifyCoproducersOnOrderCompleted::class);
         Event::listen(OrderCompleted::class, RecordAffiliateCommissionOnOrderCompleted::class);
         Event::listen(OrderCompleted::class, RecordReferralCommissionOnOrderCompleted::class);
         Event::listen(OrderCompleted::class, ForgetInertiaSharedCacheOnOrderCompleted::class);

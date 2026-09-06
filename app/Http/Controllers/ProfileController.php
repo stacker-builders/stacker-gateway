@@ -72,6 +72,7 @@ class ProfileController extends Controller
             'boleto_generated' => ['nullable', 'boolean'],
             'withdrawal_paid' => ['nullable', 'boolean'],
             'affiliate_sale_approved' => ['nullable', 'boolean'],
+            'coproduction_sale_approved' => ['nullable', 'boolean'],
             'affiliate_enrollment_approved' => ['nullable', 'boolean'],
             'daily_summary' => ['nullable', 'boolean'],
             'system' => ['nullable', 'boolean'],

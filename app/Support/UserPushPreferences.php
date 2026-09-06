@@ -59,6 +59,7 @@ final class UserPushPreferences
             'boleto_generated' => 'boleto_generated',
             'withdrawal_paid' => 'withdrawal_paid',
             'affiliate_sale_approved' => 'affiliate_sale_approved',
+            'coproduction_sale_approved' => 'coproduction_sale_approved',
             'affiliate_enrollment_approved' => 'affiliate_enrollment_approved',
             'daily_sales_summary' => 'daily_summary',
             'system' => 'system',
@@ -92,6 +93,10 @@ final class UserPushPreferences
             if ($key === 'sale_amount_mode') {
                 $data[$key] = UserPushPreference::normalizeSaleAmountMode($input[$key]);
 
+                continue;
+            }
+
+            if ($key === 'coproduction_sale_approved' && ! Schema::hasColumn('user_push_preferences', 'coproduction_sale_approved')) {
                 continue;
             }
 

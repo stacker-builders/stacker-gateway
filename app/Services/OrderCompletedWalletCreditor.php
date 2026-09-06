@@ -105,6 +105,7 @@ class OrderCompletedWalletCreditor
                 'coproduction_role' => $role,
                 'product_coproducer_id' => $slice['product_coproducer_id'] ?? null,
                 'affiliate_enrollment_id' => $slice['product_affiliate_enrollment_id'] ?? null,
+                'commission_percent' => $slice['commission_percent'] ?? null,
             ];
 
             $source = is_array($order->metadata ?? null) ? (($order->metadata['source'] ?? null) ?: null) : null;

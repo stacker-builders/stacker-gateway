@@ -61,6 +61,10 @@ const props = defineProps({
 const affiliateSidebarOpen = ref(false);
 const selectedAffiliateVenda = ref(null);
 
+function isCommissionRow(v) {
+    return !!(v?.is_affiliate_commission || v?.is_coproduction_commission);
+}
+
 function openAffiliateDetail(venda) {
     selectedAffiliateVenda.value = venda;
     affiliateSidebarOpen.value = true;
@@ -71,7 +75,7 @@ function vendaRowKey(v) {
 }
 
 function openRowDetail(v) {
-    if (v?.is_affiliate_commission) {
+    if (isCommissionRow(v)) {
         openAffiliateDetail(v);
         return;
     }
@@ -79,7 +83,7 @@ function openRowDetail(v) {
 }
 
 function customerDisplayName(v) {
-    if (v?.is_affiliate_commission) {
+    if (isCommissionRow(v)) {
         if (v.customer_hidden) return 'Oculto';
         return v.customer_name ?? v.customer_email ?? '—';
     }
@@ -87,7 +91,7 @@ function customerDisplayName(v) {
 }
 
 function customerDisplayEmail(v) {
-    if (v?.is_affiliate_commission) {
+    if (isCommissionRow(v)) {
         if (v.customer_hidden) return '—';
         return v.customer_email ?? '—';
     }
@@ -95,16 +99,17 @@ function customerDisplayEmail(v) {
 }
 
 function rowStatusBadgeLabel(v) {
-    if (v?.is_affiliate_commission) {
+    if (isCommissionRow(v)) {
         return v.status_label ?? v.status ?? '–';
     }
     return v.status_label ?? statusBadgeLabel(v.status);
 }
 
 function rowStatusBadgeClass(v) {
-    if (v?.is_affiliate_commission) {
+    if (isCommissionRow(v)) {
         const map = {
             approved: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
+            available: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
             pending: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
             cancelled: 'bg-zinc-100 text-zinc-700 dark:bg-zinc-700/50 dark:text-zinc-300',
             refunded: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
@@ -966,11 +971,15 @@ const exportXlsUrl = computed(() => `/vendas/export?${buildExportSearchParams('x
                                 v-if="v.is_affiliate_commission"
                                 class="ml-1 inline-flex rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-violet-800 dark:bg-violet-900/40 dark:text-violet-200"
                             >Afiliados</span>
+                            <span
+                                v-if="v.is_coproduction_commission"
+                                class="ml-1 inline-flex rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-sky-800 dark:bg-sky-900/40 dark:text-sky-200"
+                            >Co-produção</span>
                         </p>
                     </div>
                     <div class="flex shrink-0 items-center gap-1" @click.stop>
                         <a
-                            v-if="!v.is_affiliate_commission && whatsappCustomerUrl(v)"
+                            v-if="!isCommissionRow(v) && whatsappCustomerUrl(v)"
                             :href="whatsappCustomerUrl(v)"
                             target="_blank"
                             rel="noopener noreferrer"
@@ -984,7 +993,7 @@ const exportXlsUrl = computed(() => `/vendas/export?${buildExportSearchParams('x
                                 />
                             </svg>
                         </a>
-                        <div v-if="!v.is_affiliate_commission" class="relative" :data-venda-menu="vendaRowKey(v)">
+                        <div v-if="!isCommissionRow(v)" class="relative" :data-venda-menu="vendaRowKey(v)">
                             <button
                                 type="button"
                                 class="flex h-9 w-9 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
@@ -1112,6 +1121,10 @@ const exportXlsUrl = computed(() => `/vendas/export?${buildExportSearchParams('x
                                 v-if="v.is_affiliate_commission"
                                 class="ml-1 inline-flex rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-violet-800 dark:bg-violet-900/40 dark:text-violet-200"
                             >Afiliados</span>
+                            <span
+                                v-if="v.is_coproduction_commission"
+                                class="ml-1 inline-flex rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-medium uppercase text-sky-800 dark:bg-sky-900/40 dark:text-sky-200"
+                            >Co-produção</span>
                         </td>
                         <td class="px-4 py-3">
                             <div class="flex flex-col gap-0.5">
@@ -1144,7 +1157,7 @@ const exportXlsUrl = computed(() => `/vendas/export?${buildExportSearchParams('x
                         <td class="relative whitespace-nowrap px-2 py-3" @click.stop>
                             <div class="flex items-center justify-end gap-1">
                                 <a
-                                    v-if="!v.is_affiliate_commission && whatsappCustomerUrl(v)"
+                                    v-if="!isCommissionRow(v) && whatsappCustomerUrl(v)"
                                     :href="whatsappCustomerUrl(v)"
                                     target="_blank"
                                     rel="noopener noreferrer"
@@ -1158,7 +1171,7 @@ const exportXlsUrl = computed(() => `/vendas/export?${buildExportSearchParams('x
                                         />
                                     </svg>
                                 </a>
-                                <div v-if="!v.is_affiliate_commission" class="relative" :data-venda-menu="vendaRowKey(v)">
+                                <div v-if="!isCommissionRow(v)" class="relative" :data-venda-menu="vendaRowKey(v)">
                                     <button
                                         type="button"
                                         class="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-300"

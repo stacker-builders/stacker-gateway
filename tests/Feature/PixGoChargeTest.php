@@ -83,6 +83,7 @@ class PixGoChargeTest extends TestCase
         $order = Order::query()->where('tenant_id', $seller->id)->latest('id')->first();
         $this->assertNotNull($order);
         $this->assertSame('pixgo', $order->metadata['source'] ?? null);
+        $this->assertSame('pixgo', $order->sale_origin);
         $this->assertSame('pix', $order->payment_method);
         $this->assertNull($order->product_id);
         $this->assertTrue($order->isPixGoSale());

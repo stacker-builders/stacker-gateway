@@ -35,6 +35,8 @@ class ProductCoproductionController extends Controller
             'duration_preset' => ['required', 'string', Rule::in(array_merge([ProductCoproducer::DURATION_ETERNAL], ProductCoproducer::DURATION_DAYS))],
         ]);
 
+        ProductCoproducer::expireOverdue();
+
         $email = ProductCoproducer::normalizeEmail($validated['email']);
         $owner = auth()->user()->kycSubjectUser();
         $ownerEmail = ProductCoproducer::normalizeEmail((string) $owner->email);
@@ -131,7 +133,11 @@ class ProductCoproductionController extends Controller
             abort(404);
         }
 
-        if (in_array($coproducer->status, [ProductCoproducer::STATUS_REVOKED, ProductCoproducer::STATUS_DECLINED], true)) {
+        if (in_array($coproducer->status, [
+            ProductCoproducer::STATUS_REVOKED,
+            ProductCoproducer::STATUS_DECLINED,
+            ProductCoproducer::STATUS_EXPIRED,
+        ], true)) {
             return back()->with('success', 'Co-produção já estava encerrada.');
         }
 

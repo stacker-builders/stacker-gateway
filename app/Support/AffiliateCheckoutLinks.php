@@ -5,10 +5,11 @@ namespace App\Support;
 use App\Models\Product;
 use App\Models\ProductAffiliateEnrollment;
 use App\Models\ProductOffer;
+use App\Models\SubscriptionPlan;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Links de checkout com ?ref= para afiliados (principal + ofertas liberadas).
+ * Links de checkout com ?ref= para afiliados (principal + ofertas/planos do produto).
  */
 final class AffiliateCheckoutLinks
 {
@@ -52,6 +53,26 @@ final class AffiliateCheckoutLinks
         return self::appendRef($base, $publicRef);
     }
 
+    public static function planLink(Product $product, SubscriptionPlan $plan, string $publicRef): ?string
+    {
+        $publicRef = trim($publicRef);
+        if ($publicRef === '') {
+            return null;
+        }
+
+        if ($plan->checkout_slug) {
+            return self::appendRef(url('/c/'.$plan->checkout_slug), $publicRef);
+        }
+
+        if (! $product->checkout_slug) {
+            return null;
+        }
+
+        $base = url('/c/'.$product->checkout_slug).'?plan_id='.(int) $plan->id;
+
+        return self::appendRef($base, $publicRef);
+    }
+
     /**
      * @return list<array{type: string, id: int|null, label: string, price: float|null, currency: string|null, url: string}>
      */
@@ -75,19 +96,21 @@ final class AffiliateCheckoutLinks
             ];
         }
 
-        if (! Schema::hasColumn('product_offers', 'affiliate_share_enabled')) {
-            return $out;
-        }
-
         $offers = $product->relationLoaded('offers')
             ? $product->offers
             : $product->offers()->orderBy('position')->orderBy('id')->get();
+
+        $hasShareColumn = Schema::hasColumn('product_offers', 'affiliate_share_enabled');
+        $anyExplicitlyShared = $hasShareColumn && $offers->contains(
+            fn ($offer) => $offer instanceof ProductOffer
+                && filter_var($offer->affiliate_share_enabled ?? false, FILTER_VALIDATE_BOOLEAN)
+        );
 
         foreach ($offers as $offer) {
             if (! $offer instanceof ProductOffer) {
                 continue;
             }
-            if (! filter_var($offer->affiliate_share_enabled ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            if ($anyExplicitlyShared && ! filter_var($offer->affiliate_share_enabled ?? false, FILTER_VALIDATE_BOOLEAN)) {
                 continue;
             }
             $url = self::offerLink($product, $offer, $ref);
@@ -100,6 +123,29 @@ final class AffiliateCheckoutLinks
                 'label' => (string) ($offer->name ?: 'Oferta #'.$offer->id),
                 'price' => is_numeric($offer->price) ? (float) $offer->price : null,
                 'currency' => $offer->getCurrencyOrDefault(),
+                'url' => $url,
+            ];
+        }
+
+        $plans = $product->relationLoaded('subscriptionPlans')
+            ? $product->subscriptionPlans
+            : $product->subscriptionPlans()->orderBy('position')->orderBy('id')->get();
+
+        foreach ($plans as $plan) {
+            if (! $plan instanceof SubscriptionPlan) {
+                continue;
+            }
+            $url = self::planLink($product, $plan, $ref);
+            if ($url === null) {
+                continue;
+            }
+            $interval = SubscriptionPlan::intervalLabels()[$plan->interval] ?? $plan->interval;
+            $out[] = [
+                'type' => 'plan',
+                'id' => (int) $plan->id,
+                'label' => (string) ($plan->name ?: 'Plano #'.$plan->id).($interval ? ' · '.$interval : ''),
+                'price' => is_numeric($plan->price) ? (float) $plan->price : null,
+                'currency' => $plan->getCurrencyOrDefault(),
                 'url' => $url,
             ];
         }

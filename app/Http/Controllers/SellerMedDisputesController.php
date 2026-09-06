@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\LogsSellerActivity;
 use App\Models\MedDispute;
+use App\Services\Bspay\BspayMedService;
 use App\Services\CajuPay\CajuPayMedService;
 use App\Services\Med\MedDefenseDossierService;
 use App\Services\SellerActivityLogService;
@@ -21,6 +22,7 @@ class SellerMedDisputesController extends Controller
     public function __construct(
         protected CajuPayMedService $medService,
         protected VersellMedService $versellMedService,
+        protected BspayMedService $bspayMedService,
         protected MedDefenseDossierService $dossierService,
     ) {}
 
@@ -68,6 +70,12 @@ class SellerMedDisputesController extends Controller
         try {
             if (VersellMedService::isVersellDispute($dispute)) {
                 $this->versellMedService->submitDefense(
+                    $dispute,
+                    $validated['text'],
+                    $request->file('attachments', []) ?? []
+                );
+            } elseif (BspayMedService::isBspayDispute($dispute)) {
+                $this->bspayMedService->submitDefense(
                     $dispute,
                     $validated['text'],
                     $request->file('attachments', []) ?? []
