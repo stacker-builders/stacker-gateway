@@ -189,6 +189,44 @@ class PlatformCompanySettingsTest extends TestCase
             }));
     }
 
+    public function test_checkout_notice_replaces_product_support_email(): void
+    {
+        $seller = User::factory()->create([
+            'role' => User::ROLE_INFOPRODUTOR,
+            'name' => 'João Vendedor',
+            'email' => 'joao@seller.test',
+        ]);
+        $seller->forceFill(['tenant_id' => $seller->id])->save();
+
+        Setting::set(PlatformCompanySettings::KEY_CHECKOUT_NOTICE_ENABLED, '1', null);
+        Setting::set(
+            PlatformCompanySettings::KEY_CHECKOUT_NOTICE,
+            'Dúvidas: {email_suporte_produto}',
+            null
+        );
+
+        $product = $this->createTestProduct([
+            'tenant_id' => $seller->id,
+            'checkout_slug' => 'noticeemail',
+            'support_email' => 'suporte.curso@loja.test',
+            'checkout_config' => [
+                'customer_fields' => ['name' => false, 'cpf' => false, 'phone' => false, 'coupon' => false],
+            ],
+        ]);
+
+        $this->get('/c/'.$product->checkout_slug)
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Checkout/Show')
+                ->where('platform_checkout_notice', function ($notice) {
+                    $this->assertIsString($notice);
+                    $this->assertStringContainsString('suporte.curso@loja.test', $notice);
+                    $this->assertStringNotContainsString('{email_suporte_produto}', $notice);
+
+                    return true;
+                }));
+    }
+
     public function test_platform_admin_can_save_checkout_notice(): void
     {
         $admin = User::factory()->create([
