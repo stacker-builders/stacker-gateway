@@ -36,9 +36,18 @@ function toDisplay(value) {
     return formatPercentForDisplayBr(value);
 }
 
+function samePercent(a, b) {
+    const empty = (value) => value === '' || value === null || value === undefined;
+    if (empty(a) && empty(b)) return true;
+    if (empty(a) || empty(b)) return false;
+    return normalizePercentInput(a) === normalizePercentInput(b);
+}
+
 function commit() {
     if (props.allowEmpty && local.value.trim() === '') {
-        emit('update:modelValue', '');
+        if (!samePercent(props.modelValue, '')) {
+            emit('update:modelValue', '');
+        }
         local.value = '';
         return;
     }
@@ -46,7 +55,9 @@ function commit() {
     const normalized = normalizePercentInput(local.value);
     const canonical = formatPercentForInput(normalized) || (props.allowEmpty ? '' : '0');
     const emitted = canonical === '' ? '' : normalized;
-    emit('update:modelValue', emitted);
+    if (!samePercent(props.modelValue, emitted)) {
+        emit('update:modelValue', emitted);
+    }
     local.value = canonical === '' ? '' : formatPercentForDisplayBr(canonical);
 }
 

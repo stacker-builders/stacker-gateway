@@ -35,15 +35,26 @@ function toDisplay(value) {
     return formatMoneyForDisplayBr(value);
 }
 
+function sameMoney(a, b) {
+    const empty = (value) => value === '' || value === null || value === undefined;
+    if (props.allowEmpty && empty(a) && empty(b)) return true;
+    if (props.allowEmpty && (empty(a) || empty(b))) return false;
+    return normalizeMoneyInput(a) === normalizeMoneyInput(b);
+}
+
 function commit() {
     if (props.allowEmpty && local.value.trim() === '') {
-        emit('update:modelValue', '');
+        if (!sameMoney(props.modelValue, '')) {
+            emit('update:modelValue', '');
+        }
         local.value = '';
         return;
     }
 
     const normalized = normalizeMoneyInput(local.value);
-    emit('update:modelValue', normalized);
+    if (!sameMoney(props.modelValue, normalized)) {
+        emit('update:modelValue', normalized);
+    }
     local.value = formatMoneyForDisplayBr(normalized);
 }
 

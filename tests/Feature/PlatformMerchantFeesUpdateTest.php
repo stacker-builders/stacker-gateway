@@ -2,13 +2,24 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\EnsureInstalled;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\EffectiveMerchantFees;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Tests\TestCase;
 
 class PlatformMerchantFeesUpdateTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->withoutMiddleware([
+            EnsureInstalled::class,
+            ValidateCsrfToken::class,
+        ]);
+    }
+
     public function test_platform_admin_can_save_individual_merchant_fee_overrides(): void
     {
         Setting::set('merchant_fee_rules', [
@@ -46,7 +57,7 @@ class PlatformMerchantFeesUpdateTest extends TestCase
             'merchant_gateway_order' => null,
         ]);
 
-        $response->assertRedirect(route('plataforma.usuarios.index'));
+        $response->assertRedirect(route('plataforma.usuarios.show', $merchant));
         $response->assertSessionHas('success');
 
         $merchant->refresh();
@@ -94,6 +105,43 @@ class PlatformMerchantFeesUpdateTest extends TestCase
 
         $calc = EffectiveMerchantFees::calculateSaleFee((int) $merchant->id, 'pix', 100.0);
         $this->assertSame(2.0, $calc['percent']);
+    }
+
+    public function test_empty_merchant_fees_payload_restores_platform_defaults(): void
+    {
+        Setting::set('merchant_fee_rules', [
+            'pix' => ['percent' => 2.0, 'fixed' => 0.0],
+            'api_pix' => ['percent' => 2.0, 'fixed' => 0.0],
+            'card' => ['percent' => 3.0, 'fixed' => 0.0],
+            'apple_pay' => ['percent' => 3.0, 'fixed' => 0.0],
+            'google_pay' => ['percent' => 3.0, 'fixed' => 0.0],
+            'boleto' => ['percent' => 2.0, 'fixed' => 0.0],
+            'withdrawal' => ['percent' => 1.0, 'fixed' => 0.0],
+        ], null);
+
+        $admin = User::factory()->create([
+            'role' => User::ROLE_PLATFORM_ADMIN,
+            'tenant_id' => null,
+        ]);
+
+        $merchant = User::factory()->create([
+            'role' => User::ROLE_INFOPRODUTOR,
+            'merchant_fees' => ['pix' => ['percent' => 9.0, 'fixed' => 1.5]],
+        ]);
+        $merchant->forceFill(['tenant_id' => $merchant->id])->save();
+
+        $this->actingAs($admin)->put(route('plataforma.usuarios.update', $merchant), [
+            'name' => $merchant->name,
+            'email' => $merchant->email,
+            'merchant_fees' => [],
+        ])->assertRedirect();
+
+        $merchant->refresh();
+        $this->assertNull($merchant->merchant_fees);
+
+        $calc = EffectiveMerchantFees::calculateSaleFee((int) $merchant->id, 'pix', 100.0);
+        $this->assertSame(2.0, $calc['percent']);
+        $this->assertSame(2.0, $calc['fee']);
     }
 
     public function test_pix_override_inherits_to_api_pix_for_tenant(): void

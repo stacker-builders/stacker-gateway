@@ -234,8 +234,18 @@ function initialize() {
 }
 onMounted(initialize);
 
+function feeFieldUnchanged(current, next) {
+    const empty = (value) => value === '' || value === null || value === undefined;
+    if (empty(current) && empty(next)) return true;
+    if (empty(current) || empty(next)) return false;
+    const a = parseFloat(String(current).replace(',', '.'));
+    const b = parseFloat(String(next).replace(',', '.'));
+    if (Number.isFinite(a) && Number.isFinite(b)) return a === b;
+    return String(current) === String(next);
+}
+
 function buildFeesPayload(fees) {
-    if (clearAllFees.value) return {};
+    if (clearAllFees.value) return null;
     const result = savedFees.value && typeof savedFees.value === 'object' ? { ...savedFees.value } : {};
     for (const key of feeKeys) {
         if (!touchedFees.value[key]) continue;
@@ -245,6 +255,7 @@ function buildFeesPayload(fees) {
     return Object.keys(result).length ? result : null;
 }
 function updateFee(key, field, value) {
+    if (feeFieldUnchanged(form.merchant_fees[key]?.[field], value)) return;
     feesDirty.value = true;
     clearAllFees.value = false;
     touchedFees.value = { ...touchedFees.value, [key]: true };
@@ -266,7 +277,11 @@ function flushFeeInputs() {
     }
 }
 function restoreFees() {
-    feesDirty.value = true; clearAllFees.value = true; touchedFees.value = {}; form.merchant_fees = feesFormFromEffective(null);
+    feesDirty.value = true;
+    clearAllFees.value = true;
+    touchedFees.value = {};
+    savedFees.value = null;
+    form.merchant_fees = feesFormFromEffective(null);
 }
 function restoreSettlement() {
     settlementDirty.value = true; form.merchant_settlement_overrides = defaultSettlement();
