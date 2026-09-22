@@ -207,7 +207,7 @@ const hasUnread = computed(() => unreadCount.value > 0);
         >
             <div
                 v-if="open"
-                class="fixed inset-0 z-[100000] flex justify-end"
+                class="fixed inset-0 z-[100000] flex justify-end print:hidden"
                 aria-modal="true"
                 role="dialog"
                 aria-label="Notificações"

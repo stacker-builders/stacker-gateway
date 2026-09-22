@@ -62,7 +62,7 @@ onUnmounted(() => {
     >
         <div
             v-if="showBanner && installPromptEvent && !isStandalone"
-            class="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200 bg-white p-4 shadow-2xl dark:border-zinc-700 dark:bg-zinc-800"
+            class="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200 bg-white p-4 shadow-2xl print:hidden dark:border-zinc-700 dark:bg-zinc-800"
         >
             <div class="mx-auto flex max-w-md items-center justify-between gap-4">
                 <div class="flex items-center gap-3">
@@ -106,7 +106,7 @@ onUnmounted(() => {
     >
         <div
             v-if="showIosInstructions && isIos && !isStandalone"
-            class="fixed bottom-4 left-4 right-4 z-50 max-w-sm rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xl dark:border-zinc-700 dark:bg-zinc-800"
+            class="fixed bottom-4 left-4 right-4 z-50 max-w-sm rounded-2xl border border-zinc-200 bg-white p-5 shadow-2xl print:hidden dark:border-zinc-700 dark:bg-zinc-800"
         >
             <div class="flex items-start gap-3">
                 <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-500">
