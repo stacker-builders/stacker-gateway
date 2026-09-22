@@ -6,6 +6,13 @@ import MemberBuilderPreview from '@/components/member-builder/MemberBuilderPrevi
 import Button from '@/components/ui/Button.vue';
 import Toggle from '@/components/ui/Toggle.vue';
 import {
+    CERTIFICATE_LAYOUT_FIELD_IDS,
+    CERTIFICATE_LAYOUT_FIELD_LABELS,
+    CERTIFICATE_LAYOUT_PRESETS,
+    mergeCertificateLayout,
+    applyCertificateLayoutPreset,
+} from '@/lib/certificateLayout';
+import {
     Palette,
     LayoutList,
     LogIn,
@@ -107,6 +114,52 @@ const processing = ref(false);
 const heroDesktopUploading = ref(false);
 const heroDesktopFileInput = ref(null);
 const certBgFileInput = ref(null);
+const selectedCertField = ref('body');
+const certLayoutFieldIds = CERTIFICATE_LAYOUT_FIELD_IDS;
+const certLayoutFieldLabels = CERTIFICATE_LAYOUT_FIELD_LABELS;
+const certLayoutPresets = CERTIFICATE_LAYOUT_PRESETS;
+
+function ensureCertLayout() {
+    const cert = configForm.member_area_config.certificate;
+    if (!cert.layout) {
+        cert.layout = mergeCertificateLayout({});
+    } else {
+        cert.layout = mergeCertificateLayout(cert.layout);
+    }
+    return cert.layout;
+}
+
+function onCertLayoutUpdate(layout) {
+    configForm.member_area_config.certificate.layout = mergeCertificateLayout(layout);
+}
+
+function patchCertField(id, key, value) {
+    const layout = ensureCertLayout();
+    if (!layout.fields[id]) return;
+    configForm.member_area_config.certificate.layout = {
+        ...layout,
+        fields: {
+            ...layout.fields,
+            [id]: { ...layout.fields[id], [key]: value },
+        },
+    };
+}
+
+function resetCertLayoutPositions() {
+    const layout = ensureCertLayout();
+    configForm.member_area_config.certificate.layout = {
+        ...layout,
+        fields: mergeCertificateLayout({}).fields,
+    };
+}
+
+function applyCertLayoutPreset(presetId) {
+    const next = applyCertificateLayoutPreset(presetId, ensureCertLayout());
+    configForm.member_area_config.certificate.layout = next;
+    if (presetId === 'name_date_signature') {
+        selectedCertField.value = 'body';
+    }
+}
 const heroMobileUploading = ref(false);
 const heroMobileFileInput = ref(null);
 const headerLogoUploading = ref(false);
@@ -201,9 +254,11 @@ function mergeCertificateSection(stored = {}) {
         font_scale: 100,
         duration_enabled: true,
         body_template: '',
+        layout: mergeCertificateLayout({}),
         ...CERTIFICATE_TEXT_DEFAULTS,
     };
     const merged = { ...base, ...(stored && typeof stored === 'object' ? stored : {}) };
+    merged.layout = mergeCertificateLayout(merged.layout);
     for (const [key, value] of Object.entries(CERTIFICATE_TEXT_DEFAULTS)) {
         if (!String(merged[key] ?? '').trim()) {
             merged[key] = value;
@@ -3370,6 +3425,14 @@ const inputClass = 'block w-full rounded-lg border border-zinc-300 bg-white px-3
                                 </div>
                             </template>
                             <div>
+                                <label class="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">Formato da folha (PDF / preview)</label>
+                                <select v-model="configForm.member_area_config.certificate.print_format" :class="inputClass">
+                                    <option value="A4">A4 paisagem</option>
+                                    <option value="A3">A3 paisagem</option>
+                                </select>
+                                <p class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">O preview à direita usa o mesmo formato do PDF.</p>
+                            </div>
+                            <div>
                                 <label class="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">Fonte da assinatura</label>
                                 <select v-model="configForm.member_area_config.certificate.signature_font_family" :class="inputClass">
                                     <option value="Dancing Script">Dancing Script</option>
@@ -3378,6 +3441,132 @@ const inputClass = 'block w-full rounded-lg border border-zinc-300 bg-white px-3
                                     <option value="Caveat">Caveat</option>
                                     <option value="Satisfy">Satisfy</option>
                                 </select>
+                            </div>
+
+                            <div class="rounded-lg border border-zinc-200 bg-zinc-50/50 p-3 dark:border-zinc-600 dark:bg-zinc-800/30">
+                                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">Posição dos textos</p>
+                                <p class="mb-3 text-xs text-zinc-500 dark:text-zinc-400">
+                                    Use com modelos de fundo personalizados. No preview (desktop), arraste os campos ou ajuste altura/lateral abaixo.
+                                </p>
+                                <div class="mb-3 space-y-1.5">
+                                    <p class="text-xs font-medium text-zinc-600 dark:text-zinc-400">Atalhos</p>
+                                    <div class="flex flex-wrap gap-1.5">
+                                        <button
+                                            v-for="(preset, presetId) in certLayoutPresets"
+                                            :key="presetId"
+                                            type="button"
+                                            class="rounded-lg border border-zinc-300 bg-white px-2.5 py-1.5 text-left text-xs font-medium text-zinc-700 transition hover:border-sky-400 hover:bg-sky-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:border-sky-500 dark:hover:bg-zinc-700"
+                                            :title="preset.description"
+                                            @click="applyCertLayoutPreset(presetId)"
+                                        >
+                                            {{ preset.label }}
+                                        </button>
+                                    </div>
+                                </div>
+                                <Toggle
+                                    :model-value="!!configForm.member_area_config.certificate.layout?.background_only"
+                                    label="Usar só a imagem de fundo (esconder medalha e cantos)"
+                                    @update:model-value="(v) => {
+                                        const l = ensureCertLayout();
+                                        configForm.member_area_config.certificate.layout = { ...l, background_only: !!v };
+                                    }"
+                                />
+                                <div class="mt-3">
+                                    <Toggle
+                                        :model-value="!!configForm.member_area_config.certificate.layout?.custom_positions"
+                                        label="Posicionar campos manualmente"
+                                        @update:model-value="(v) => {
+                                            const l = ensureCertLayout();
+                                            configForm.member_area_config.certificate.layout = { ...l, custom_positions: !!v };
+                                        }"
+                                    />
+                                </div>
+                                <template v-if="configForm.member_area_config.certificate.layout?.custom_positions">
+                                    <div class="mt-3 flex flex-wrap gap-1.5">
+                                        <button
+                                            v-for="fid in certLayoutFieldIds"
+                                            :key="fid"
+                                            type="button"
+                                            class="rounded-lg px-2.5 py-1 text-xs font-medium transition"
+                                            :class="selectedCertField === fid
+                                                ? 'bg-sky-500 text-white'
+                                                : 'bg-zinc-200 text-zinc-700 hover:bg-zinc-300 dark:bg-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-600'"
+                                            @click="selectedCertField = fid"
+                                        >
+                                            {{ certLayoutFieldLabels[fid] }}
+                                        </button>
+                                    </div>
+                                    <div
+                                        v-if="selectedCertField && configForm.member_area_config.certificate.layout?.fields?.[selectedCertField]"
+                                        class="mt-3 space-y-3"
+                                    >
+                                        <Toggle
+                                            :model-value="configForm.member_area_config.certificate.layout.fields[selectedCertField].visible !== false"
+                                            :label="`Exibir «${certLayoutFieldLabels[selectedCertField]}»`"
+                                            @update:model-value="(v) => patchCertField(selectedCertField, 'visible', !!v)"
+                                        />
+                                        <div>
+                                            <label class="mb-1 flex justify-between text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                                                <span>Lateral (X)</span>
+                                                <span>{{ Math.round(configForm.member_area_config.certificate.layout.fields[selectedCertField].x) }}%</span>
+                                            </label>
+                                            <input
+                                                type="range"
+                                                min="0"
+                                                max="100"
+                                                step="0.5"
+                                                class="w-full"
+                                                :value="configForm.member_area_config.certificate.layout.fields[selectedCertField].x"
+                                                @input="patchCertField(selectedCertField, 'x', Number($event.target.value))"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label class="mb-1 flex justify-between text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                                                <span>Altura (Y)</span>
+                                                <span>{{ Math.round(configForm.member_area_config.certificate.layout.fields[selectedCertField].y) }}%</span>
+                                            </label>
+                                            <input
+                                                type="range"
+                                                min="0"
+                                                max="100"
+                                                step="0.5"
+                                                class="w-full"
+                                                :value="configForm.member_area_config.certificate.layout.fields[selectedCertField].y"
+                                                @input="patchCertField(selectedCertField, 'y', Number($event.target.value))"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label class="mb-1 flex justify-between text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                                                <span>Largura</span>
+                                                <span>{{ Math.round(configForm.member_area_config.certificate.layout.fields[selectedCertField].w) }}%</span>
+                                            </label>
+                                            <input
+                                                type="range"
+                                                min="10"
+                                                max="100"
+                                                step="1"
+                                                class="w-full"
+                                                :value="configForm.member_area_config.certificate.layout.fields[selectedCertField].w"
+                                                @input="patchCertField(selectedCertField, 'w', Number($event.target.value))"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label class="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">Alinhamento</label>
+                                            <select
+                                                :class="inputClass"
+                                                :value="configForm.member_area_config.certificate.layout.fields[selectedCertField].align"
+                                                @change="patchCertField(selectedCertField, 'align', $event.target.value)"
+                                            >
+                                                <option value="left">Esquerda</option>
+                                                <option value="center">Centro</option>
+                                                <option value="right">Direita</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <Button type="button" variant="ghost" size="sm" class="mt-3" @click="resetCertLayoutPositions">
+                                        Restaurar posições padrão
+                                    </Button>
+                                </template>
                             </div>
                         </div>
                         <Button type="button" class="mt-4" @click="saveConfig" :disabled="processing">Salvar</Button>
@@ -3664,6 +3853,11 @@ const inputClass = 'block w-full rounded-lg border border-zinc-300 bg-white px-3
                         :community-pages="communityPagesList"
                         :certificate-enabled="configForm.member_area_config.certificate?.enabled ?? false"
                         :can-issue-certificate="(configForm.member_area_config.certificate?.enabled ?? false) ? true : false"
+                        :certificate-editable="previewMode === 'certificate'"
+                        :certificate-selected-field="selectedCertField"
+                        @update:certificate-layout="onCertLayoutUpdate"
+                        @select-certificate-field="selectedCertField = $event"
+                        @update:print-format="(fmt) => { configForm.member_area_config.certificate.print_format = fmt === 'A3' ? 'A3' : 'A4'; }"
                     />
                 </div>
             </div>

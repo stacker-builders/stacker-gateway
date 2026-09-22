@@ -3,11 +3,8 @@ import { computed, ref, onMounted, onUnmounted } from 'vue';
 import MemberAreaAppLayout from '@/Layouts/MemberAreaAppLayout.vue';
 import { Link } from '@inertiajs/vue3';
 import { useMemberAreaHref } from '@/composables/useMemberAreaHref';
-import {
-    resolveCertificateBody,
-    certificateFontCssVars,
-    certificateFontScaleRatio,
-} from '@/lib/certificateText';
+import { certificateFontScaleRatio } from '@/lib/certificateText';
+import CertificateCanvas from '@/components/member-area/CertificateCanvas.vue';
 
 defineOptions({ layout: MemberAreaAppLayout });
 
@@ -58,56 +55,8 @@ const certificateBlockedMessage = computed(() => {
 });
 
 const printFormatOverride = ref(null);
-const courseTitle = computed(() => props.certificate?.title || props.product?.name || '');
-const platformName = computed(() => props.certificate?.platform_name || '');
-const issuedAtLabel = computed(() => props.certificate?.issued_at_full || props.certificate?.issued_at || '');
-const certPrimary = computed(() => props.certificate?.primary_color || 'var(--ma-primary)');
-const certBgUrl = computed(() => props.certificate?.background_image_url || null);
-const certTextColor = computed(() => props.certificate?.text_color || '#262626');
-const certTitleColor = computed(() => props.certificate?.title_color || null);
 const certSignatureFont = computed(() => props.certificate?.signature_font_family || 'Dancing Script');
-const certSignatureFontUrl = computed(() => {
-    const name = certSignatureFont.value;
-    if (!name) return null;
-    return `https://fonts.googleapis.com/css2?family=${encodeURIComponent(name).replace(/%20/g, '+')}&display=swap`;
-});
-const certOverlayEnabled = computed(() => certBgUrl.value && props.certificate?.background_overlay_enabled);
-const certOverlayColor = computed(() => props.certificate?.background_overlay_color || '#000000');
-const certOverlayOpacity = computed(() => {
-    const raw = props.certificate?.background_overlay_opacity ?? 50;
-    return (raw <= 1 ? raw * 100 : raw) / 100;
-});
 const certPrintFormat = computed(() => printFormatOverride.value || (props.certificate?.print_format === 'A3' ? 'A3' : 'A4'));
-const headerText = computed(() => props.certificate?.header_text || 'Certificado de conclusão');
-const recipientIntroText = computed(() => props.certificate?.recipient_intro_text || 'Certificamos que');
-const completionText = computed(() => props.certificate?.completion_text || 'completou com sucesso o curso em');
-const issuedOnText = computed(() => props.certificate?.issued_on_text || 'em');
-const instructorLabelText = computed(() => props.certificate?.instructor_label_text || 'Assinatura do Instrutor');
-const platformLabelText = computed(() => props.certificate?.platform_label_text || 'Plataforma de Cursos');
-const durationLabelText = computed(() => props.certificate?.duration_label_text || 'Duração');
-const durationEnabled = computed(() => props.certificate?.duration_enabled !== false);
-const hasBodyTemplate = computed(() => String(props.certificate?.body_template || '').trim() !== '');
-
-const certificateTextVars = computed(() => ({
-    aluno: props.recipient_name || 'Aluno',
-    curso: courseTitle.value,
-    data: issuedAtLabel.value || '',
-    plataforma: platformName.value,
-    carga_horaria: durationEnabled.value ? (props.certificate?.duration_text || '') : '',
-}));
-
-const resolvedBodyText = computed(() =>
-    resolveCertificateBody(props.certificate?.body_template, certificateTextVars.value)
-);
-
-const certAreaStyle = computed(() => ({
-    fontFamily: props.certificate?.font_family || 'sans-serif',
-    backgroundColor: certBgUrl.value ? 'transparent' : '#fff',
-    ...certificateFontCssVars(props.certificate?.font_scale ?? 100, false),
-    '--cert-primary': certPrimary.value,
-    '--cert-text': certBgUrl.value ? (props.certificate?.text_color || '#171717') : certTextColor.value,
-    '--cert-title': certBgUrl.value && props.certificate?.title_color ? props.certificate?.title_color : certPrimary.value,
-}));
 
 const printScale = computed(() => {
     const base = certificateFontScaleRatio(props.certificate?.font_scale ?? 100);
@@ -150,7 +99,6 @@ html.printing-certificate .fixed {
         print-color-adjust: exact !important;
         color-adjust: exact !important;
     }
-    /* Isola o certificado: overlays (PWA, header, modais) não entram no PDF */
     body * {
         visibility: hidden !important;
     }
@@ -189,8 +137,9 @@ html.printing-certificate .fixed {
         height: ${pageH} !important;
         min-height: ${pageH} !important;
         max-height: ${pageH} !important;
+        aspect-ratio: auto !important;
         margin: 0 !important;
-        padding: 10mm 12mm !important;
+        padding: 0 !important;
         border: none !important;
         border-radius: 0 !important;
         box-shadow: none !important;
@@ -211,21 +160,6 @@ html.printing-certificate .fixed {
     }
     .certificate-print-area .certificate-signature {
         font-family: ${certSignatureFont.value || 'cursive'}, cursive !important;
-    }
-    .certificate-print-area .certificate-inner {
-        display: flex !important;
-        flex-direction: column !important;
-        min-height: 100% !important;
-        height: 100% !important;
-        box-sizing: border-box !important;
-        padding: 2mm 1mm !important;
-    }
-    .certificate-print-area .certificate-inner .certificate-body {
-        flex: 0 0 auto !important;
-    }
-    .certificate-print-area .certificate-footer {
-        margin-top: auto !important;
-        flex-shrink: 0 !important;
     }
     .certificate-print-area .certificate-bg-image {
         -webkit-print-color-adjust: exact !important;
@@ -271,113 +205,16 @@ onUnmounted(() => {
 <template>
     <div class="print-certificate-wrapper space-y-8">
         <component :is="'style'" v-if="printStyleText">{{ printStyleText }}</component>
-        <link v-if="certSignatureFontUrl" rel="stylesheet" :href="certSignatureFontUrl" />
         <h1 class="certificate-no-print text-2xl font-bold print:hidden">Certificado de conclusão</h1>
-        <div
-            class="certificate-print-area relative mx-auto max-w-2xl overflow-hidden rounded-2xl border border-zinc-200 p-8 shadow-md dark:border-zinc-500 print:max-w-none print:rounded-none print:shadow-none"
-            :style="certAreaStyle"
-        >
-            <img
-                v-if="certBgUrl"
-                :src="certBgUrl"
-                alt=""
-                class="certificate-bg-image pointer-events-none absolute inset-0 h-full w-full object-cover"
-                style="z-index: 0"
+        <div class="mx-auto w-full max-w-4xl print:max-w-none">
+            <CertificateCanvas
+                mode="student"
+                :certificate="certificate"
+                :recipient-name="recipient_name || 'Aluno'"
+                :product-name="product?.name || ''"
+                :show-blocked-overlay="!certificate_available"
+                :blocked-message="certificateBlockedMessage"
             />
-
-            <div
-                v-if="!certificate_available"
-                class="certificate-no-print pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center rounded-2xl bg-black/60 p-6 print:hidden"
-                aria-hidden="true"
-            >
-                <div class="flex flex-col items-center gap-3 rounded-xl bg-zinc-900/95 px-6 py-5 text-center shadow-xl">
-                    <svg class="h-12 w-12 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                    </svg>
-                    <p class="text-lg font-semibold text-white">Certificado bloqueado</p>
-                    <p class="max-w-xs text-sm text-zinc-300">
-                        {{ certificateBlockedMessage }}
-                    </p>
-                </div>
-            </div>
-
-            <div class="certificate-corners absolute left-0 top-0 h-16 w-16 border-l-4 border-t-4 rounded-tl-lg print:hidden" style="border-color: var(--cert-primary)" aria-hidden="true" />
-            <div class="certificate-corners absolute right-0 top-0 h-16 w-16 border-r-4 border-t-4 rounded-tr-lg print:hidden" style="border-color: var(--cert-primary)" aria-hidden="true" />
-            <div class="certificate-corners absolute bottom-0 left-0 h-16 w-16 border-b-4 border-l-4 rounded-bl-lg print:hidden" style="border-color: var(--cert-primary)" aria-hidden="true" />
-            <div class="certificate-corners absolute bottom-0 right-0 h-16 w-16 border-b-4 border-r-4 rounded-br-lg print:hidden" style="border-color: var(--cert-primary)" aria-hidden="true" />
-
-            <div
-                v-if="certOverlayEnabled"
-                class="pointer-events-none absolute inset-0"
-                style="z-index: 1"
-                :style="{ backgroundColor: certOverlayColor, opacity: certOverlayOpacity }"
-                aria-hidden="true"
-            />
-
-            <div
-                class="certificate-watermark pointer-events-none absolute inset-0 flex items-center justify-center opacity-[0.06] print:hidden"
-                style="z-index: 1"
-            >
-                <span
-                    class="font-bold whitespace-nowrap"
-                    style="color: var(--cert-primary); transform: rotate(-35deg); font-size: var(--cert-watermark-size)"
-                >
-                    {{ platformName }}
-                </span>
-            </div>
-
-            <div class="certificate-inner relative flex flex-col" style="z-index: 2">
-                <div class="certificate-body flex flex-col items-center text-center">
-                    <div class="relative flex h-14 w-14 items-center justify-center rounded-full text-[var(--cert-primary)]">
-                        <div class="absolute inset-0 rounded-full" style="background-color: var(--cert-primary); opacity: 0.15" aria-hidden="true" />
-                        <svg class="relative z-10 h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-                        </svg>
-                    </div>
-                    <p class="mt-3 font-semibold uppercase tracking-[0.2em]" style="color: var(--cert-text); font-size: var(--cert-header-size)">
-                        {{ headerText }}
-                    </p>
-                </div>
-
-                <h2 class="mt-6 text-center font-bold certificate-body" style="color: var(--cert-title); font-size: var(--cert-title-size)">
-                    {{ courseTitle }}
-                </h2>
-
-                <div class="certificate-body mt-8 text-center" style="color: var(--cert-text); font-size: var(--cert-body-size)">
-                    <template v-if="hasBodyTemplate">
-                        <p class="whitespace-pre-wrap leading-relaxed">{{ resolvedBodyText }}</p>
-                    </template>
-                    <template v-else>
-                        <p>{{ recipientIntroText }}</p>
-                        <p class="mt-2">
-                            <span class="inline-block border-b-2 px-1 font-bold" style="border-color: var(--cert-primary); color: var(--cert-text)">{{ recipient_name || 'Aluno' }}</span>
-                        </p>
-                        <p class="mt-3">
-                            {{ completionText }} <strong>{{ platformName }}</strong>
-                        </p>
-                        <p v-if="issuedAtLabel" class="mt-2" style="color: var(--cert-text); opacity: 0.9">
-                            {{ issuedOnText }} {{ issuedAtLabel }}
-                        </p>
-                        <p v-else-if="!certificate_available" class="mt-2 print:hidden" style="color: var(--cert-text); opacity: 0.8">
-                            {{ issuedOnText }} --
-                        </p>
-                        <p v-if="durationEnabled && certificate.duration_text" class="mt-2" style="opacity: 0.9">
-                            {{ durationLabelText }}: <strong>{{ certificate.duration_text }}</strong>
-                        </p>
-                    </template>
-                </div>
-
-                <div class="certificate-footer mt-12 grid grid-cols-2 gap-8 border-t pt-8" style="border-color: rgba(0,0,0,0.12); color: var(--cert-text); font-size: var(--cert-footer-size)">
-                    <div>
-                        <p class="font-medium uppercase tracking-wide" style="opacity: 0.85">{{ instructorLabelText }}</p>
-                        <p class="certificate-signature mt-1 font-medium" :style="{ fontFamily: certSignatureFont, color: 'var(--cert-text)' }">{{ certificate.signature_text || 'Instrutor' }}</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="font-semibold">{{ platformName }}</p>
-                        <p style="opacity: 0.85">{{ platformLabelText }}</p>
-                    </div>
-                </div>
-            </div>
         </div>
         <div class="certificate-no-print flex flex-wrap justify-center gap-4 print:hidden">
             <template v-if="certificate_available">

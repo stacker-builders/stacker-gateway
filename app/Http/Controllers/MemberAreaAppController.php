@@ -874,6 +874,7 @@ class MemberAreaAppController extends Controller
             'title_color' => $certConfig['title_color'] ?? null,
             'signature_font_family' => $certConfig['signature_font_family'] ?? 'Dancing Script',
             'print_format' => $certConfig['print_format'] ?? 'A4',
+            'layout' => is_array($certConfig['layout'] ?? null) ? $certConfig['layout'] : [],
         ];
 
         return Inertia::render('MemberAreaApp/Certificado', [
