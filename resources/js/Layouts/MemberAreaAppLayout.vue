@@ -786,7 +786,7 @@ watch(
         <Teleport to="body">
             <div
                 v-if="mobileMenuOpen"
-                class="fixed inset-0 z-40 md:hidden"
+                class="fixed inset-0 z-40 print:hidden md:hidden"
                 aria-hidden="true"
             >
                 <div
@@ -942,7 +942,9 @@ watch(
                 <slot />
             </main>
         </div>
-        <PwaInstallPrompt v-if="slug" :app-name="appName" :slug="slug" />
+        <div class="print:hidden">
+            <PwaInstallPrompt v-if="slug" :app-name="appName" :slug="slug" />
+        </div>
         <MemberAreaNotificationsPanel
             :open="notificationsPanelOpen"
             :base-path="notificationsApiBasePath"
@@ -960,7 +962,7 @@ watch(
         <Teleport to="body">
             <div
                 v-if="accountModalOpen"
-                class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+                class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm print:hidden"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="account-modal-title"
@@ -1139,7 +1141,7 @@ watch(
             >
                 <div
                     v-if="achievementModalOpen && currentAchievementModal"
-                    class="fixed inset-0 z-[100] flex items-center justify-center p-4"
+                    class="fixed inset-0 z-[100] flex items-center justify-center p-4 print:hidden"
                     aria-modal="true"
                     role="dialog"
                 >

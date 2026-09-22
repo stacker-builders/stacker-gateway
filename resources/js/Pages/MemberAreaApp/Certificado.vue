@@ -121,21 +121,53 @@ const printStyleText = computed(() => {
     const pageH = isA3 ? '297mm' : '210mm';
     const scale = printScale.value;
     return `
+html.printing-certificate body * {
+    visibility: hidden !important;
+}
+html.printing-certificate .print-certificate-wrapper,
+html.printing-certificate .print-certificate-wrapper * {
+    visibility: visible !important;
+}
+html.printing-certificate .print-certificate-wrapper .certificate-no-print,
+html.printing-certificate .print-certificate-wrapper .certificate-no-print *,
+html.printing-certificate .fixed {
+    visibility: hidden !important;
+    display: none !important;
+}
 @media print {
     @page {
         size: ${pageW} ${pageH};
         margin: 0;
+    }
+    html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+        overflow: hidden !important;
     }
     body, body *, .print-certificate-wrapper {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
         color-adjust: exact !important;
     }
-    body {
-        margin: 0 !important;
-        padding: 0 !important;
+    /* Isola o certificado: overlays (PWA, header, modais) não entram no PDF */
+    body * {
+        visibility: hidden !important;
+    }
+    .print-certificate-wrapper,
+    .print-certificate-wrapper * {
+        visibility: visible !important;
+    }
+    .print-certificate-wrapper .certificate-no-print,
+    .print-certificate-wrapper .certificate-no-print *,
+    .fixed {
+        visibility: hidden !important;
+        display: none !important;
     }
     .print-certificate-wrapper {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
         width: ${pageW} !important;
         min-width: ${pageW} !important;
         max-width: ${pageW} !important;
@@ -203,22 +235,36 @@ const printStyleText = computed(() => {
 `;
 });
 
+function setCertificatePrinting(on) {
+    if (typeof document === 'undefined') return;
+    document.documentElement.classList.toggle('printing-certificate', on);
+}
+
 function downloadPdf(format) {
     printFormatOverride.value = format === 'A3' ? 'A3' : 'A4';
+    setCertificatePrinting(true);
     requestAnimationFrame(() => {
         window.print();
     });
 }
 
+function onBeforePrint() {
+    setCertificatePrinting(true);
+}
+
 function onAfterPrint() {
     printFormatOverride.value = null;
+    setCertificatePrinting(false);
 }
 
 onMounted(() => {
+    window.addEventListener('beforeprint', onBeforePrint);
     window.addEventListener('afterprint', onAfterPrint);
 });
 onUnmounted(() => {
+    window.removeEventListener('beforeprint', onBeforePrint);
     window.removeEventListener('afterprint', onAfterPrint);
+    setCertificatePrinting(false);
 });
 </script>
 
@@ -226,7 +272,7 @@ onUnmounted(() => {
     <div class="print-certificate-wrapper space-y-8">
         <component :is="'style'" v-if="printStyleText">{{ printStyleText }}</component>
         <link v-if="certSignatureFontUrl" rel="stylesheet" :href="certSignatureFontUrl" />
-        <h1 class="text-2xl font-bold print:hidden">Certificado de conclusão</h1>
+        <h1 class="certificate-no-print text-2xl font-bold print:hidden">Certificado de conclusão</h1>
         <div
             class="certificate-print-area relative mx-auto max-w-2xl overflow-hidden rounded-2xl border border-zinc-200 p-8 shadow-md dark:border-zinc-500 print:max-w-none print:rounded-none print:shadow-none"
             :style="certAreaStyle"
@@ -241,7 +287,7 @@ onUnmounted(() => {
 
             <div
                 v-if="!certificate_available"
-                class="pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center rounded-2xl bg-black/60 p-6 print:hidden"
+                class="certificate-no-print pointer-events-none absolute inset-0 z-20 flex flex-col items-center justify-center rounded-2xl bg-black/60 p-6 print:hidden"
                 aria-hidden="true"
             >
                 <div class="flex flex-col items-center gap-3 rounded-xl bg-zinc-900/95 px-6 py-5 text-center shadow-xl">
@@ -333,7 +379,7 @@ onUnmounted(() => {
                 </div>
             </div>
         </div>
-        <div class="flex flex-wrap justify-center gap-4 print:hidden">
+        <div class="certificate-no-print flex flex-wrap justify-center gap-4 print:hidden">
             <template v-if="certificate_available">
                 <button
                     type="button"
