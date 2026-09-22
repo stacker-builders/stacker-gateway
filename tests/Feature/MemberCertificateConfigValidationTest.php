@@ -169,5 +169,58 @@ class MemberCertificateConfigValidationTest extends TestCase
         $this->assertSame('Instrutor', $cert['signature_text']);
         $this->assertSame('Certificado de conclusão', $cert['header_text']);
     }
+
+    public function test_member_builder_persists_certificate_layout_positions(): void
+    {
+        $seller = User::factory()->create(['role' => User::ROLE_INFOPRODUTOR]);
+        $seller->forceFill(['tenant_id' => $seller->id])->save();
+
+        $product = $this->createTestProduct([
+            'tenant_id' => $seller->id,
+            'type' => Product::TYPE_AREA_MEMBROS,
+            'name' => 'Curso Layout Certificado',
+        ]);
+
+        $payload = [
+            'member_area_config' => array_replace_recursive(Product::defaultMemberAreaConfig(), [
+                'certificate' => [
+                    'enabled' => true,
+                    'title' => 'Layout Test',
+                    'signature_text' => 'Diretor',
+                    'duration_text' => '20 horas',
+                    'layout' => [
+                        'background_only' => true,
+                        'custom_positions' => true,
+                        'fields' => [
+                            'header' => ['visible' => false, 'x' => 10, 'y' => 20, 'w' => 50, 'align' => 'left'],
+                            'title' => ['visible' => true, 'x' => 55, 'y' => 30, 'w' => 60, 'align' => 'center'],
+                            'body' => ['visible' => true, 'x' => 50, 'y' => 55, 'w' => 80, 'align' => 'center'],
+                            'date' => ['visible' => true, 'x' => 20, 'y' => 72, 'w' => 35, 'align' => 'left'],
+                            'duration' => ['visible' => false, 'x' => 80, 'y' => 72, 'w' => 30, 'align' => 'right'],
+                            'signature' => ['visible' => true, 'x' => 15, 'y' => 88, 'w' => 30, 'align' => 'left'],
+                            'platform' => ['visible' => true, 'x' => 85, 'y' => 88, 'w' => 30, 'align' => 'right'],
+                        ],
+                    ],
+                ],
+            ]),
+        ];
+
+        $this->actingAs($seller)
+            ->postJson(route('member-builder.config.update.post', ['produto' => $product->id]), $payload)
+            ->assertOk();
+
+        $product->refresh();
+        $layout = $product->member_area_config['certificate']['layout'] ?? [];
+
+        $this->assertTrue((bool) ($layout['background_only'] ?? false));
+        $this->assertTrue((bool) ($layout['custom_positions'] ?? false));
+        $this->assertFalse((bool) ($layout['fields']['header']['visible'] ?? true));
+        $this->assertSame(10.0, (float) ($layout['fields']['header']['x'] ?? 0));
+        $this->assertSame(20.0, (float) ($layout['fields']['header']['y'] ?? 0));
+        $this->assertSame('left', $layout['fields']['header']['align'] ?? null);
+        $this->assertSame(55.0, (float) ($layout['fields']['title']['x'] ?? 0));
+        $this->assertSame(20.0, (float) ($layout['fields']['date']['x'] ?? 0));
+        $this->assertFalse((bool) ($layout['fields']['duration']['visible'] ?? true));
+    }
 }
 

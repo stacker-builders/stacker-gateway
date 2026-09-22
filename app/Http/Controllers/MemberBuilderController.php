@@ -1705,6 +1705,9 @@ class MemberBuilderController extends Controller
         $certificate['duration_enabled'] = array_key_exists('duration_enabled', $certificate)
             ? (bool) $certificate['duration_enabled']
             : true;
+        $certificate['layout'] = $this->normalizeCertificateLayout(
+            is_array($certificate['layout'] ?? null) ? $certificate['layout'] : []
+        );
 
         if ((bool) ($certificate['enabled'] ?? false)) {
             $defaults = Product::defaultMemberAreaConfig()['certificate'] ?? [];
@@ -1730,6 +1733,48 @@ class MemberBuilderController extends Controller
         }
 
         $config['certificate'] = $certificate;
+    }
+
+    /**
+     * @param  array<string, mixed>  $layout
+     * @return array{background_only: bool, custom_positions: bool, fields: array<string, array{visible: bool, x: float, y: float, w: float, align: string}>}
+     */
+    private function normalizeCertificateLayout(array $layout): array
+    {
+        $defaults = Product::defaultMemberAreaConfig()['certificate']['layout'] ?? [];
+        $defaultFields = is_array($defaults['fields'] ?? null) ? $defaults['fields'] : [];
+        $fieldIds = ['header', 'title', 'body', 'date', 'duration', 'signature', 'platform'];
+        $aligns = ['left', 'center', 'right'];
+        $incomingFields = is_array($layout['fields'] ?? null) ? $layout['fields'] : [];
+        $fields = [];
+
+        foreach ($fieldIds as $id) {
+            $def = is_array($defaultFields[$id] ?? null) ? $defaultFields[$id] : [
+                'visible' => true,
+                'x' => 50,
+                'y' => 50,
+                'w' => 70,
+                'align' => 'center',
+            ];
+            $src = is_array($incomingFields[$id] ?? null) ? $incomingFields[$id] : [];
+            $align = (string) ($src['align'] ?? $def['align'] ?? 'center');
+            if (! in_array($align, $aligns, true)) {
+                $align = 'center';
+            }
+            $fields[$id] = [
+                'visible' => array_key_exists('visible', $src) ? (bool) $src['visible'] : (bool) ($def['visible'] ?? true),
+                'x' => max(0, min(100, (float) ($src['x'] ?? $def['x'] ?? 50))),
+                'y' => max(0, min(100, (float) ($src['y'] ?? $def['y'] ?? 50))),
+                'w' => max(10, min(100, (float) ($src['w'] ?? $def['w'] ?? 70))),
+                'align' => $align,
+            ];
+        }
+
+        return [
+            'background_only' => (bool) ($layout['background_only'] ?? $defaults['background_only'] ?? false),
+            'custom_positions' => (bool) ($layout['custom_positions'] ?? $defaults['custom_positions'] ?? false),
+            'fields' => $fields,
+        ];
     }
 
     /**
