@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, watchEffect, onMounted } from 'vue';
+import { ref, computed, watch, watchEffect, onMounted, nextTick } from 'vue';
 import { useForm, Link, usePage } from '@inertiajs/vue3';
 import { User, Building2, ChevronLeft } from 'lucide-vue-next';
 import Button from '@/components/ui/Button.vue';
@@ -31,6 +31,47 @@ let cepFetchTimer = null;
 let cepAbortController = null;
 /** Erro de validação apenas do passo atual (avanço Continuar / Enter). */
 const wizardStepError = ref('');
+
+const errorStepByField = {
+    name: 1,
+    email: 1,
+    phone: 1,
+    birth_date: 1,
+    document: 2,
+    company_name: 2,
+    legal_representative_cpf: 2,
+    address_zip: 3,
+    address_street: 3,
+    address_number: 3,
+    address_complement: 3,
+    address_neighborhood: 3,
+    address_city: 3,
+    address_state: 3,
+    monthly_revenue_range: 4,
+    password: 5,
+    password_confirmation: 5,
+    accept_terms_privacy: 5,
+    turnstile_token: 5,
+};
+
+function firstServerErrorMessage(errors) {
+    const value = Object.values(errors || {}).find((msg) => String(msg || '').trim() !== '');
+    return value ? String(value) : '';
+}
+
+function revealServerErrors(errors) {
+    const keys = Object.keys(errors || {});
+    const stepForError = keys.map((key) => errorStepByField[key]).find((n) => n);
+    if (stepForError) {
+        step.value = stepForError;
+    }
+    const message = firstServerErrorMessage(errors);
+    if (message) {
+        nextTick(() => {
+            wizardStepError.value = message;
+        });
+    }
+}
 
 const cnpjLookupLoading = ref(false);
 const cnpjSituacaoWarning = ref('');
@@ -287,6 +328,15 @@ const form = useForm({
     turnstile_token: '',
     website: '',
 });
+
+const flashError = computed(() => String(page.props.flash?.error || '').trim());
+
+const firstFormError = computed(() => firstServerErrorMessage(form.errors));
+
+/** Aviso sempre visível na etapa atual: validação local, erro de campo ou flash (ex.: rate limit). */
+const registrationAlert = computed(
+    () => wizardStepError.value || firstFormError.value || flashError.value
+);
 
 onMounted(() => {
     if (!props.upgrade_from_customer) return;
@@ -557,6 +607,7 @@ async function onWizardKeydownEnter(e) {
 }
 
 function submitRegistration() {
+    wizardStepError.value = '';
     form.turnstile_token = turnstileToken.value;
     form
         .transform((data) => ({
@@ -570,7 +621,18 @@ function submitRegistration() {
             address_zip: String(data.address_zip || '').replace(/\D/g, ''),
             address_state: String(data.address_state || '').toUpperCase().slice(0, 2),
         }))
-        .post('/cadastro', { preserveScroll: true });
+        .post('/cadastro', {
+            preserveScroll: true,
+            onError: (errors) => {
+                revealServerErrors(errors);
+            },
+            onFinish: () => {
+                const msg = String(page.props.flash?.error || '').trim();
+                if (msg && !wizardStepError.value && !firstServerErrorMessage(form.errors)) {
+                    wizardStepError.value = msg;
+                }
+            },
+        });
 }
 </script>
 
@@ -855,11 +917,11 @@ function submitRegistration() {
                     </div>
 
                     <p
-                        v-if="wizardStepError"
+                        v-if="registrationAlert"
                         class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200"
                         role="alert"
                     >
-                        {{ wizardStepError }}
+                        {{ registrationAlert }}
                     </p>
 
                     <div class="flex items-center justify-between gap-3 pt-2">
