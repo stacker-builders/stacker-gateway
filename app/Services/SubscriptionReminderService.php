@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Mail\SubscriptionReminderMail;
 use App\Models\Subscription;
+use App\Support\PublicAppUrl;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -85,7 +86,7 @@ class SubscriptionReminderService
         }
 
         $daysLeft = (int) $today->diffInDays($periodEnd, false);
-        $renewalUrl = url('/renovar/'.$subscription->renewal_token);
+        $renewalUrl = rtrim(PublicAppUrl::base(), '/').'/renovar/'.$subscription->renewal_token;
         $planName = e($plan->name);
         $productName = e($subscription->product?->name ?? 'seu produto');
 

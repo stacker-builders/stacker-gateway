@@ -231,6 +231,11 @@ class SubscriptionPixRenewalTest extends TestCase
             $mock->shouldReceive('assertSmtpHostIsConfigured')->andReturnNull();
         });
 
+        config([
+            'app.url' => 'http://localhost',
+            'getfy.webhook_public_url' => 'https://loja.exemplo.com',
+        ]);
+
         [, $buyer, , , $subscription] = $this->pastDueSubscriptionContext();
 
         $sent = app(SubscriptionReminderService::class)->sendForSubscription(
@@ -240,8 +245,13 @@ class SubscriptionPixRenewalTest extends TestCase
         );
 
         $this->assertTrue($sent);
-        Mail::assertSent(SubscriptionReminderMail::class, function (SubscriptionReminderMail $mail) use ($buyer) {
-            return $mail->hasTo($buyer->email);
+        $subscription->refresh();
+        $expectedUrl = 'https://loja.exemplo.com/renovar/'.$subscription->renewal_token;
+        Mail::assertSent(SubscriptionReminderMail::class, function (SubscriptionReminderMail $mail) use ($buyer, $expectedUrl) {
+            return $mail->hasTo($buyer->email)
+                && str_contains($mail->htmlBody, 'href="'.e($expectedUrl).'"')
+                && str_contains($mail->htmlBody, e($expectedUrl))
+                && ! str_contains($mail->htmlBody, 'localhost');
         });
     }
 
