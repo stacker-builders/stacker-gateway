@@ -21,6 +21,8 @@ defineProps({
     formas_pagamento: { type: Array, default: () => [] },
     taxa_conversao: { type: Number, default: 0 },
     abandono_carrinho: { type: Number, default: 0 },
+    taxa_abandono_compras: { type: Number, default: 0 },
+    compras_periodo: { type: Number, default: 0 },
     reembolsos_count: { type: Number, default: 0 },
     reembolsos_total: { type: Number, default: 0 },
     quantidade_produtos: { type: Number, default: 0 },
@@ -115,7 +117,13 @@ const emit = defineEmits(['update:period', 'toggle-values']);
                         <ShoppingBag class="h-4 w-4" />
                         <span class="text-sm font-medium">{{ labels.cartAbandonment }}</span>
                     </div>
-                    <p class="mt-2 text-lg font-bold text-zinc-900 dark:text-white">{{ displayNumber(abandono_carrinho) }}</p>
+                    <p class="mt-2 text-lg font-bold text-zinc-900 dark:text-white">
+                        {{ valuesVisible ? `${taxa_abandono_compras}%` : '—' }}
+                    </p>
+                    <p class="text-xs text-zinc-500">
+                        {{ displayNumber(abandono_carrinho) }} {{ labels.abandonedCount }}
+                        · {{ displayNumber(compras_periodo) }} {{ labels.purchasesCount }}
+                    </p>
                 </div>
                 <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
                     <div class="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">

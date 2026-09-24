@@ -315,6 +315,8 @@ class CheckoutAbandonmentMetricsTest extends TestCase
         $response->assertInertia(fn ($page) => $page
             ->component('Dashboard/Index')
             ->where('abandono_carrinho', 1)
+            ->where('taxa_abandono_compras', 100)
+            ->where('compras_periodo', 0)
         );
     }
 }
