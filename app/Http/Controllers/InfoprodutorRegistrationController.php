@@ -725,7 +725,11 @@ class InfoprodutorRegistrationController extends Controller
 
     private function rejectRegistrationHoneypot(Request $request): ?RedirectResponse
     {
-        if (trim((string) $request->input('website', '')) === '') {
+        $honeypot = trim((string) $request->input('sg_hp', ''));
+        if ($honeypot === '') {
+            $honeypot = trim((string) $request->input('website', ''));
+        }
+        if ($honeypot === '') {
             return null;
         }
 
