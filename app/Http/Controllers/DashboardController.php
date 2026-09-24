@@ -33,7 +33,7 @@ class DashboardController extends Controller
         $tenantId = auth()->user()->tenant_id;
         $userId = (int) auth()->id();
         $hasAffiliateEnrollments = AffiliateCommissionQuery::userHasApprovedEnrollments($userId);
-        $cacheKey = 'dashboard:v5:'.($tenantId ?? 'global').':'.$userId.':'.$period;
+        $cacheKey = 'dashboard:v6:'.($tenantId ?? 'global').':'.$userId.':'.$period;
 
         $payload = Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($tenantId, $period, $userId, $hasAffiliateEnrollments) {
             [$start, $end] = $this->rangeForPeriod($period);
@@ -57,6 +57,8 @@ class DashboardController extends Controller
 
         $vendasTotais = (float) $ordersCompleted->sum('amount');
         $quantidadeVendas = $ordersCompleted->count();
+        // Compras próprias (sem comissões de afiliado) para a métrica abandono / compras.
+        $comprasProprias = $quantidadeVendas;
         $vendasPendentes = (float) $ordersPending->sum('amount');
         $reembolsosCount = $ordersRefunded->count();
         $reembolsosTotal = (float) (clone $ordersQuery)->where('status', 'refunded')->sum('amount');
@@ -113,6 +115,11 @@ class DashboardController extends Controller
         $quantidadeProdutos = $productsQuery->count();
 
             $funnel = $this->checkoutFunnelStats($tenantId, $start, $end);
+            $abandonados = $funnel['abandono_carrinho'];
+            $baseAbandonoCompras = $abandonados + $comprasProprias;
+            $taxaAbandonoCompras = $baseAbandonoCompras > 0
+                ? round((float) $abandonados / $baseAbandonoCompras * 100, 1)
+                : 0.0;
 
             return [
                 'period' => $period,
@@ -122,7 +129,9 @@ class DashboardController extends Controller
                 'ticket_medio' => round($ticketMedio, 2),
                 'formas_pagamento' => $formasPagamento,
                 'taxa_conversao' => $funnel['taxa_conversao'],
-                'abandono_carrinho' => $funnel['abandono_carrinho'],
+                'abandono_carrinho' => $abandonados,
+                'taxa_abandono_compras' => $taxaAbandonoCompras,
+                'compras_periodo' => $comprasProprias,
                 'reembolsos_count' => $reembolsosCount,
                 'reembolsos_total' => round($reembolsosTotal, 2),
                 'quantidade_produtos' => $quantidadeProdutos,
@@ -144,6 +153,7 @@ class DashboardController extends Controller
     /**
      * Abandono: sessões válidas deduplicadas (e-mail + produto, form com e-mail, após graça).
      * Taxa de conversão: sessões com pedido completed / total de sessões no período (created_at).
+     * Taxa abandono/compras (no payload): abandonados / (abandonados + compras completed) × 100.
      *
      * @return array{taxa_conversao: float, abandono_carrinho: int}
      */

@@ -34,6 +34,8 @@ const props = defineProps({
     formas_pagamento: { type: Array, default: () => [] },
     taxa_conversao: { type: Number, default: 0 },
     abandono_carrinho: { type: Number, default: 0 },
+    taxa_abandono_compras: { type: Number, default: 0 },
+    compras_periodo: { type: Number, default: 0 },
     reembolsos_count: { type: Number, default: 0 },
     reembolsos_total: { type: Number, default: 0 },
     quantidade_produtos: { type: Number, default: 0 },
@@ -51,6 +53,14 @@ const { isDark } = useThemeMode();
 
 const conversaoFormatted = computed(() =>
     props.valuesVisible ? `${props.taxa_conversao}%` : '—'
+);
+
+const abandonoFormatted = computed(() =>
+    props.valuesVisible ? `${props.taxa_abandono_compras}%` : '—'
+);
+
+const abandonoFooter = computed(() =>
+    `${props.valuesVisible ? props.abandono_carrinho : '—'} ${props.labels.abandonedCount} · ${props.valuesVisible ? props.compras_periodo : '—'} ${props.labels.purchasesCount}`
 );
 
 const kawaiiChartOptions = computed(() => {
@@ -196,7 +206,8 @@ const kawaiiChartOptions = computed(() => {
                 <KawaiiMetricCard
                     :icon="ShoppingBag"
                     :label="labels.cartAbandonment"
-                    :value="displayNumber(abandono_carrinho)"
+                    :value="abandonoFormatted"
+                    :footer="abandonoFooter"
                     href="/relatorios"
                     variant="stacked"
                     tint="pink"
