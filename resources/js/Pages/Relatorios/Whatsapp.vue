@@ -39,6 +39,7 @@ const props = defineProps({
     audience_counts: { type: Object, default: () => ({}) },
     campaigns: { type: Array, default: () => [] },
     campaign_defaults: { type: Object, default: () => ({}) },
+    campaigns_available: { type: Boolean, default: false },
 });
 
 const periodOptions = [
@@ -176,7 +177,7 @@ function statusLabel(row) {
             </p>
         </AuroraPageSection>
 
-        <AuroraPageSection>
+        <AuroraPageSection v-if="campaigns_available">
             <div :class="innerPanelClass">
                 <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Campanha em lote</h2>
                 <p class="mt-1 text-xs text-zinc-500">

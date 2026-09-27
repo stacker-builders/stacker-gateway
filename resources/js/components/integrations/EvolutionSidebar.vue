@@ -4,7 +4,7 @@ import axios from 'axios';
 import Button from '@/components/ui/Button.vue';
 import Checkbox from '@/components/ui/Checkbox.vue';
 import Toggle from '@/components/ui/Toggle.vue';
-import { ChevronLeft, ExternalLink, Loader2, Plus, Trash2, X } from 'lucide-vue-next';
+import { BarChart3, ChevronLeft, ExternalLink, Loader2, Plus, Trash2, X } from 'lucide-vue-next';
 import { useI18n } from '@/composables/useI18n';
 
 const props = defineProps({
@@ -506,6 +506,13 @@ function close() {
                         <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
                             Cadastre mais de uma conta para contingência. Cada uma tem Server URL, nome da instância e apikey. Contas ativas entram no roteamento; a padrão é usada primeiro.
                         </p>
+                        <a
+                            href="/relatorios/whatsapp"
+                            class="mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-[var(--color-primary)] hover:underline"
+                        >
+                            <BarChart3 class="h-4 w-4" />
+                            Painel de conversão
+                        </a>
 
                         <p v-if="loading" class="text-sm text-zinc-500">Carregando…</p>
                         <div v-else-if="accounts.length" class="space-y-2">
