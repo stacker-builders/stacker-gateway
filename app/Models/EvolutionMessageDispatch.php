@@ -147,4 +147,43 @@ class EvolutionMessageDispatch extends Model
                 'error' => $reason,
             ]);
     }
+
+    public static function cancelPendingCartForOwnedProduct(int $tenantId, string $normalizedPhone, string|int|null $productId): int
+    {
+        if ($productId === null || $productId === '') {
+            return 0;
+        }
+
+        $variants = \App\Services\Whatsapp\WhatsappRecoveryGuard::phoneMatchVariants($normalizedPhone);
+        if ($variants === []) {
+            return 0;
+        }
+
+        $pending = static::query()
+            ->where('tenant_id', $tenantId)
+            ->where('event_type', EvolutionInstance::EVENT_CART_RECOVERY)
+            ->where('status', self::STATUS_PENDING)
+            ->whereHas('checkoutSession', fn ($query) => $query->where('product_id', $productId))
+            ->get();
+
+        $ids = $pending
+            ->filter(function (self $dispatch) use ($variants) {
+                $dispatchVariants = \App\Services\Whatsapp\WhatsappRecoveryGuard::phoneMatchVariants($dispatch->phone);
+
+                return array_intersect($variants, $dispatchVariants) !== [];
+            })
+            ->pluck('id')
+            ->all();
+
+        if ($ids === []) {
+            return 0;
+        }
+
+        return static::query()
+            ->whereIn('id', $ids)
+            ->update([
+                'status' => self::STATUS_CANCELED,
+                'error' => 'Cliente já comprou este produto — recuperação interrompida.',
+            ]);
+    }
 }

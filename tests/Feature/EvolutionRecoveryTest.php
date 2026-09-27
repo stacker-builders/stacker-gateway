@@ -75,6 +75,46 @@ class EvolutionRecoveryTest extends TestCase
         $this->assertSame(EvolutionInstance::EVENT_CART_RECOVERY, $dispatch->event_type);
     }
 
+    public function test_command_skips_cart_recovery_when_phone_already_bought_product(): void
+    {
+        Queue::fake();
+        $this->seedSeller();
+        $this->connectedInstance([
+            'cart_recovery_enabled' => true,
+            'cart_recovery_steps' => [
+                ['delay_minutes' => 10, 'message' => 'Primeira {nome}! {link}'],
+            ],
+        ]);
+
+        $product = $this->createTestProduct(['checkout_slug' => 'evo-owned-1']);
+        Order::create([
+            'tenant_id' => 1,
+            'product_id' => $product->id,
+            'status' => 'completed',
+            'amount' => 97,
+            'email' => 'buyer@example.com',
+            'phone' => '11988776655',
+        ]);
+
+        CheckoutSession::create([
+            'tenant_id' => 1,
+            'product_id' => $product->id,
+            'checkout_slug' => $product->checkout_slug,
+            'session_token' => 'evo-owned-'.uniqid(),
+            'step' => CheckoutSession::STEP_FORM_FILLED,
+            'email' => 'lead@example.com',
+            'name' => 'Lead Evo',
+            'phone' => '11988776655',
+            'form_started_at' => now()->subMinutes(20),
+            'form_filled_at' => now()->subMinutes(15),
+        ]);
+
+        $this->artisan('evolution:process-cart-recovery')->assertSuccessful();
+
+        Queue::assertNothingPushed();
+        $this->assertSame(0, EvolutionMessageDispatch::query()->count());
+    }
+
     public function test_command_skips_when_instance_disconnected(): void
     {
         Queue::fake();

@@ -46,6 +46,14 @@ class UazapiDispatcher
             return false;
         }
 
+        if (WhatsappRecoveryGuard::alreadyOwnsProduct(
+            (int) $session->tenant_id,
+            $phone,
+            $session->product_id
+        )) {
+            return false;
+        }
+
         if (WhatsappRecoveryGuard::sessionTaken((int) $session->id, UazapiInstance::EVENT_CART_RECOVERY, $stepIndex)) {
             return false;
         }

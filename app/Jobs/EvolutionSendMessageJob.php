@@ -169,8 +169,15 @@ class EvolutionSendMessageJob implements ShouldQueue
 
         if ($dispatch->event_type === EvolutionInstance::EVENT_CART_RECOVERY && $dispatch->checkout_session_id) {
             $session = CheckoutSession::query()->find($dispatch->checkout_session_id);
+            if ($session !== null && $session->order_id !== null) {
+                return true;
+            }
 
-            return $session !== null && $session->order_id !== null;
+            return WhatsappRecoveryGuard::alreadyOwnsProduct(
+                (int) $dispatch->tenant_id,
+                $dispatch->phone,
+                $session?->product_id
+            );
         }
 
         if ($dispatch->order_id) {
@@ -191,6 +198,19 @@ class EvolutionSendMessageJob implements ShouldQueue
         $startedAt = $this->recoveryStartedAt($dispatch);
         if ($startedAt && WhatsappRecoveryGuard::blocks((int) $dispatch->tenant_id, $dispatch->phone, $startedAt)) {
             return 'Lead respondeu no WhatsApp — envio cancelado.';
+        }
+
+        if ($dispatch->event_type === EvolutionInstance::EVENT_CART_RECOVERY) {
+            $session = $dispatch->checkout_session_id
+                ? CheckoutSession::query()->find($dispatch->checkout_session_id)
+                : null;
+            if ($session && WhatsappRecoveryGuard::alreadyOwnsProduct(
+                (int) $dispatch->tenant_id,
+                $dispatch->phone,
+                $session->product_id
+            )) {
+                return 'Cliente já comprou este produto — envio cancelado.';
+            }
         }
 
         return 'Pedido pago ou carrinho convertido — envio cancelado.';
