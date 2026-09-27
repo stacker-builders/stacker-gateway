@@ -399,6 +399,55 @@ class EvolutionRecoveryTest extends TestCase
             );
     }
 
+    public function test_infoprodutor_can_open_whatsapp_recovery_report_with_evolution_only(): void
+    {
+        SellerIntegrationVisibility::setGlobal(SellerIntegrationVisibility::UAZAPI, false);
+        SellerIntegrationVisibility::setGlobal(SellerIntegrationVisibility::EVOLUTION, true);
+
+        $seller = User::factory()->create(['role' => User::ROLE_INFOPRODUTOR]);
+        $seller->forceFill([
+            'tenant_id' => $seller->id,
+            'kyc_status' => User::KYC_APPROVED,
+            'account_status' => 'approved',
+        ])->save();
+
+        $instance = EvolutionInstance::firstOrNewForTenant((int) $seller->id);
+        $instance->fill([
+            'name' => 'Conta principal',
+            'server_url' => 'https://stacker.evo.com',
+            'instance_name' => 'loja-1',
+            'instance_token' => 'inst-token',
+            'status' => EvolutionInstance::STATUS_CONNECTED,
+            'is_active' => true,
+            'is_default' => true,
+            'cart_recovery_enabled' => true,
+            'connected_at' => now(),
+        ]);
+        $instance->save();
+
+        EvolutionMessageDispatch::query()->create([
+            'tenant_id' => $seller->id,
+            'evolution_instance_id' => $instance->id,
+            'event_type' => EvolutionInstance::EVENT_CART_RECOVERY,
+            'sequence_step' => 0,
+            'phone' => '5511999999999',
+            'message' => 'Oi',
+            'status' => EvolutionMessageDispatch::STATUS_SENT,
+            'sent_at' => now(),
+        ]);
+
+        $this->actingAs($seller)
+            ->get(route('relatorios.whatsapp'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Relatorios/Whatsapp')
+                ->where('campaigns_available', false)
+                ->where('metrics.sent', 1)
+                ->where('metrics.cart_sent', 1)
+                ->has('recent', 1)
+            );
+    }
+
     private function seedSeller(): void
     {
         User::factory()->create(['role' => User::ROLE_INFOPRODUTOR, 'tenant_id' => 1]);

@@ -154,8 +154,10 @@ class RelatoriosController extends Controller
             'abandonados_com_email' => $abandonadosComEmail,
             'reembolsos_count' => $reembolsosCount,
             'reembolsos_total' => round($reembolsosTotal, 2),
-            'whatsapp_recovery_available' => $tenantId !== null
-                && SellerIntegrationVisibility::effectiveForTenant(SellerIntegrationVisibility::UAZAPI, (int) $tenantId),
+            'whatsapp_recovery_available' => $tenantId !== null && (
+                SellerIntegrationVisibility::effectiveForTenant(SellerIntegrationVisibility::UAZAPI, (int) $tenantId)
+                || SellerIntegrationVisibility::effectiveForTenant(SellerIntegrationVisibility::EVOLUTION, (int) $tenantId)
+            ),
         ]);
     }
 
