@@ -12,6 +12,7 @@ use App\Models\UazapiRecoveryStop;
 use App\Services\Uazapi\UazapiAccountResolver;
 use App\Services\Uazapi\UazapiClient;
 use App\Services\Uazapi\UazapiLabelService;
+use App\Services\Whatsapp\WhatsappRecoveryGuard;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -175,8 +176,15 @@ class UazapiSendMessageJob implements ShouldQueue
 
         if ($dispatch->event_type === UazapiInstance::EVENT_CART_RECOVERY && $dispatch->checkout_session_id) {
             $session = CheckoutSession::query()->find($dispatch->checkout_session_id);
+            if ($session !== null && $session->order_id !== null) {
+                return true;
+            }
 
-            return $session !== null && $session->order_id !== null;
+            return WhatsappRecoveryGuard::alreadyOwnsProduct(
+                (int) $dispatch->tenant_id,
+                $dispatch->phone,
+                $session?->product_id
+            );
         }
 
         if ($dispatch->order_id) {
@@ -197,6 +205,19 @@ class UazapiSendMessageJob implements ShouldQueue
         $startedAt = $this->recoveryStartedAt($dispatch);
         if ($startedAt && UazapiRecoveryStop::blocks((int) $dispatch->tenant_id, $dispatch->phone, $startedAt)) {
             return 'Lead respondeu no WhatsApp — envio cancelado.';
+        }
+
+        if ($dispatch->event_type === UazapiInstance::EVENT_CART_RECOVERY) {
+            $session = $dispatch->checkout_session_id
+                ? CheckoutSession::query()->find($dispatch->checkout_session_id)
+                : null;
+            if ($session && WhatsappRecoveryGuard::alreadyOwnsProduct(
+                (int) $dispatch->tenant_id,
+                $dispatch->phone,
+                $session->product_id
+            )) {
+                return 'Cliente já comprou este produto — envio cancelado.';
+            }
         }
 
         return 'Pedido pago ou carrinho convertido — envio cancelado.';

@@ -52,17 +52,26 @@ class UazapiEventSubscriber
             return;
         }
 
+        $phone = $this->resolveOrderPhone($order);
+        $normalized = $phone !== null ? $this->client->normalizePhone($phone) : null;
+        if ($normalized !== null && $order->product_id) {
+            UazapiMessageDispatch::cancelPendingCartForOwnedProduct(
+                $tenantId,
+                $normalized,
+                $order->product_id
+            );
+        }
+
         $instanceIds = $this->resolver->instanceIdsForOrderOrSession(
             (int) $order->id,
             $sessionId !== null ? (int) $sessionId : null
         );
-        $phone = $this->resolveOrderPhone($order);
         if ($phone && $instanceIds !== []) {
-            $normalized = $this->client->normalizePhone($phone);
-            if ($normalized) {
+            $normalizedForLabel = $this->client->normalizePhone($phone);
+            if ($normalizedForLabel) {
                 $instances = UazapiInstance::query()->whereIn('id', $instanceIds)->get();
                 foreach ($instances as $instance) {
-                    $this->labels->apply($instance, $normalized, UazapiLabelService::PAID);
+                    $this->labels->apply($instance, $normalizedForLabel, UazapiLabelService::PAID);
                 }
             }
         }

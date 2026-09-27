@@ -116,6 +116,14 @@ class ProcessEvolutionCartRecoveryCommand extends Command
                 continue;
             }
 
+            if (WhatsappRecoveryGuard::alreadyOwnsProduct(
+                (int) $session->tenant_id,
+                $phone,
+                $session->product_id
+            )) {
+                continue;
+            }
+
             $abandonAt = $this->resolveAbandonAt($session);
             if ($abandonAt === null) {
                 continue;

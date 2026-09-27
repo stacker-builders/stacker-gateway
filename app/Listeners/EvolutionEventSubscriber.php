@@ -43,6 +43,16 @@ class EvolutionEventSubscriber
             ->value('id');
 
         EvolutionMessageDispatch::cancelPendingForOrder((int) $order->id, $sessionId !== null ? (int) $sessionId : null);
+
+        $phone = $this->resolveOrderPhone($order);
+        $normalized = $phone !== null ? $this->client->normalizePhone($phone) : null;
+        if ($normalized !== null && $order->tenant_id !== null && $order->product_id) {
+            EvolutionMessageDispatch::cancelPendingCartForOwnedProduct(
+                (int) $order->tenant_id,
+                $normalized,
+                $order->product_id
+            );
+        }
     }
 
     public function handlePixGenerated(PixGenerated $event): void
