@@ -122,7 +122,7 @@ services:
     command:
       - "sh"
       - "-lc"
-      - "set -e; php artisan queue:work --queue=payments,webhooks-outbound,webhooks-inbound,webhooks,payouts,meta-tracking,utmify-tracking,metrics-tracking,default --sleep=3 --tries=3 --timeout=0 --memory=${GETFY_QUEUE_WORKER_MEMORY:-128} --max-time=${GETFY_QUEUE_WORKER_MAX_TIME:-3600} --max-jobs=${GETFY_QUEUE_WORKER_MAX_JOBS:-1000} & Q=$$!; php artisan schedule:work & S=$$!; trap 'kill $$Q $$S 2>/dev/null || true' INT TERM; while kill -0 $$Q 2>/dev/null && kill -0 $$S 2>/dev/null; do sleep 5; done; kill $$Q $$S 2>/dev/null || true; wait $$Q 2>/dev/null || true; wait $$S 2>/dev/null || true; exit 1"
+      - "set -e; php artisan queue:work --queue=payments,webhooks-outbound,webhooks-inbound,webhooks,payouts,meta-tracking,utmify-tracking,metrics-tracking,uazapi,default --sleep=3 --tries=3 --timeout=0 --memory=${GETFY_QUEUE_WORKER_MEMORY:-128} --max-time=${GETFY_QUEUE_WORKER_MAX_TIME:-3600} --max-jobs=${GETFY_QUEUE_WORKER_MAX_JOBS:-1000} & Q=$$!; php artisan schedule:work & S=$$!; trap 'kill $$Q $$S 2>/dev/null || true' INT TERM; while kill -0 $$Q 2>/dev/null && kill -0 $$S 2>/dev/null; do sleep 5; done; kill $$Q $$S 2>/dev/null || true; wait $$Q 2>/dev/null || true; wait $$S 2>/dev/null || true; exit 1"
     volumes:
       - getfy_storage:/var/www/html/storage
       - getfy_env:/var/www/html/.docker

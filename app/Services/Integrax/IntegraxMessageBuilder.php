@@ -28,13 +28,12 @@ class IntegraxMessageBuilder
         }
 
         $slug = $session->checkout_slug ?? $session->product?->checkout_slug ?? '';
-        $link = $slug !== '' ? URL::route('checkout.show', ['slug' => $slug]) : '';
 
         return [
             'nome' => $name,
             'produto' => (string) ($session->product?->name ?? 'Produto'),
             'valor' => '',
-            'link' => $link,
+            'link' => $this->checkoutPublicUrl(is_string($slug) ? $slug : ''),
             'link_acesso' => '',
         ];
     }
@@ -57,13 +56,12 @@ class IntegraxMessageBuilder
 
         $product = $order->product;
         $slug = $order->getCheckoutSlug();
-        $link = $slug ? URL::route('checkout.show', ['slug' => $slug]) : '';
 
         return [
             'nome' => $name,
             'produto' => (string) ($product?->name ?? 'Produto'),
             'valor' => 'R$ '.number_format((float) $order->amount, 2, ',', '.'),
-            'link' => $link,
+            'link' => $this->checkoutPublicUrl(is_string($slug) ? $slug : ''),
             'link_acesso' => $this->resolveAccessLink($product, $order->user),
         ];
     }
@@ -86,6 +84,20 @@ class IntegraxMessageBuilder
             Product::TYPE_LINK,
             Product::TYPE_APLICATIVO,
         ], true);
+    }
+
+    private function checkoutPublicUrl(string $slug): string
+    {
+        $slug = trim($slug);
+        if ($slug === '') {
+            return '';
+        }
+
+        // Cron/queue rodam com APP_URL interno (localhost). Força a origem pública
+        // antes de gerar o checkout enviado no WhatsApp/SMS.
+        PublicAppUrl::forceRoot();
+
+        return URL::route('checkout.show', ['slug' => $slug]);
     }
 
     private function resolveAccessLink(?Product $product, ?User $user): string
