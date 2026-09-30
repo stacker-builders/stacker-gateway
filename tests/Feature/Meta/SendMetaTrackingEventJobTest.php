@@ -145,6 +145,7 @@ class SendMetaTrackingEventJobTest extends TestCase
         $session->refresh();
         $this->assertSame('fb.1.123.456', $session->meta_fbp);
         $this->assertSame('fb.1.123.click', $session->meta_fbc);
+        $this->assertSame('https://example.test/c/metaevt1?fbclid=abc', $session->meta_page_url);
 
         Queue::assertPushed(SendMetaTrackingEventJob::class);
     }

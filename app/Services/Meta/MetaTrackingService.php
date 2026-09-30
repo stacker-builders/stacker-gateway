@@ -110,6 +110,10 @@ class MetaTrackingService
             return [];
         }
 
+        // Persist attribution before queueing: the send job rebuilds context from the session only.
+        $this->persistSessionAttribution($session, $overrides);
+        $session->refresh();
+
         $session->loadMissing('product');
         $product = $session->product;
         if (! $product) {
@@ -497,15 +501,30 @@ class MetaTrackingService
     public function persistSessionAttribution(CheckoutSession $session, array $data): void
     {
         $updates = [];
+        $maxLengths = [
+            'meta_fbp' => 512,
+            'meta_fbc' => 512,
+            'meta_user_agent' => 1024,
+            'meta_page_url' => 2048,
+        ];
 
         foreach (['fbp' => 'meta_fbp', 'fbc' => 'meta_fbc', 'user_agent' => 'meta_user_agent', 'event_source_url' => 'meta_page_url'] as $key => $column) {
             if (! isset($data[$key]) || ! is_string($data[$key])) {
                 continue;
             }
             $value = trim($data[$key]);
-            if ($value !== '') {
-                $updates[$column] = $value;
+            if ($value === '') {
+                continue;
             }
+            $max = $maxLengths[$column] ?? 2048;
+            if (mb_strlen($value) > $max) {
+                $value = mb_substr($value, 0, $max);
+            }
+            // Keep the first page URL for the session; later mirrors may be thank-you pages.
+            if ($column === 'meta_page_url' && is_string($session->meta_page_url) && trim($session->meta_page_url) !== '') {
+                continue;
+            }
+            $updates[$column] = $value;
         }
 
         if ($updates !== []) {
@@ -529,6 +548,9 @@ class MetaTrackingService
         }
         if (empty($orderMetadata['user_agent']) && $session->meta_user_agent) {
             $orderMetadata['user_agent'] = $session->meta_user_agent;
+        }
+        if (empty($orderMetadata['event_source_url']) && $session->meta_page_url) {
+            $orderMetadata['event_source_url'] = $session->meta_page_url;
         }
 
         return $orderMetadata;
