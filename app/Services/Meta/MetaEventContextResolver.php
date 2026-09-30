@@ -70,7 +70,11 @@ class MetaEventContextResolver
             fbc: $this->firstNonEmpty($overrides['fbc'] ?? null, $meta['fbc'] ?? null, $sessionFbc),
             clientIp: $order->customer_ip ?: ($session?->customer_ip),
             clientUserAgent: $this->firstNonEmpty($overrides['user_agent'] ?? null, $meta['user_agent'] ?? null, $session?->meta_user_agent),
-            eventSourceUrl: $this->firstNonEmpty($overrides['event_source_url'] ?? null, $session?->meta_page_url),
+            eventSourceUrl: $this->firstNonEmpty(
+                $overrides['event_source_url'] ?? null,
+                $meta['event_source_url'] ?? null,
+                $session?->meta_page_url,
+            ),
             email: $order->email ?: ($order->user?->email ?? null),
             phone: $order->phone ?: null,
             firstName: $firstName,

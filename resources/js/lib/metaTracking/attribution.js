@@ -118,7 +118,7 @@ export function getAttributionPayload() {
     return {
         fbp: getFbp() || undefined,
         fbc: getFbc() || undefined,
-        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent || undefined : undefined,
-        event_source_url: eventSourceUrl,
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent || undefined : undefined,
+        eventSourceUrl,
     };
 }

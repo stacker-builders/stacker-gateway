@@ -45,6 +45,8 @@ class MetaCheckoutAdTrafficTest extends TestCase
         $this->assertSame('CLICK_ID_XYZ', $session->meta_fbclid);
         $this->assertNotEmpty($session->meta_fbc);
         $this->assertStringContainsString('CLICK_ID_XYZ', $session->meta_fbc);
+        $this->assertNotEmpty($session->meta_page_url);
+        $this->assertStringContainsString('/c/metaad1', $session->meta_page_url);
     }
 
     public function test_checkout_get_with_ad_params_queues_pageview_and_initiate_checkout(): void
@@ -69,6 +71,8 @@ class MetaCheckoutAdTrafficTest extends TestCase
 
         $session = CheckoutSession::query()->where('checkout_slug', 'metaad2')->latest('id')->first();
         $this->assertNotNull($session);
+        $this->assertNotEmpty($session->meta_page_url);
+        $this->assertStringContainsString('/c/metaad2', $session->meta_page_url);
 
         $this->assertDatabaseHas('meta_tracking_events', [
             'event_name' => 'PageView',
@@ -82,6 +86,14 @@ class MetaCheckoutAdTrafficTest extends TestCase
         ]);
 
         Queue::assertPushed(SendMetaTrackingEventJob::class, 2);
+
+        $context = app(\App\Services\Meta\MetaEventContextResolver::class)->forCheckoutSession($session);
+        $payload = app(\App\Services\Meta\MetaTrackingService::class)->buildPayload(
+            'PageView',
+            'pv:'.$session->session_token,
+            $context,
+        );
+        $this->assertSame($session->meta_page_url, $payload['data'][0]['event_source_url'] ?? null);
     }
 
     public function test_checkout_get_without_ad_params_does_not_queue_landing_backup(): void

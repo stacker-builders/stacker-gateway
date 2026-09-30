@@ -405,6 +405,13 @@ class CheckoutController extends Controller
                 $checkoutSession = $existingCheckoutSession;
                 $sessionToken = $existingCheckoutSession->session_token;
                 $reusedCheckoutSession = true;
+                if (trim((string) ($checkoutSession->meta_page_url ?? '')) === '') {
+                    app(MetaTrackingService::class)->persistSessionAttribution($checkoutSession, [
+                        'event_source_url' => $request->fullUrl(),
+                        'user_agent' => (string) $request->userAgent(),
+                    ]);
+                    $checkoutSession->refresh();
+                }
             } else {
                 $checkoutSession = CheckoutSession::create(
                     CheckoutSession::filterAttributesForExistingColumns(array_merge([
@@ -417,6 +424,8 @@ class CheckoutController extends Controller
                         'step' => CheckoutSession::STEP_VISIT,
                         'customer_ip' => $request->ip(),
                         'affiliate_ref' => $affiliateRef !== '' ? $affiliateRef : null,
+                        'meta_page_url' => CheckoutSession::truncateTrackingValue($request->fullUrl(), 2048),
+                        'meta_user_agent' => CheckoutSession::truncateTrackingValue((string) $request->userAgent(), 1024),
                     ], CheckoutSession::trackingFromQuery($request), CheckoutSession::metaAttributionFromQuery($request)))
                 );
             }
