@@ -1084,6 +1084,11 @@ Route::middleware(['auth', 'admin.tenant', 'seller.panel', 'stacker.license', 'r
     Route::get('/relatorios/whatsapp', [\App\Http\Controllers\UazapiRecoveryReportController::class, 'index'])
         ->middleware(['team.permission:relatorios.view', 'seller.integration:uazapi,evolution'])
         ->name('relatorios.whatsapp');
+    Route::post('/relatorios/whatsapp/envios/{provider}/{dispatch}/reenviar', [\App\Http\Controllers\UazapiRecoveryReportController::class, 'resendFailed'])
+        ->middleware(['throttle:20,1', 'team.permission:relatorios.view', 'seller.integration:uazapi,evolution'])
+        ->whereIn('provider', ['evolution', 'uazapi'])
+        ->whereNumber('dispatch')
+        ->name('relatorios.whatsapp.resend');
     Route::get('/relatorios/carrinhos-abandonados/export', [\App\Http\Controllers\RelatoriosController::class, 'exportAbandonedCarts'])
         ->middleware(['throttle:30,1', 'team.permission:relatorios.view'])
         ->name('relatorios.abandoned-carts.export');

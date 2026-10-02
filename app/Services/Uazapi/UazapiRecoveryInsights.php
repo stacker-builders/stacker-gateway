@@ -161,6 +161,24 @@ class UazapiRecoveryInsights
             ->all();
     }
 
+    public function canResendFailed(string $provider, string $eventType, string $status): bool
+    {
+        if ($status !== 'failed') {
+            return false;
+        }
+
+        if (! in_array($provider, ['evolution', 'uazapi'], true)) {
+            return false;
+        }
+
+        return in_array($eventType, [
+            EvolutionInstance::EVENT_CART_RECOVERY,
+            EvolutionInstance::EVENT_PIX_GENERATED,
+            UazapiInstance::EVENT_CART_RECOVERY,
+            UazapiInstance::EVENT_PIX_GENERATED,
+        ], true);
+    }
+
     /**
      * @return array{order_ids: list<int>}
      */
@@ -270,6 +288,7 @@ class UazapiRecoveryInsights
     ): array {
         return [
             'id' => $provider.'-'.$id,
+            'dispatch_id' => $id,
             'provider' => $provider,
             'event_type' => $eventType,
             'status' => $status,
@@ -279,6 +298,7 @@ class UazapiRecoveryInsights
             'error' => is_string($error) ? $error : null,
             'sent_at' => $sentAt,
             'created_at' => $createdAt,
+            'can_resend' => $this->canResendFailed($provider, $eventType, $status),
         ];
     }
 }
