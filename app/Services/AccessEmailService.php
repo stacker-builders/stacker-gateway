@@ -138,9 +138,17 @@ class AccessEmailService
         if ($isRenewal) {
             $subject = 'Renovação confirmada — '.$product->name;
             $bodyHtml = $this->buildRenewalSuccessBody($customerName, $product->name);
+            $logoUrl = $this->resolveAccessEmailLogo($tenantIdForMail, $template);
+            if ($logoUrl !== null) {
+                $bodyHtml = $this->prependLogoToBody($logoUrl, $bodyHtml);
+            }
         } elseif ($product->type === Product::TYPE_AREA_MEMBROS_EXTERNA) {
             $subject = 'Compra confirmada — '.$product->name;
             $bodyHtml = $this->buildExternalMemberAreaPendingBody($customerName, $product->name);
+            $logoUrl = $this->resolveAccessEmailLogo($tenantIdForMail, $template);
+            if ($logoUrl !== null) {
+                $bodyHtml = $this->prependLogoToBody($logoUrl, $bodyHtml);
+            }
         } elseif ($product->type === Product::TYPE_LINK) {
             $subject = 'Seu acesso a '.$product->name;
             $externalLink = $order->user
@@ -154,9 +162,9 @@ class AccessEmailService
                 $customerEmail,
                 $linkEsqueciSenha,
             );
-            $brandingLogo = BrandingEmailData::forTenant($tenantIdForMail)['logo_url'] ?? null;
-            if (is_string($brandingLogo) && $brandingLogo !== '') {
-                $bodyHtml = $this->prependLogoToBody($brandingLogo, $bodyHtml);
+            $logoUrl = $this->resolveAccessEmailLogo($tenantIdForMail, $template);
+            if ($logoUrl !== null) {
+                $bodyHtml = $this->prependLogoToBody($logoUrl, $bodyHtml);
             }
         } else {
             $bodyHtmlBeforeReplace = $bodyHtml;
@@ -173,9 +181,9 @@ class AccessEmailService
             ];
             $subject = str_replace(array_keys($replace), array_values($replace), $subject);
             $bodyHtml = str_replace(array_keys($replace), array_values($replace), $bodyHtml);
-            $brandingLogo = BrandingEmailData::forTenant($tenantIdForMail)['logo_url'] ?? null;
-            if (is_string($brandingLogo) && $brandingLogo !== '') {
-                $bodyHtml = $this->prependLogoToBody($brandingLogo, $bodyHtml);
+            $logoUrl = $this->resolveAccessEmailLogo($tenantIdForMail, $template);
+            if ($logoUrl !== null) {
+                $bodyHtml = $this->prependLogoToBody($logoUrl, $bodyHtml);
             }
             if ($product->type === Product::TYPE_AREA_MEMBROS) {
                 if ($senha !== '' && ! str_contains($bodyHtmlBeforeReplace, '{senha}')) {
@@ -533,14 +541,30 @@ class AccessEmailService
             }
         }
 
-        $brandingLogo = BrandingEmailData::forTenant($product->tenant_id)['logo_url'] ?? null;
-        if (is_string($brandingLogo) && $brandingLogo !== '') {
-            $bodyHtml = $this->prependLogoToBody($brandingLogo, $bodyHtml);
-        } elseif (! empty($template['logo_url'])) {
-            $bodyHtml = $this->prependLogoToBody($template['logo_url'], $bodyHtml);
+        $logoUrl = $this->resolveAccessEmailLogo($product->tenant_id, $template);
+        if ($logoUrl !== null) {
+            $bodyHtml = $this->prependLogoToBody($logoUrl, $bodyHtml);
         }
 
         return $this->sendAccessMailableWithFallback($subject, $bodyHtml, $customerEmail, $product->tenant_id, $template, $product);
+    }
+
+    /**
+     * Prioriza a logo do template do produto; se vazia, usa a logo da marca da plataforma.
+     */
+    private function resolveAccessEmailLogo(?int $tenantId, array $template): ?string
+    {
+        $productLogo = trim((string) ($template['logo_url'] ?? ''));
+        if ($productLogo !== '') {
+            return $productLogo;
+        }
+
+        $brandingLogo = BrandingEmailData::forTenant($tenantId)['logo_url'] ?? null;
+        if (is_string($brandingLogo) && trim($brandingLogo) !== '') {
+            return trim($brandingLogo);
+        }
+
+        return null;
     }
 
     private function resolveLinkAcesso(Product $product): string
@@ -669,12 +693,11 @@ class AccessEmailService
 
         $subject = 'Pedido confirmado — '.$product->name;
         $bodyHtml = $this->buildPhysicalProductConfirmationBody($order, $customerName, $product->name);
-        $brandingLogo = BrandingEmailData::forTenant($tenantIdForMail)['logo_url'] ?? null;
-        if (is_string($brandingLogo) && $brandingLogo !== '') {
-            $bodyHtml = $this->prependLogoToBody($brandingLogo, $bodyHtml);
-        }
-
         $template = array_merge(Product::defaultEmailTemplate(), ($product->checkout_config ?? [])['email_template'] ?? []);
+        $logoUrl = $this->resolveAccessEmailLogo($tenantIdForMail, $template);
+        if ($logoUrl !== null) {
+            $bodyHtml = $this->prependLogoToBody($logoUrl, $bodyHtml);
+        }
 
         $sendResult = $this->sendAccessMailableWithFallback($subject, $bodyHtml, $customerEmail, $tenantIdForMail, $template, $product);
         if ($sendResult->success) {

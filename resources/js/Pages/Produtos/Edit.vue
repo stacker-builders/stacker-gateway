@@ -627,6 +627,26 @@ function onLogoFileChange(e) {
     if (file) uploadEmailLogo(file);
 }
 
+async function removeEmailLogo() {
+    logoError.value = '';
+    logoUploading.value = true;
+    try {
+        await axios.delete(`/produtos/${props.produto.id}/email-template-logo`, {
+            headers: {
+                'X-XSRF-TOKEN': getCsrfToken(),
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            withCredentials: true,
+        });
+        form.email_template.logo_url = '';
+    } catch (err) {
+        logoError.value = err.response?.data?.message || 'Não foi possível remover a logo.';
+    } finally {
+        logoUploading.value = false;
+    }
+}
+
 function checkoutUrl(slug) {
     if (typeof window === 'undefined' || !slug) return '';
     return `${window.location.origin}/c/${slug}`;
@@ -2476,33 +2496,60 @@ function submit() {
                             <div>
                                 <label class="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">{{ t('products.edit.email_logo', 'Logo do e-mail') }}</label>
                                 <div class="flex flex-col sm:flex-row gap-4 items-start">
+                                    <input ref="logoInputRef" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="hidden" @change="onLogoFileChange" />
                                     <div
-                                        class="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800/80 w-full sm:w-44 h-32 shrink-0 cursor-pointer transition hover:border-[var(--color-primary)] hover:bg-[var(--color-primary)]/5"
-                                        @click="logoInputRef?.click()"
+                                        class="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800/80 w-full sm:w-52 h-36 shrink-0 transition"
+                                        :class="logoUploading ? 'opacity-70' : 'hover:border-[var(--color-primary)] hover:bg-[var(--color-primary)]/5'"
                                     >
-                                        <input ref="logoInputRef" type="file" accept="image/*" class="hidden" @change="onLogoFileChange" />
                                         <template v-if="logoUploading">
                                             <Loader2 class="h-8 w-8 text-[var(--color-primary)] animate-spin" />
                                             <span class="mt-2 text-xs text-zinc-500">{{ t('common.sending', 'Enviando...') }}</span>
                                         </template>
                                         <template v-else-if="form.email_template.logo_url">
-                                            <div class="rounded-lg bg-white px-2 py-1.5 shadow-sm ring-1 ring-zinc-200/80 dark:ring-zinc-600">
+                                            <div class="rounded-lg bg-white px-3 py-2 shadow-sm ring-1 ring-zinc-200/80 dark:ring-zinc-600">
                                                 <img
                                                     :key="form.email_template.logo_url"
                                                     :src="form.email_template.logo_url"
                                                     alt="Logo"
-                                                    class="max-h-20 w-auto object-contain mx-auto"
+                                                    class="max-h-24 w-auto max-w-[180px] object-contain mx-auto"
                                                     @error="($e) => $e.target.style.display = 'none'"
                                                 />
                                             </div>
-                                            <span class="mt-2 text-xs text-zinc-500">{{ t('products.edit.click_to_change', 'Clique para trocar') }}</span>
                                         </template>
                                         <template v-else>
-                                            <ImageIcon class="h-8 w-8 text-zinc-400 dark:text-zinc-500" />
-                                            <span class="mt-2 text-xs text-zinc-500">{{ t('products.edit.click_to_upload', 'Clique para enviar') }}</span>
+                                            <button
+                                                type="button"
+                                                class="flex flex-col items-center justify-center px-4 py-6 cursor-pointer"
+                                                @click="logoInputRef?.click()"
+                                            >
+                                                <ImageIcon class="h-8 w-8 text-zinc-400 dark:text-zinc-500" />
+                                                <span class="mt-2 text-xs text-zinc-500">{{ t('products.edit.click_to_upload', 'Clique para enviar') }}</span>
+                                            </button>
                                         </template>
                                     </div>
-                                    <p class="text-xs text-zinc-500 dark:text-zinc-400 sm:pt-2">PNG ou JPG, até 2 MB. Exibida no topo do e-mail.</p>
+                                    <div class="space-y-2 sm:pt-1">
+                                        <p class="text-xs text-zinc-500 dark:text-zinc-400">
+                                            {{ t('products.edit.email_logo_hint', 'PNG, JPG ou WebP, até 2 MB. A logo é convertida com fundo branco para aparecer nítida no e-mail (inclusive no modo escuro).') }}
+                                        </p>
+                                        <div v-if="form.email_template.logo_url" class="flex flex-wrap gap-2">
+                                            <button
+                                                type="button"
+                                                class="inline-flex items-center rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                                                :disabled="logoUploading || coproductionReadonly"
+                                                @click="logoInputRef?.click()"
+                                            >
+                                                {{ t('products.edit.click_to_change', 'Trocar') }}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="inline-flex items-center rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition hover:bg-red-50 dark:border-red-900/50 dark:bg-zinc-800 dark:text-red-400 dark:hover:bg-red-950/40"
+                                                :disabled="logoUploading || coproductionReadonly"
+                                                @click="removeEmailLogo"
+                                            >
+                                                {{ t('products.edit.remove_email_logo', 'Remover logo') }}
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                                 <p v-if="logoError" class="mt-2 text-sm text-red-600 dark:text-red-400">{{ logoError }}</p>
                             </div>

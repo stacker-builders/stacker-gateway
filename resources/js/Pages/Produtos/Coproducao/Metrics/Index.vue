@@ -11,7 +11,7 @@ import { usePanelThemeClasses } from '@/composables/usePanelThemeClasses';
 import { useThemeMode } from '@/composables/useThemeMode';
 import {
     Users, MousePointerClick, ShoppingCart, QrCode, BadgeCheck,
-    Percent, CircleDollarSign, Wallet, Timer, TrendingUp,
+    Percent, CircleDollarSign, Wallet, Timer, TrendingUp, CreditCard, Ban,
 } from 'lucide-vue-next';
 
 defineOptions({ layout: LayoutInfoprodutor });
@@ -152,8 +152,11 @@ function onProductChange(e) {
                 <AuroraStatCard label="Checkouts iniciados" :value="String(summary.checkouts_form_started || 0)" :icon="ShoppingCart" />
                 <AuroraStatCard label="Pedidos submetidos" :value="String(summary.checkouts_started || 0)" :icon="ShoppingCart" />
                 <AuroraStatCard label="PIX gerados" :value="String(summary.pix_created || 0)" :icon="QrCode" />
+                <AuroraStatCard label="Conversão PIX" :value="`${summary.pix_conversion_rate || 0}%`" :icon="QrCode" />
                 <AuroraStatCard label="Conversões" :value="String(summary.conversions_approved || 0)" :icon="BadgeCheck" />
                 <AuroraStatCard label="Taxa de conversão" :value="`${summary.conversion_rate || 0}%`" :icon="Percent" />
+                <AuroraStatCard label="Aprovação cartão" :value="`${summary.card_approval_rate || 0}%`" :icon="CreditCard" />
+                <AuroraStatCard label="Recusas" :value="String(summary.payments_refused || 0)" :icon="Ban" />
                 <AuroraStatCard label="Receita bruta" :value="money(summary.gross_revenue)" :icon="CircleDollarSign" />
                 <AuroraStatCard label="Receita líquida" :value="money(summary.net_revenue)" :icon="Wallet" />
                 <AuroraStatCard label="Ticket médio" :value="money(summary.avg_ticket)" :icon="TrendingUp" />

@@ -52,12 +52,12 @@ const previewBodyHtml = computed(() => sanitizeHtmlAllowlist(replacePlaceholders
         </div>
       </div>
       <div v-if="logoUrl" class="mb-3 flex justify-center">
-        <div class="rounded-lg bg-white px-3 py-2 shadow-sm ring-1 ring-zinc-200/90 dark:ring-zinc-600">
+        <div class="rounded-lg bg-white px-4 py-3 shadow-sm ring-1 ring-zinc-200/90 dark:ring-zinc-600">
           <img
             :key="logoUrl"
             :src="logoUrl"
             alt="Logo"
-            class="max-h-10 w-auto object-contain mx-auto block"
+            class="max-h-[120px] w-auto max-w-[280px] object-contain mx-auto block"
             @error="($e) => $e.target.style.display = 'none'"
           />
         </div>

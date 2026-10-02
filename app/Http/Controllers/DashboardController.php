@@ -7,6 +7,7 @@ use App\Models\CheckoutSession;
 use App\Models\Order;
 use App\Models\Product;
 use App\Support\DashboardBannerSettings;
+use App\Support\PlatformDashboardPeriod;
 use App\Support\SqlDialect;
 use Carbon\Carbon;
 use App\Services\AffiliateCommissionQuery;
@@ -19,24 +20,36 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    private const PERIODS = ['hoje', 'ontem', '7dias', 'mes', 'ano', 'total'];
-
     private const CACHE_TTL_SECONDS = 300; // 5 minutes
 
     public function __invoke(Request $request): Response
     {
-        $period = $request->query('period', 'hoje');
-        if (! in_array($period, self::PERIODS, true)) {
-            $period = 'hoje';
+        $period = PlatformDashboardPeriod::normalize($request->query('period', 'hoje'));
+        $from = PlatformDashboardPeriod::normalizeDate($request->query('from'));
+        $to = PlatformDashboardPeriod::normalizeDate($request->query('to'));
+        if ($period === 'personalizado') {
+            $today = Carbon::now()->toDateString();
+            $from = $from ?? $today;
+            $to = $to ?? $today;
+            if ($to < $from) {
+                [$from, $to] = [$to, $from];
+            }
+        } else {
+            $from = null;
+            $to = null;
         }
+
+        [$start, $end] = PlatformDashboardPeriod::range($period, $from, $to);
+        $chartGranularity = $period === 'personalizado'
+            ? PlatformDashboardPeriod::granularity($period, $start, $end)
+            : (in_array($period, ['hoje', 'ontem'], true) ? 'hour' : 'day');
 
         $tenantId = auth()->user()->tenant_id;
         $userId = (int) auth()->id();
         $hasAffiliateEnrollments = AffiliateCommissionQuery::userHasApprovedEnrollments($userId);
-        $cacheKey = 'dashboard:v6:'.($tenantId ?? 'global').':'.$userId.':'.$period;
+        $cacheKey = 'dashboard:v7:'.($tenantId ?? 'global').':'.$userId.':'.$period.':'.($from ?? '').':'.($to ?? '');
 
-        $payload = Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($tenantId, $period, $userId, $hasAffiliateEnrollments) {
-            [$start, $end] = $this->rangeForPeriod($period);
+        $payload = Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($tenantId, $period, $userId, $hasAffiliateEnrollments, $start, $end, $from, $to, $chartGranularity) {
 
             $ordersQuery = Order::forTenant($tenantId);
             if (auth()->user()?->isTeam()) {
@@ -64,7 +77,7 @@ class DashboardController extends Controller
         $reembolsosTotal = (float) (clone $ordersQuery)->where('status', 'refunded')->sum('amount');
 
         if ($hasAffiliateEnrollments) {
-            $affiliateRequest = Request::create('/', 'GET', ['period' => $period]);
+            $affiliateRequest = $this->affiliatePeriodRequest($period, $from, $to);
             $affiliateApproved = AffiliateCommissionQuery::applyFilters(
                 AffiliateCommissionQuery::baseQuery($userId),
                 $affiliateRequest,
@@ -105,7 +118,7 @@ class DashboardController extends Controller
             ->values()
             ->all();
 
-        $graficoVendas = $this->buildGraficoVendas($tenantId, $period, $start, $end, $hasAffiliateEnrollments ? $userId : null);
+        $graficoVendas = $this->buildGraficoVendas($tenantId, $period, $start, $end, $hasAffiliateEnrollments ? $userId : null, $chartGranularity, $from, $to);
 
         $productsQuery = Product::forTenant($tenantId);
         if (auth()->user()?->isTeam()) {
@@ -138,6 +151,11 @@ class DashboardController extends Controller
                 'grafico_vendas' => $graficoVendas,
             ];
         });
+
+        $payload['period'] = $period;
+        $payload['from'] = $from;
+        $payload['to'] = $to;
+        $payload['chart_granularity'] = $chartGranularity;
 
         $data = new \ArrayObject($payload);
         $data['dashboard_banners'] = DashboardBannerSettings::banners(activeOnly: true, resolveUrls: true);
@@ -191,41 +209,50 @@ class DashboardController extends Controller
         ];
     }
 
-    private function rangeForPeriod(string $period): array
+    private function affiliatePeriodRequest(string $period, ?string $from, ?string $to): Request
     {
-        $now = Carbon::now();
-        $start = null;
-        $end = null;
-
-        switch ($period) {
-            case 'hoje':
-                $start = $now->copy()->startOfDay();
-                $end = $now->copy()->endOfDay();
-                break;
-            case 'ontem':
-                $start = $now->copy()->subDay()->startOfDay();
-                $end = $now->copy()->subDay()->endOfDay();
-                break;
-            case '7dias':
-                $start = $now->copy()->subDays(6)->startOfDay();
-                $end = $now->copy()->endOfDay();
-                break;
-            case 'mes':
-                $start = $now->copy()->startOfMonth();
-                $end = $now->copy()->endOfMonth();
-                break;
-            case 'ano':
-                $start = $now->copy()->startOfYear();
-                $end = $now->copy()->endOfYear();
-                break;
-            case 'total':
-                break;
+        $params = ['period' => $period];
+        if ($period === 'personalizado') {
+            $params['date_from'] = $from;
+            $params['date_to'] = $to;
         }
 
-        return [$start?->toDateTimeString(), $end?->toDateTimeString()];
+        return Request::create('/', 'GET', $params);
     }
 
-    private function buildGraficoVendas(?int $tenantId, string $period, ?string $start, ?string $end, ?int $affiliateUserId = null): array
+    /**
+     * @return list<string>
+     */
+    private function chartKeys(string $granularity, string $start, string $end): array
+    {
+        if ($granularity === 'hour') {
+            return array_map('strval', range(0, 23));
+        }
+
+        if ($granularity === 'month') {
+            $cursor = Carbon::parse($start)->startOfMonth();
+            $last = Carbon::parse($end)->startOfMonth();
+            $keys = [];
+            while ($cursor->lte($last)) {
+                $keys[] = $cursor->format('Y-m');
+                $cursor->addMonth();
+            }
+
+            return $keys;
+        }
+
+        $cursor = Carbon::parse($start)->startOfDay();
+        $last = Carbon::parse($end)->startOfDay();
+        $keys = [];
+        while ($cursor->lte($last)) {
+            $keys[] = $cursor->format('Y-m-d');
+            $cursor->addDay();
+        }
+
+        return $keys;
+    }
+
+    private function buildGraficoVendas(?int $tenantId, string $period, ?string $start, ?string $end, ?int $affiliateUserId = null, string $chartGranularity = 'day', ?string $from = null, ?string $to = null): array
     {
         $query = Order::forTenant($tenantId)->where('status', 'completed');
         if (auth()->user()?->isTeam()) {
@@ -242,12 +269,10 @@ class DashboardController extends Controller
         }
 
         $affiliateRequest = $affiliateUserId
-            ? Request::create('/', 'GET', ['period' => $period])
+            ? $this->affiliatePeriodRequest($period, $from, $to)
             : null;
 
-        $isHourly = in_array($period, ['hoje', 'ontem'], true);
-
-        if ($isHourly) {
+        if ($chartGranularity === 'hour') {
             $hour = SqlDialect::hourExpression('created_at');
             $rows = $query
                 ->selectRaw($hour.' as hora, SUM(amount) as total')
@@ -271,7 +296,9 @@ class DashboardController extends Controller
             return $result;
         }
 
-        $dateExpr = SqlDialect::dateExpression('created_at');
+        $dateExpr = $chartGranularity === 'month'
+            ? SqlDialect::monthExpression('created_at')
+            : SqlDialect::dateExpression('created_at');
         $rows = $query
             ->selectRaw($dateExpr.' as data, SUM(amount) as total')
             ->groupBy('data')
@@ -282,6 +309,24 @@ class DashboardController extends Controller
         $affiliateByDate = $affiliateUserId
             ? AffiliateCommissionQuery::approvedCommissionTotalsByDate($affiliateUserId, $affiliateRequest)
             : [];
+
+        if ($chartGranularity === 'month' && $affiliateByDate !== []) {
+            $byMonth = [];
+            foreach ($affiliateByDate as $date => $total) {
+                $key = substr((string) $date, 0, 7);
+                $byMonth[$key] = ($byMonth[$key] ?? 0) + (float) $total;
+            }
+            $affiliateByDate = $byMonth;
+        }
+
+        if ($period === 'personalizado' && $start && $end) {
+            return array_map(function (string $key) use ($rows, $affiliateByDate) {
+                return [
+                    'data' => $key,
+                    'total' => (float) ($rows->get($key)?->total ?? 0) + (float) ($affiliateByDate[$key] ?? 0),
+                ];
+            }, $this->chartKeys($chartGranularity, $start, $end));
+        }
 
         $dates = collect($rows->keys())->merge(array_keys($affiliateByDate))->unique()->sort()->values();
 

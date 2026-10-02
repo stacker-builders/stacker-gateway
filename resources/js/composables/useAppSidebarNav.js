@@ -25,6 +25,7 @@ import {
     Truck,
     Zap,
     Activity,
+    Code2,
 } from 'lucide-vue-next';
 import { useI18n } from '@/composables/useI18n';
 
@@ -41,6 +42,7 @@ const iconMap = {
     BarChart3,
     Mail,
     CodeXml,
+    Code2,
 };
 
 /** Hover only no desktop — no mobile o primeiro toque vira hover e compete com a navegação. */
@@ -94,6 +96,13 @@ export function useAppSidebarNav() {
                 href: '/vendas',
                 icon: CircleDollarSign,
             });
+            if (page.props.api_pix_enabled_effective) {
+                items.push({
+                    name: t('sidebar.api_transactions', 'Transações API'),
+                    href: '/transacoes-api',
+                    icon: Code2,
+                });
+            }
         }
 
         if (canView('relatorios.view')) {
@@ -182,6 +191,9 @@ export function useAppSidebarNav() {
         if (href === '/dashboard') return url === '/dashboard' || url === '/';
         if (href === '/vendas') {
             return url === '/vendas' || url.startsWith('/vendas/');
+        }
+        if (href === '/transacoes-api') {
+            return url === '/transacoes-api' || url.startsWith('/transacoes-api/');
         }
         if (href === '/produtos/vitrine-afiliacao') {
             return url === '/produtos/vitrine-afiliacao' || url.startsWith('/produtos/vitrine-afiliacao/');

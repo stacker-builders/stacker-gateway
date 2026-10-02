@@ -180,14 +180,23 @@ class MetricsAnalyticsService
      */
     public function summary(?int $tenantId, ?Carbon $start, ?Carbon $end, array $filters = [], bool $platformScope = false): array
     {
+        $summary = null;
         if ($this->shouldUseDailyStats($filters, $start, $end)) {
             $fromDaily = $this->summaryFromDailyStats($tenantId, $start, $end, $filters, $platformScope);
             if ($fromDaily !== null) {
-                return $fromDaily;
+                $summary = $fromDaily;
             }
         }
 
-        return $this->summaryFromLive($tenantId, $start, $end, $filters, $platformScope);
+        if ($summary === null) {
+            $summary = $this->summaryFromLive($tenantId, $start, $end, $filters, $platformScope);
+        }
+
+        // Taxas por método usam properties/order ao vivo (daily stats não quebram por método).
+        return $this->withPaymentMethodRates(
+            $summary,
+            $this->eventsQuery($tenantId, $start, $end, $filters, $platformScope)
+        );
     }
 
     /**
@@ -444,7 +453,84 @@ class MetricsAnalyticsService
             'avg_seconds_to_convert' => (int) round($avgSeconds),
             'revenue_per_visitor' => $revPerVisitor,
             'revenue_per_click' => $revPerClick,
+            'pix_paid' => 0,
+            'pix_conversion_rate' => 0.0,
+            'card_approved' => 0,
+            'card_refused' => 0,
+            'card_attempts' => 0,
+            'card_approval_rate' => 0.0,
         ];
+    }
+
+    /**
+     * Anexa conversão PIX (pagos / gerados) e aprovação de cartão (aprovados / tentativas).
+     *
+     * @param  array<string, mixed>  $summary
+     * @return array<string, mixed>
+     */
+    private function withPaymentMethodRates(array $summary, Builder $events): array
+    {
+        $pixCreated = (int) ($summary['pix_created'] ?? 0);
+        $pixPaid = $this->countEventsByPaymentBucket($events, MetricsEvent::PAYMENT_APPROVED, 'pix');
+        $cardApproved = $this->countEventsByPaymentBucket($events, MetricsEvent::PAYMENT_APPROVED, 'card');
+        $cardRefused = $this->countEventsByPaymentBucket($events, MetricsEvent::PAYMENT_REFUSED, 'card');
+        $cardAttempts = $cardApproved + $cardRefused;
+
+        $summary['pix_paid'] = $pixPaid;
+        $summary['pix_conversion_rate'] = $pixCreated > 0
+            ? round(($pixPaid / $pixCreated) * 100, 2)
+            : 0.0;
+        $summary['card_approved'] = $cardApproved;
+        $summary['card_refused'] = $cardRefused;
+        $summary['card_attempts'] = $cardAttempts;
+        $summary['card_approval_rate'] = $cardAttempts > 0
+            ? round(($cardApproved / $cardAttempts) * 100, 2)
+            : 0.0;
+
+        return $summary;
+    }
+
+    /**
+     * Conta eventos filtrando pelo método em properties JSON ou na order relacionada.
+     *
+     * @param  'pix'|'card'  $bucket
+     */
+    private function countEventsByPaymentBucket(Builder $events, string $eventName, string $bucket): int
+    {
+        $methods = $this->paymentMethodsForBucket($bucket);
+        if ($methods === []) {
+            return 0;
+        }
+
+        return (int) (clone $events)
+            ->where('event_name', $eventName)
+            ->where(function ($outer) use ($methods) {
+                $outer->where(function ($pq) use ($methods) {
+                    foreach ($methods as $method) {
+                        $pq->orWhere('properties->payment_method', $method);
+                    }
+                })->orWhereHas('order', function ($oq) use ($methods) {
+                    $oq->where(function ($inner) use ($methods) {
+                        foreach ($methods as $method) {
+                            $inner->orWhereRaw('LOWER(payment_method) = ?', [$method]);
+                        }
+                    });
+                });
+            })
+            ->count();
+    }
+
+    /**
+     * @param  'pix'|'card'  $bucket
+     * @return list<string>
+     */
+    private function paymentMethodsForBucket(string $bucket): array
+    {
+        return match ($bucket) {
+            'pix' => ['pix', 'pix_auto'],
+            'card' => ['card', 'credit_card', 'creditcard', 'apple_pay', 'google_pay'],
+            default => [],
+        };
     }
 
     /**
@@ -796,6 +882,7 @@ class MetricsAnalyticsService
             ['key' => 'checkouts_form_started', 'label' => 'Checkouts iniciados', 'value' => $this->distinctVisitorCount($events, [MetricsEvent::CHECKOUT_FORM_STARTED])],
             ['key' => 'checkouts_started', 'label' => 'Pedidos submetidos', 'value' => $this->distinctVisitorCount($events, [MetricsEvent::CHECKOUT_STARTED])],
             ['key' => 'payments_initiated', 'label' => 'Pagamentos iniciados', 'value' => $this->distinctVisitorCount($events, MetricsEvent::paymentInitiatedEventNames())],
+            ['key' => 'pix_created', 'label' => 'PIX gerados', 'value' => $this->distinctVisitorCount($events, [MetricsEvent::PIX_CREATED])],
             ['key' => 'approved', 'label' => 'Pagamentos aprovados', 'value' => $approvedUnique],
         ];
 

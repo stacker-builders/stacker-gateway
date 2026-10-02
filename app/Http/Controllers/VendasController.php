@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\AffiliateCommissionQuery;
 use App\Services\CoproductionCommissionQuery;
 use App\Services\AccessEmailService;
+use App\Services\ApiPixAccess;
 use App\Services\ManualOrderRefundService;
 use App\Services\Med\MedPolicyService;
 use App\Services\PixGoAccess;
@@ -521,13 +522,30 @@ class VendasController extends Controller
         ];
     }
 
-    public function index(Request $request): InertiaResponse|RedirectResponse
+    public function apiTransactions(Request $request): InertiaResponse|RedirectResponse
     {
+        $tenantId = auth()->user()?->tenant_id;
+        if (! ApiPixAccess::effectiveForTenant($tenantId !== null ? (int) $tenantId : null)) {
+            abort(404);
+        }
+
+        $request->query->set('sale_channel', 'api_pix');
+
+        return $this->index($request, 'api_transactions');
+    }
+
+    public function index(Request $request, string $listingMode = 'sales'): InertiaResponse|RedirectResponse
+    {
+        $isApiListing = $listingMode === 'api_transactions';
+        if ($isApiListing) {
+            $request->query->set('sale_channel', 'api_pix');
+        }
+
         $user = auth()->user();
-        $hasAffiliateEnrollments = AffiliateCommissionQuery::userHasApprovedEnrollments((int) $user->id);
+        $hasAffiliateEnrollments = ! $isApiListing && AffiliateCommissionQuery::userHasApprovedEnrollments((int) $user->id);
         $view = $request->query('view', 'own');
 
-        if ($view === 'affiliate') {
+        if (! $isApiListing && $view === 'affiliate') {
             $query = $request->query();
             unset($query['view']);
 
@@ -535,7 +553,7 @@ class VendasController extends Controller
         }
 
         $tenantId = $user->tenant_id;
-        $hasCoproduction = ProductCoproducer::userHasParticipations((int) $user->id);
+        $hasCoproduction = ! $isApiListing && ProductCoproducer::userHasParticipations((int) $user->id);
         [$filteredQuery, $statusFilter] = $this->buildFilteredQuery($request, $tenantId);
         $mergeAffiliate = $this->shouldMergeAffiliateCommissions($request, $statusFilter, $hasAffiliateEnrollments);
         $mergeCoproduction = $this->shouldMergeCoproductionCommissions($request, $statusFilter, $hasCoproduction);
@@ -601,6 +619,8 @@ class VendasController extends Controller
 
         return Inertia::render('Vendas/Index', [
             'view' => 'own',
+            'listing_mode' => $listingMode,
+            'list_base_path' => $isApiListing ? '/transacoes-api' : '/vendas',
             'has_affiliate_enrollments' => $hasAffiliateEnrollments,
             'has_coproduction' => $hasCoproduction,
             'vendas' => $vendas,
@@ -618,7 +638,7 @@ class VendasController extends Controller
                 'utm_source' => $this->normalizeString($request->query('utm_source')),
                 'utm_medium' => $this->normalizeString($request->query('utm_medium')),
                 'utm_campaign' => $this->normalizeString($request->query('utm_campaign')),
-                'sale_channel' => $this->normalizeString($request->query('sale_channel')),
+                'sale_channel' => $isApiListing ? 'api_pix' : $this->normalizeString($request->query('sale_channel')),
                 'affiliate' => $this->normalizeString($request->query('affiliate')),
                 'sale_origin' => $this->normalizeString($request->query('sale_origin')),
                 'producer_id' => $this->normalizeString($request->query('producer_id')),

@@ -31,6 +31,7 @@ use App\Services\SellerIntegrationVisibility;
 use App\Services\StorageService;
 use App\Services\TeamAccessService;
 use App\Support\CardInstallments;
+use App\Support\EmailLogoImage;
 use App\Support\HtmlSanitizer;
 use App\Support\MoneyDecimal;
 use Illuminate\Database\QueryException;
@@ -1065,9 +1066,10 @@ class ProdutosController extends Controller
         ]);
 
         $file = $request->file('logo');
-        $ext = strtolower((string) ($file->guessExtension() ?: $file->getClientOriginalExtension() ?: 'png'));
-        if (! in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)) {
-            $ext = 'png';
+        try {
+            [$binary, $ext] = EmailLogoImage::prepareForEmail($file);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
         }
 
         $storage = app(StorageService::class);
@@ -1079,8 +1081,23 @@ class ProdutosController extends Controller
             }
         }
         $filename = 'logo-'.strtolower((string) Str::ulid()).'.'.$ext;
-        $path = $dir.'/'.$filename;
-        $storage->putFileAs($dir, $file, $filename);
+        $tmpPath = tempnam(sys_get_temp_dir(), 'emlogo');
+        if ($tmpPath === false) {
+            return response()->json(['message' => 'Falha ao processar a logo.'], 500);
+        }
+        file_put_contents($tmpPath, $binary);
+        try {
+            $uploaded = new \Illuminate\Http\UploadedFile(
+                $tmpPath,
+                $filename,
+                $ext === 'jpg' ? 'image/jpeg' : 'image/png',
+                null,
+                true
+            );
+            $path = $storage->putFileAs($dir, $uploaded, $filename);
+        } finally {
+            @unlink($tmpPath);
+        }
         $logoUrl = $storage->url($path);
 
         $config = $produto->checkout_config ?? [];
@@ -1092,6 +1109,30 @@ class ProdutosController extends Controller
         $produto->update(['checkout_config' => $config]);
 
         return response()->json(['logo_url' => $logoUrl]);
+    }
+
+    public function deleteEmailTemplateLogo(Product $produto)
+    {
+        $this->authorizeProduct($produto);
+
+        $storage = app(StorageService::class);
+        $dir = 'email-templates/'.$produto->id;
+        $disk = $storage->disk();
+        if ($disk->exists($dir)) {
+            foreach ($disk->files($dir) as $existing) {
+                $storage->delete($existing);
+            }
+        }
+
+        $config = $produto->checkout_config ?? [];
+        $config['email_template'] = array_merge(
+            Product::defaultEmailTemplate(),
+            $config['email_template'] ?? [],
+            ['logo_url' => '']
+        );
+        $produto->update(['checkout_config' => $config]);
+
+        return response()->json(['logo_url' => '']);
     }
 
     public function storeOffer(Request $request, Product $produto)

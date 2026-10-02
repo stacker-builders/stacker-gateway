@@ -39,6 +39,24 @@ class CajuPayWithdrawalEconomicsTest extends TestCase
         $this->assertSame(7.0, $out['cajupay_payout_min_brl']);
         $this->assertSame(1.0, $out['cajupay_admin_fee_pix_brl']);
         $this->assertSame(0.5, $out['cajupay_admin_fee_payout_brl']);
+        $this->assertSame(0.0, $out['cajupay_admin_fee_pix_percent']);
+        $this->assertSame(0.0, $out['cajupay_admin_fee_payout_percent']);
+    }
+
+    public function test_credential_economics_parses_percent_fees(): void
+    {
+        $out = CajuPayCredentialEconomics::fromCredentialsArray([
+            'cajupay_payout_min_brl' => '7',
+            'cajupay_admin_fee_pix_brl' => '0.5',
+            'cajupay_admin_fee_pix_percent' => '1,5',
+            'cajupay_admin_fee_payout_brl' => '1',
+            'cajupay_admin_fee_payout_percent' => '0.8',
+        ]);
+
+        $this->assertSame(0.5, $out['cajupay_admin_fee_pix_brl']);
+        $this->assertSame(1.5, $out['cajupay_admin_fee_pix_percent']);
+        $this->assertSame(1.0, $out['cajupay_admin_fee_payout_brl']);
+        $this->assertSame(0.8, $out['cajupay_admin_fee_payout_percent']);
     }
 
     public function test_credential_economics_defaults_min_when_empty(): void

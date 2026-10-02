@@ -89,7 +89,9 @@ final class VersellCredentials
     private const ECONOMICS_KEYS = [
         'versell_payout_min_brl',
         'versell_admin_fee_pix_brl',
+        'versell_admin_fee_pix_percent',
         'versell_admin_fee_payout_brl',
+        'versell_admin_fee_payout_percent',
     ];
 
     /**

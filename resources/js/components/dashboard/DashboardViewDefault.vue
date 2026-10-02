@@ -2,6 +2,7 @@
 import VueApexCharts from 'vue3-apexcharts';
 import ConquistasWidget from '@/components/layout/ConquistasWidget.vue';
 import DashboardPeriodToolbar from '@/components/dashboard/DashboardPeriodToolbar.vue';
+import DashboardCustomPeriodForm from '@/components/dashboard/DashboardCustomPeriodForm.vue';
 import { CircleDollarSign, ShoppingCart, CreditCard, ShoppingBag, RotateCcw, Package } from 'lucide-vue-next';
 
 defineProps({
@@ -58,6 +59,8 @@ const emit = defineEmits(['update:period', 'toggle-values']);
             @update:period="emit('update:period', $event)"
             @toggle-values="emit('toggle-values')"
         />
+
+        <DashboardCustomPeriodForm />
 
         <div class="grid gap-4 sm:grid-cols-2">
             <div class="rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50">

@@ -4,6 +4,7 @@ import { computed } from 'vue';
 import { useThemeMode } from '@/composables/useThemeMode';
 import ConquistasWidget from '@/components/layout/ConquistasWidget.vue';
 import DashboardPeriodToolbar from '@/components/dashboard/DashboardPeriodToolbar.vue';
+import DashboardCustomPeriodForm from '@/components/dashboard/DashboardCustomPeriodForm.vue';
 import AuroraMetricCard from '@/components/dashboard/AuroraMetricCard.vue';
 import AuroraPaymentMethodsCard from '@/components/dashboard/AuroraPaymentMethodsCard.vue';
 import {
@@ -170,6 +171,8 @@ const auroraChartOptions = computed(() => {
             @update:period="emit('update:period', $event)"
             @toggle-values="emit('toggle-values')"
         />
+
+        <DashboardCustomPeriodForm />
 
         <!-- Linha 1: KPIs Principais (4 Colunas) -->
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

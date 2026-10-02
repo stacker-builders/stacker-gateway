@@ -7,57 +7,52 @@ use Tests\TestCase;
 
 class GatewayPayoutEconomicsTest extends TestCase
 {
-    public function test_spacepag_credentials_sum_components(): void
-    {
-        $out = GatewayPayoutEconomics::fromCredentialsArray('spacepag', [
-            'spacepag_payout_min_brl' => '7',
-            'spacepag_admin_fee_pix_brl' => '1',
-            'spacepag_admin_fee_payout_brl' => '0.5',
-        ]);
-
-        // Taxas admin não entram no piso do seller — só no retorno para KPI/API.
-        $this->assertSame(7.0, $out['required_min_net']);
-        $this->assertSame(7.0, $out['payout_min_brl']);
-        $this->assertSame(1.0, $out['admin_fee_pix_brl']);
-        $this->assertSame(0.5, $out['admin_fee_payout_brl']);
-    }
-
-    public function test_xflow_credentials_parse_payout_fees(): void
-    {
-        $out = GatewayPayoutEconomics::fromCredentialsArray('xflow', [
-            'xflow_payout_min_brl' => '10',
-            'xflow_admin_fee_pix_brl' => '0.8',
-            'xflow_admin_fee_payout_brl' => '2',
-        ]);
-
-        $this->assertSame(10.0, $out['required_min_net']);
-        $this->assertSame(10.0, $out['payout_min_brl']);
-        $this->assertSame(0.8, $out['admin_fee_pix_brl']);
-        $this->assertSame(2.0, $out['admin_fee_payout_brl']);
-    }
-
-    public function test_okto_credentials_parse_payout_fees(): void
-    {
-        $out = GatewayPayoutEconomics::fromCredentialsArray('okto', [
-            'okto_payout_min_brl' => '10',
-            'okto_admin_fee_pix_brl' => '0.5',
-            'okto_admin_fee_payout_brl' => '2',
-        ]);
-
-        $this->assertSame(10.0, $out['required_min_net']);
-        $this->assertSame(10.0, $out['payout_min_brl']);
-        $this->assertSame(0.5, $out['admin_fee_pix_brl']);
-        $this->assertSame(2.0, $out['admin_fee_payout_brl']);
-    }
-
-    public function test_transfer_amount_for_api_adds_admin_fee_payout(): void
+    public function test_transfer_amount_without_percent_keeps_legacy_fixed_only(): void
     {
         $this->assertSame(18.0, GatewayPayoutEconomics::transferAmountBrlForApi(16.0, 2.0));
-        $this->assertSame(100.0, GatewayPayoutEconomics::transferAmountBrlForApi(100.0, 0.0));
+        $this->assertSame(16.0, GatewayPayoutEconomics::transferAmountBrlForApi(16.0, 0.0, 0.0));
     }
 
-    public function test_transfer_amount_for_api_ignores_negative_fee(): void
+    public function test_transfer_amount_grosses_up_percent_plus_fixed(): void
     {
-        $this->assertSame(16.0, GatewayPayoutEconomics::transferAmountBrlForApi(16.0, -1.0));
+        // (16 + 2) / (1 - 0.01) = 18 / 0.99 ≈ 18.18
+        $this->assertSame(18.18, GatewayPayoutEconomics::transferAmountBrlForApi(16.0, 2.0, 1.0));
+    }
+
+    public function test_transfer_amount_percent_only(): void
+    {
+        // 100 / (1 - 0.02) ≈ 102.04
+        $this->assertSame(102.04, GatewayPayoutEconomics::transferAmountBrlForApi(100.0, 0.0, 2.0));
+    }
+
+    public function test_payout_fee_cost_is_api_minus_net(): void
+    {
+        $this->assertSame(2.0, GatewayPayoutEconomics::payoutFeeCostBrl(16.0, 2.0, 0.0));
+        $this->assertSame(2.18, GatewayPayoutEconomics::payoutFeeCostBrl(16.0, 2.0, 1.0));
+    }
+
+    public function test_pix_in_fee_cost_percent_plus_fixed(): void
+    {
+        // 100 * 1.5% + 0.50 = 2.00
+        $this->assertSame(2.0, GatewayPayoutEconomics::pixInFeeCostBrl(100.0, 0.5, 1.5));
+        $this->assertSame(0.5, GatewayPayoutEconomics::pixInFeeCostBrl(100.0, 0.5, 0.0));
+        $this->assertSame(0.0, GatewayPayoutEconomics::pixInFeeCostBrl(100.0, 0.0, 0.0));
+    }
+
+    public function test_from_credentials_array_reads_percent_keys(): void
+    {
+        $e = GatewayPayoutEconomics::fromCredentialsArray('woovi', [
+            'woovi_payout_min_brl' => '10',
+            'woovi_admin_fee_pix_brl' => '0.3',
+            'woovi_admin_fee_pix_percent' => '0,99',
+            'woovi_admin_fee_payout_brl' => '1.2',
+            'woovi_admin_fee_payout_percent' => '1.5',
+        ]);
+
+        $this->assertSame(10.0, $e['required_min_net']);
+        $this->assertSame(0.3, $e['admin_fee_pix_brl']);
+        $this->assertSame(0.99, $e['admin_fee_pix_percent']);
+        $this->assertSame(1.2, $e['admin_fee_payout_brl']);
+        $this->assertSame(1.5, $e['admin_fee_payout_percent']);
     }
 }

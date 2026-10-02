@@ -32,7 +32,7 @@ class PlatformRevenueKpis
 
         $custoVendas = 0.0;
         self::ordersInPeriodQuery($start, $end)
-            ->select(['id', 'payment_method', 'metadata', 'gateway'])
+            ->select(['id', 'payment_method', 'metadata', 'gateway', 'amount'])
             ->chunkById(500, function ($orders) use (&$custoVendas) {
                 foreach ($orders as $order) {
                     if (self::paymentBucket($order) !== 'pix') {
@@ -42,7 +42,12 @@ class PlatformRevenueKpis
                     if ($slug === '') {
                         continue;
                     }
-                    $custoVendas += GatewayPayoutEconomics::fromSlug($slug)['admin_fee_pix_brl'];
+                    $e = GatewayPayoutEconomics::fromSlug($slug);
+                    $custoVendas += GatewayPayoutEconomics::pixInFeeCostBrl(
+                        (float) ($order->amount ?? 0),
+                        (float) ($e['admin_fee_pix_brl'] ?? 0),
+                        (float) ($e['admin_fee_pix_percent'] ?? 0),
+                    );
                 }
             });
 
@@ -56,7 +61,7 @@ class PlatformRevenueKpis
             } elseif ($end) {
                 $wdQ->where('created_at', '<=', $end);
             }
-            $wdQ->select(['id', 'payout_provider'])->chunkById(500, function ($rows) use (&$custoSaques) {
+            $wdQ->select(['id', 'payout_provider', 'net_amount'])->chunkById(500, function ($rows) use (&$custoSaques) {
                 foreach ($rows as $w) {
                     $slug = $w->payout_provider;
                     if ($slug === null || $slug === '') {
@@ -65,7 +70,12 @@ class PlatformRevenueKpis
                     if ($slug === null || $slug === '') {
                         continue;
                     }
-                    $custoSaques += GatewayPayoutEconomics::fromSlug($slug)['admin_fee_payout_brl'];
+                    $e = GatewayPayoutEconomics::fromSlug($slug);
+                    $custoSaques += GatewayPayoutEconomics::payoutFeeCostBrl(
+                        (float) ($w->net_amount ?? 0),
+                        (float) ($e['admin_fee_payout_brl'] ?? 0),
+                        (float) ($e['admin_fee_payout_percent'] ?? 0),
+                    );
                 }
             });
         }
