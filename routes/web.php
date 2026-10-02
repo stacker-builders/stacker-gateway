@@ -901,6 +901,7 @@ Route::middleware(['auth', 'admin.tenant', 'seller.panel', 'stacker.license', 'r
 
     Route::middleware('team.permission:vendas.view')->group(function () {
         Route::get('/vendas', [\App\Http\Controllers\VendasController::class, 'index'])->name('vendas.index');
+        Route::get('/transacoes-api', [\App\Http\Controllers\VendasController::class, 'apiTransactions'])->name('transacoes-api.index');
         Route::get('/vendas/export', [\App\Http\Controllers\VendasController::class, 'export'])->name('vendas.export');
         Route::post('/vendas/{order}/resend-access-email', [\App\Http\Controllers\VendasController::class, 'resendAccessEmail'])->name('vendas.resend-access-email');
         Route::post('/vendas/{order}/reembolsar', [\App\Http\Controllers\VendasController::class, 'refundManually'])->name('vendas.refund-manually');
@@ -998,6 +999,7 @@ Route::middleware(['auth', 'admin.tenant', 'seller.panel', 'stacker.license', 'r
         Route::post('/produtos/{produto}/downsell-page/config', [\App\Http\Controllers\UpsellDownsellPageController::class, 'updateDownsellPage'])->name('downsell-page.update.post');
         Route::put('/produtos/{produto}', [\App\Http\Controllers\ProdutosController::class, 'update'])->name('produtos.update');
         Route::post('/produtos/{produto}/email-template-logo', [\App\Http\Controllers\ProdutosController::class, 'uploadEmailTemplateLogo'])->name('produtos.email-template-logo');
+        Route::delete('/produtos/{produto}/email-template-logo', [\App\Http\Controllers\ProdutosController::class, 'deleteEmailTemplateLogo'])->name('produtos.email-template-logo.destroy');
         Route::delete('/produtos/{produto}', [\App\Http\Controllers\ProdutosController::class, 'destroy'])->name('produtos.destroy');
         Route::post('/produtos/{produto}/duplicate', [\App\Http\Controllers\ProdutosController::class, 'duplicate'])->name('produtos.duplicate');
         Route::post('/produtos/{produto}/reenviar-analise', [\App\Http\Controllers\ProdutosController::class, 'resubmitForReview'])

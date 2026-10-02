@@ -3,6 +3,7 @@ import VueApexCharts from 'vue3-apexcharts';
 import { computed } from 'vue';
 import ConquistasWidget from '@/components/layout/ConquistasWidget.vue';
 import KawaiiPeriodToolbar from '@/components/kawaii/KawaiiPeriodToolbar.vue';
+import DashboardCustomPeriodForm from '@/components/dashboard/DashboardCustomPeriodForm.vue';
 import KawaiiMetricCard from '@/components/kawaii/KawaiiMetricCard.vue';
 import KawaiiPaymentMethodsCard from '@/components/kawaii/KawaiiPaymentMethodsCard.vue';
 import { useThemeMode } from '@/composables/useThemeMode';
@@ -160,6 +161,8 @@ const kawaiiChartOptions = computed(() => {
             @update:period="emit('update:period', $event)"
             @toggle-values="emit('toggle-values')"
         />
+
+        <DashboardCustomPeriodForm />
 
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <KawaiiMetricCard

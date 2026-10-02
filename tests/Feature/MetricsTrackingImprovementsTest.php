@@ -127,10 +127,51 @@ class MetricsTrackingImprovementsTest extends TestCase
         $this->assertSame(2, $byKey['checkouts_form_started']['value']);
         $this->assertSame(2, $byKey['checkouts_started']['value']);
         $this->assertSame(2, $byKey['payments_initiated']['value']);
+        $this->assertSame(1, $byKey['pix_created']['value']);
         $this->assertSame(2, $byKey['approved']['value']);
         $this->assertArrayNotHasKey('clicks', $byKey->all());
-        $this->assertArrayNotHasKey('pix_created', $byKey->all());
         $this->assertEquals(100.0, $funnel['final_conversion_rate']);
+    }
+
+    public function test_summary_exposes_pix_conversion_and_card_approval_rates(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-12 12:00:00', 'America/Sao_Paulo'));
+
+        $tenantId = 93;
+        $visitor = (string) Str::uuid();
+        $session = (string) Str::uuid();
+
+        MetricsSession::query()->create([
+            'session_key' => $session,
+            'visitor_key' => $visitor,
+            'tenant_id' => $tenantId,
+            'first_touch_at' => now(),
+            'last_touch_at' => now(),
+        ]);
+
+        // 2 PIX gerados, 1 pago
+        $this->insertEvent($tenantId, $session, $visitor, MetricsEvent::PIX_CREATED, now(), null, ['payment_method' => 'pix']);
+        $this->insertEvent($tenantId, $session, $visitor, MetricsEvent::PIX_CREATED, now()->copy()->addSecond(), null, ['payment_method' => 'pix']);
+        $this->insertEvent($tenantId, $session, $visitor, MetricsEvent::PAYMENT_APPROVED, now(), 50, ['payment_method' => 'pix']);
+
+        // Cartão: 2 aprovados, 1 recusado → 66.67%
+        $this->insertEvent($tenantId, $session, $visitor, MetricsEvent::PAYMENT_APPROVED, now(), 80, ['payment_method' => 'card']);
+        $this->insertEvent($tenantId, $session, $visitor, MetricsEvent::PAYMENT_APPROVED, now(), 90, ['payment_method' => 'credit_card']);
+        $this->insertEvent($tenantId, $session, $visitor, MetricsEvent::PAYMENT_REFUSED, now(), 70, ['payment_method' => 'card']);
+
+        $service = app(MetricsAnalyticsService::class);
+        $request = Request::create('/', 'GET', ['period' => 'hoje']);
+        [$start, $end] = $service->resolveDateRange($request, 'hoje');
+        $summary = $service->summary($tenantId, $start, $end, []);
+
+        $this->assertSame(2, $summary['pix_created']);
+        $this->assertSame(1, $summary['pix_paid']);
+        $this->assertEquals(50.0, $summary['pix_conversion_rate']);
+        $this->assertSame(2, $summary['card_approved']);
+        $this->assertSame(1, $summary['card_refused']);
+        $this->assertSame(3, $summary['card_attempts']);
+        $this->assertEquals(66.67, $summary['card_approval_rate']);
+        $this->assertSame(1, $summary['payments_refused']);
     }
 
     public function test_form_started_creates_deduped_metrics_event(): void
@@ -262,6 +303,7 @@ class MetricsTrackingImprovementsTest extends TestCase
         string $eventName,
         Carbon $occurredAt,
         ?float $amount = null,
+        ?array $properties = null,
     ): void {
         MetricsEvent::query()->create([
             'event_id' => (string) Str::uuid(),
@@ -270,6 +312,7 @@ class MetricsTrackingImprovementsTest extends TestCase
             'visitor_key' => $visitorKey,
             'tenant_id' => $tenantId,
             'amount' => $amount,
+            'properties' => $properties,
             'occurred_at' => $occurredAt,
         ]);
     }

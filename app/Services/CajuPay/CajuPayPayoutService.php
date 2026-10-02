@@ -59,7 +59,11 @@ class CajuPayPayoutService
             return ['ok' => false, 'error' => $msg];
         }
 
-        $apiAmount = GatewayPayoutEconomics::transferAmountBrlForApi($net, $economics['admin_fee_payout_brl']);
+        $apiAmount = GatewayPayoutEconomics::transferAmountBrlForApi(
+            $net,
+            $economics['admin_fee_payout_brl'],
+            $economics['admin_fee_payout_percent'] ?? 0.0,
+        );
         $amountCents = (int) round($apiAmount * 100);
 
         $http = $this->httpForCredentials($credentials);

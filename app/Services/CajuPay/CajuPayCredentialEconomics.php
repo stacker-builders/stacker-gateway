@@ -16,7 +16,9 @@ class CajuPayCredentialEconomics
      *     required_min_net: float,
      *     cajupay_payout_min_brl: float,
      *     cajupay_admin_fee_pix_brl: float,
-     *     cajupay_admin_fee_payout_brl: float
+     *     cajupay_admin_fee_payout_brl: float,
+     *     cajupay_admin_fee_pix_percent: float,
+     *     cajupay_admin_fee_payout_percent: float
      * }
      */
     public static function fromGateway(): array
@@ -40,7 +42,9 @@ class CajuPayCredentialEconomics
      *     required_min_net: float,
      *     cajupay_payout_min_brl: float,
      *     cajupay_admin_fee_pix_brl: float,
-     *     cajupay_admin_fee_payout_brl: float
+     *     cajupay_admin_fee_payout_brl: float,
+     *     cajupay_admin_fee_pix_percent: float,
+     *     cajupay_admin_fee_payout_percent: float
      * }
      */
     public static function fromCredentialsArray(array $credentials): array
@@ -52,6 +56,8 @@ class CajuPayCredentialEconomics
             'cajupay_payout_min_brl' => $e['payout_min_brl'],
             'cajupay_admin_fee_pix_brl' => $e['admin_fee_pix_brl'],
             'cajupay_admin_fee_payout_brl' => $e['admin_fee_payout_brl'],
+            'cajupay_admin_fee_pix_percent' => $e['admin_fee_pix_percent'],
+            'cajupay_admin_fee_payout_percent' => $e['admin_fee_payout_percent'],
         ];
     }
 
@@ -60,7 +66,9 @@ class CajuPayCredentialEconomics
      *     required_min_net: float,
      *     cajupay_payout_min_brl: float,
      *     cajupay_admin_fee_pix_brl: float,
-     *     cajupay_admin_fee_payout_brl: float
+     *     cajupay_admin_fee_payout_brl: float,
+     *     cajupay_admin_fee_pix_percent: float,
+     *     cajupay_admin_fee_payout_percent: float
      * }
      */
     private static function defaults(): array
@@ -72,6 +80,8 @@ class CajuPayCredentialEconomics
             'cajupay_payout_min_brl' => $e['payout_min_brl'],
             'cajupay_admin_fee_pix_brl' => $e['admin_fee_pix_brl'],
             'cajupay_admin_fee_payout_brl' => $e['admin_fee_payout_brl'],
+            'cajupay_admin_fee_pix_percent' => $e['admin_fee_pix_percent'],
+            'cajupay_admin_fee_payout_percent' => $e['admin_fee_payout_percent'],
         ];
     }
 }

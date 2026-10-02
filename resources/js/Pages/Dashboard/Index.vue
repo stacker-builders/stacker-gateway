@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, provide, defineAsyncComponent } from 'vue';
+import { ref, computed, onMounted, provide, watch, defineAsyncComponent } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
 import LayoutInfoprodutor from '@/Layouts/LayoutInfoprodutor.vue';
 import { useI18n } from '@/composables/useI18n';
@@ -32,6 +32,9 @@ onMounted(() => {
 
 const props = defineProps({
     period: { type: String, default: 'hoje' },
+    from: { type: String, default: null },
+    to: { type: String, default: null },
+    chart_granularity: { type: String, default: 'day' },
     vendas_totais: { type: Number, default: 0 },
     vendas_pendentes: { type: Number, default: 0 },
     quantidade_vendas: { type: Number, default: 0 },
@@ -57,7 +60,23 @@ const periodOptions = [
     { value: 'mes', label: t('period.month', 'Mês') },
     { value: 'ano', label: t('period.year', 'Ano') },
     { value: 'total', label: t('period.total', 'Total') },
+    { value: 'personalizado', label: t('period.custom', 'Personalizado') },
 ];
+
+const fromDate = ref(props.from ?? '');
+const toDate = ref(props.to ?? '');
+
+watch(() => props.from, (value) => { fromDate.value = value ?? ''; });
+watch(() => props.to, (value) => { toDate.value = value ?? ''; });
+
+function todayIso() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+
+    return `${y}-${m}-${day}`;
+}
 
 const dashboardLabels = computed(() => ({
     totalSales: t('dashboard.total_sales', 'Vendas totais'),
@@ -78,8 +97,50 @@ const dashboardLabels = computed(() => ({
 }));
 
 function setPeriod(value) {
+    if (value === 'personalizado') {
+        const today = todayIso();
+        router.get('/dashboard', {
+            period: 'personalizado',
+            from: fromDate.value || props.from || today,
+            to: toDate.value || props.to || today,
+        }, { preserveState: false });
+        return;
+    }
     router.get('/dashboard', { period: value }, { preserveState: false });
 }
+
+function applyCustomPeriod() {
+    const today = todayIso();
+    router.get('/dashboard', {
+        period: 'personalizado',
+        from: fromDate.value || today,
+        to: toDate.value || today,
+    }, { preserveState: false });
+}
+
+function chartCategory(point) {
+    if (props.chart_granularity === 'hour') {
+        return `${Number(point.data)}h`;
+    }
+    const parts = String(point.data || '').split('-');
+    if (props.chart_granularity === 'month' && parts.length >= 2) {
+        return `${parts[1]}/${parts[0]}`;
+    }
+    const day = parts[2];
+    const month = parts[1];
+
+    return day && month ? `${day}/${month}` : point.data;
+}
+
+provide('dashboardCustomPeriod', {
+    from: fromDate,
+    to: toDate,
+    period: computed(() => props.period),
+    startLabel: computed(() => t('dashboard.date_start', 'Data inicial')),
+    endLabel: computed(() => t('dashboard.date_end', 'Data final')),
+    applyLabel: computed(() => t('dashboard.apply_period', 'Aplicar')),
+    apply: applyCustomPeriod,
+});
 
 function formatBRL(value) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -132,12 +193,7 @@ const chartOptions = computed(() => ({
         hover: { size: 6 },
     },
     xaxis: {
-        categories: (props.period === 'hoje' || props.period === 'ontem')
-            ? props.grafico_vendas.map((d) => `${Number(d.data)}h`)
-            : props.grafico_vendas.map((d) => {
-                const [y, m, day] = (d.data || '').split('-');
-                return day && m ? `${day}/${m}` : d.data;
-            }),
+        categories: props.grafico_vendas.map((d) => chartCategory(d)),
         labels: { style: { colors: '#71717a', fontSize: '12px' } },
         axisBorder: { show: true },
         crosshairs: { show: true },
@@ -159,7 +215,7 @@ const chartOptions = computed(() => ({
         theme: isDarkMode.value ? 'dark' : 'light',
         shared: true,
         intersect: false,
-        x: { format: props.period === 'hoje' || props.period === 'ontem' ? 'HH' : 'dd/MM/yyyy' },
+        x: { format: props.chart_granularity === 'hour' ? 'HH' : 'dd/MM/yyyy' },
         y: { formatter: (v) => (valuesVisible.value ? formatBRL(v) : '••••••') },
         style: { fontSize: '13px' },
     },

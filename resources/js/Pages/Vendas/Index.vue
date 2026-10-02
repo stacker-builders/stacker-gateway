@@ -47,6 +47,8 @@ const {
 
 const props = defineProps({
     view: { type: String, default: 'own' },
+    listing_mode: { type: String, default: 'sales' },
+    list_base_path: { type: String, default: '/vendas' },
     has_affiliate_enrollments: { type: Boolean, default: false },
     vendas: { type: Object, default: () => ({ data: [], links: [] }) },
     stats: { type: Object, default: () => ({}) },
@@ -57,6 +59,19 @@ const props = defineProps({
     commission_status_options: { type: Array, default: () => [] },
     offers: { type: Array, default: () => [] },
 });
+
+const isApiTransactionsListing = computed(() => props.listing_mode === 'api_transactions');
+const listBasePath = computed(() => props.list_base_path || '/vendas');
+const pageTitle = computed(() =>
+    isApiTransactionsListing.value
+        ? t('sidebar.api_transactions', 'Transações API')
+        : t('sidebar.sales', 'Vendas')
+);
+const pageSubtitle = computed(() =>
+    isApiTransactionsListing.value
+        ? t('sales.api_transactions_subtitle', 'Cobranças PIX geradas pela API PIX deste estabelecimento.')
+        : t('sales.subtitle', 'Acompanhe pedidos, status de pagamento e desempenho comercial.')
+);
 
 const affiliateSidebarOpen = ref(false);
 const selectedAffiliateVenda = ref(null);
@@ -255,6 +270,9 @@ function buildQuery(overrides = {}) {
     if (typeof f.q === 'string') {
         f.q = f.q.trim();
     }
+    if (isApiTransactionsListing.value) {
+        f.sale_channel = 'api_pix';
+    }
     const q = { status_filter: props.status_filter, ...f };
 
     const cleaned = {};
@@ -278,7 +296,7 @@ function buildQuery(overrides = {}) {
 }
 
 function applyFilters(overrides = {}) {
-    router.get('/vendas', buildQuery(overrides), {
+    router.get(listBasePath.value, buildQuery(overrides), {
         preserveState: true,
         preserveScroll: true,
         replace: true,
@@ -574,7 +592,7 @@ function clearFilters() {
         utm_source: '',
         utm_medium: '',
         utm_campaign: '',
-        sale_channel: '',
+        sale_channel: isApiTransactionsListing.value ? 'api_pix' : '',
         producer_id: '',
         commission_status: 'all',
     };
@@ -607,11 +625,11 @@ const exportXlsUrl = computed(() => `/vendas/export?${buildExportSearchParams('x
 <template>
     <div :class="pageClass">
         <AuroraPageHeader
-            :title="t('sidebar.sales', 'Vendas')"
-            :subtitle="t('sales.subtitle', 'Acompanhe pedidos, status de pagamento e desempenho comercial.')"
+            :title="pageTitle"
+            :subtitle="pageSubtitle"
         />
 
-        <VendasTabs />
+        <VendasTabs v-if="!isApiTransactionsListing" />
 
         <AuroraPageSection>
             <div class="flex items-center justify-between gap-3">
@@ -874,7 +892,7 @@ const exportXlsUrl = computed(() => `/vendas/export?${buildExportSearchParams('x
                     {{ advancedFiltersOpen ? t('sales.hide_advanced_filters', 'Ocultar filtros avançados') : t('sales.show_advanced_filters', 'Mostrar filtros avançados') }}
                 </button>
                 <div v-if="advancedFiltersOpen" class="mt-3 grid gap-3 lg:grid-cols-3">
-                    <div>
+                    <div v-if="!isApiTransactionsListing">
                         <label class="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Canal</label>
                         <select
                             v-model="filterForm.sale_channel"
