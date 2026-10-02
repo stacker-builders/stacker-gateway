@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import { ChevronDown, ChevronUp, Tag, Globe, Banknote, Check } from 'lucide-vue-next';
 import CheckoutDropdown from './CheckoutDropdown.vue';
 
@@ -65,15 +65,58 @@ const couponDiscountAmountBrl = computed(() =>
 );
 const couponDiscountAmount = computed(() => props.priceInCurrency(couponDiscountAmountBrl.value));
 const description = computed(() => props.product?.description ?? '');
+
+/** Texto plano preservando quebras de linha do textarea / HTML simples. */
+function toPlainDescription(raw) {
+    let text = String(raw ?? '');
+    text = text
+        .replace(/\r\n/g, '\n')
+        .replace(/<\s*br\s*\/?>/gi, '\n')
+        .replace(/<\/\s*p\s*>/gi, '\n')
+        .replace(/<\/\s*div\s*>/gi, '\n')
+        .replace(/<\/\s*li\s*>/gi, '\n')
+        .replace(/<[^>]+>/g, '');
+    text = text
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+    return text;
+}
+
+const fullDesc = computed(() => toPlainDescription(description.value));
 const shortDesc = computed(() => {
-    const d = description.value.replace(/<[^>]+>/g, '').trim();
-    return d.length > 120 ? d.slice(0, 120) + '…' : d;
+    const d = fullDesc.value;
+    return d.length > 120 ? d.slice(0, 120).trimEnd() + '…' : d;
 });
-const fullDesc = computed(() => description.value.replace(/<[^>]+>/g, '').trim());
 const showVerMais = computed(() => fullDesc.value.length > 120);
 
 const expanded = ref(false);
 const displayDesc = computed(() => (expanded.value ? fullDesc.value : shortDesc.value));
+
+const titleEl = ref(null);
+const titleExpanded = ref(false);
+/** True quando o título está truncado (desktop com line-clamp). */
+const titleOverflows = ref(false);
+
+function measureTitleOverflow() {
+    nextTick(() => {
+        const el = titleEl.value;
+        if (!el || titleExpanded.value) {
+            return;
+        }
+        titleOverflows.value = el.scrollHeight > el.clientHeight + 1;
+    });
+}
+
+function toggleTitleExpanded() {
+    if (!titleOverflows.value && !titleExpanded.value) {
+        return;
+    }
+    titleExpanded.value = !titleExpanded.value;
+    if (!titleExpanded.value) {
+        measureTitleOverflow();
+    }
+}
 
 const localeOpen = ref(false);
 const currencyOpen = ref(false);
@@ -86,6 +129,28 @@ function selectCurrency(code) {
     emit('set-currency', code);
     currencyOpen.value = false;
 }
+
+watch(
+    () => props.product?.name,
+    () => {
+        titleExpanded.value = false;
+        measureTitleOverflow();
+    },
+);
+
+let titleResizeObserver = null;
+onMounted(() => {
+    measureTitleOverflow();
+    if (typeof ResizeObserver !== 'undefined' && titleEl.value) {
+        titleResizeObserver = new ResizeObserver(() => measureTitleOverflow());
+        titleResizeObserver.observe(titleEl.value);
+    }
+    window.addEventListener('resize', measureTitleOverflow);
+});
+onBeforeUnmount(() => {
+    titleResizeObserver?.disconnect();
+    window.removeEventListener('resize', measureTitleOverflow);
+});
 </script>
 
 <template>
@@ -100,8 +165,12 @@ function selectCurrency(code) {
         <div class="min-w-0 flex-1" data-checkout="summary-main">
             <div class="relative flex items-start gap-3">
                 <h1
-                    class="min-w-0 flex-1 pr-0 text-xl font-bold tracking-tight text-gray-900 line-clamp-2 sm:pr-24 sm:text-2xl"
+                    ref="titleEl"
+                    class="min-w-0 flex-1 break-words pr-0 text-xl font-bold leading-snug tracking-tight text-gray-900 sm:pr-24 sm:text-2xl sm:leading-tight"
+                    :class="{ 'sm:line-clamp-2': !titleExpanded }"
                     data-checkout="summary-title"
+                    :aria-expanded="titleOverflows || titleExpanded ? titleExpanded : undefined"
+                    @click="toggleTitleExpanded"
                 >
                     {{ product.name }}
                 </h1>
@@ -175,7 +244,7 @@ function selectCurrency(code) {
             </span>
             <template v-if="showDescription && fullDesc">
                 <p
-                    class="mt-3 text-sm leading-relaxed text-gray-600"
+                    class="mt-3 whitespace-pre-line text-sm leading-relaxed text-gray-600"
                     data-checkout="summary-description"
                     :class="{ 'line-clamp-2': !expanded && showVerMais }"
                 >
