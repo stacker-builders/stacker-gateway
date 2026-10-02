@@ -488,6 +488,113 @@ class EvolutionRecoveryTest extends TestCase
             );
     }
 
+    public function test_report_can_resend_failed_evolution_cart_recovery(): void
+    {
+        Queue::fake();
+        SellerIntegrationVisibility::setGlobal(SellerIntegrationVisibility::UAZAPI, false);
+
+        $seller = User::factory()->create(['role' => User::ROLE_INFOPRODUTOR]);
+        $seller->forceFill([
+            'tenant_id' => $seller->id,
+            'kyc_status' => User::KYC_APPROVED,
+            'account_status' => 'approved',
+        ])->save();
+
+        $instance = EvolutionInstance::firstOrNewForTenant((int) $seller->id);
+        $instance->fill([
+            'name' => 'Conta principal',
+            'server_url' => 'https://stacker.evo.com',
+            'instance_name' => 'loja-1',
+            'instance_token' => 'inst-token',
+            'status' => EvolutionInstance::STATUS_CONNECTED,
+            'is_active' => true,
+            'is_default' => true,
+            'cart_recovery_enabled' => true,
+            'connected_at' => now(),
+        ]);
+        $instance->save();
+
+        $dispatch = EvolutionMessageDispatch::query()->create([
+            'tenant_id' => $seller->id,
+            'evolution_instance_id' => $instance->id,
+            'event_type' => EvolutionInstance::EVENT_CART_RECOVERY,
+            'sequence_step' => 0,
+            'phone' => '5511988776655',
+            'message' => 'Oi {nome}! Finalize: {link}',
+            'status' => EvolutionMessageDispatch::STATUS_FAILED,
+            'error' => 'Evolution HTTP 500: temporary',
+        ]);
+
+        $this->actingAs($seller)
+            ->get(route('relatorios.whatsapp'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Relatorios/Whatsapp')
+                ->where('recent.0.can_resend', true)
+                ->where('recent.0.provider', 'evolution')
+            );
+
+        $this->actingAs($seller)
+            ->postJson(route('relatorios.whatsapp.resend', [
+                'provider' => 'evolution',
+                'dispatch' => $dispatch->id,
+            ]))
+            ->assertOk()
+            ->assertJsonPath('ok', true);
+
+        $fresh = $dispatch->fresh();
+        $this->assertSame(EvolutionMessageDispatch::STATUS_PENDING, $fresh->status);
+        $this->assertNull($fresh->error);
+        Queue::assertPushed(EvolutionSendMessageJob::class, fn ($job) => $job->dispatchId === $dispatch->id);
+    }
+
+    public function test_report_rejects_resend_for_sent_dispatch(): void
+    {
+        Queue::fake();
+        SellerIntegrationVisibility::setGlobal(SellerIntegrationVisibility::UAZAPI, false);
+
+        $seller = User::factory()->create(['role' => User::ROLE_INFOPRODUTOR]);
+        $seller->forceFill([
+            'tenant_id' => $seller->id,
+            'kyc_status' => User::KYC_APPROVED,
+            'account_status' => 'approved',
+        ])->save();
+
+        $instance = EvolutionInstance::firstOrNewForTenant((int) $seller->id);
+        $instance->fill([
+            'name' => 'Conta principal',
+            'server_url' => 'https://stacker.evo.com',
+            'instance_name' => 'loja-1',
+            'instance_token' => 'inst-token',
+            'status' => EvolutionInstance::STATUS_CONNECTED,
+            'is_active' => true,
+            'is_default' => true,
+            'connected_at' => now(),
+        ]);
+        $instance->save();
+
+        $dispatch = EvolutionMessageDispatch::query()->create([
+            'tenant_id' => $seller->id,
+            'evolution_instance_id' => $instance->id,
+            'event_type' => EvolutionInstance::EVENT_CART_RECOVERY,
+            'sequence_step' => 0,
+            'phone' => '5511988776655',
+            'message' => 'Oi',
+            'status' => EvolutionMessageDispatch::STATUS_SENT,
+            'sent_at' => now(),
+        ]);
+
+        $this->actingAs($seller)
+            ->postJson(route('relatorios.whatsapp.resend', [
+                'provider' => 'evolution',
+                'dispatch' => $dispatch->id,
+            ]))
+            ->assertStatus(422);
+
+        Queue::assertNothingPushed();
+        $this->assertSame(EvolutionMessageDispatch::STATUS_SENT, $dispatch->fresh()->status);
+    }
+
     private function seedSeller(): void
     {
         User::factory()->create(['role' => User::ROLE_INFOPRODUTOR, 'tenant_id' => 1]);

@@ -20,6 +20,7 @@ import {
     ShoppingCart,
     CreditCard,
     Loader2,
+    RotateCcw,
 } from 'lucide-vue-next';
 
 defineOptions({ layout: LayoutInfoprodutor });
@@ -53,6 +54,9 @@ const includeImage = ref(true);
 const sending = ref(false);
 const campaignError = ref(null);
 const campaignSuccess = ref(null);
+const resendingId = ref(null);
+const resendError = ref(null);
+const resendSuccess = ref(null);
 
 const audienceOptions = [
     { value: 'abandoned_cart', label: 'Carrinho abandonado' },
@@ -119,6 +123,26 @@ function audienceLabel(value) {
 function statusLabel(row) {
     if (row.wa_status) return row.wa_status;
     return row.status;
+}
+
+async function resendFailed(row) {
+    if (!row?.can_resend || !row?.provider || !row?.dispatch_id || resendingId.value) {
+        return;
+    }
+    resendingId.value = row.id;
+    resendError.value = null;
+    resendSuccess.value = null;
+    try {
+        const { data } = await axios.post(
+            `/relatorios/whatsapp/envios/${row.provider}/${row.dispatch_id}/reenviar`,
+        );
+        resendSuccess.value = data?.message || 'Reenvio enfileirado.';
+        router.reload({ only: ['recent', 'metrics'] });
+    } catch (err) {
+        resendError.value = err.response?.data?.message || 'Não foi possível reenviar a mensagem.';
+    } finally {
+        resendingId.value = null;
+    }
 }
 </script>
 
@@ -230,6 +254,8 @@ function statusLabel(row) {
 
         <AuroraPageSection flush>
             <h2 class="px-4 pt-4 text-sm font-semibold aurora-fg">Últimos envios</h2>
+            <p v-if="resendError" class="px-4 pt-2 text-sm text-red-600">{{ resendError }}</p>
+            <p v-if="resendSuccess" class="px-4 pt-2 text-sm text-emerald-600">{{ resendSuccess }}</p>
             <div class="mt-4 overflow-hidden" :class="tablePanel">
                 <table class="min-w-full divide-y divide-zinc-200 dark:divide-zinc-700">
                     <thead class="bg-zinc-100/80 dark:bg-zinc-800/80">
@@ -238,6 +264,7 @@ function statusLabel(row) {
                             <th class="px-4 py-2 text-left text-xs font-medium uppercase text-zinc-500">Tipo</th>
                             <th class="px-4 py-2 text-left text-xs font-medium uppercase text-zinc-500">Telefone</th>
                             <th class="px-4 py-2 text-left text-xs font-medium uppercase text-zinc-500">Status</th>
+                            <th class="px-4 py-2 text-right text-xs font-medium uppercase text-zinc-500">Ação</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-zinc-200 dark:divide-zinc-700">
@@ -252,9 +279,23 @@ function statusLabel(row) {
                                 {{ statusLabel(row) }}
                                 <span v-if="row.error" class="block text-xs text-red-500">{{ row.error }}</span>
                             </td>
+                            <td class="px-4 py-2 text-right">
+                                <Button
+                                    v-if="row.can_resend"
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    :disabled="resendingId === row.id"
+                                    @click="resendFailed(row)"
+                                >
+                                    <Loader2 v-if="resendingId === row.id" class="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                    <RotateCcw v-else class="mr-1.5 h-3.5 w-3.5" />
+                                    Reenviar
+                                </Button>
+                            </td>
                         </tr>
                         <tr v-if="!recent.length">
-                            <td colspan="4" class="px-4 py-8 text-center text-sm text-zinc-500">Nenhum envio neste período.</td>
+                            <td colspan="5" class="px-4 py-8 text-center text-sm text-zinc-500">Nenhum envio neste período.</td>
                         </tr>
                     </tbody>
                 </table>
