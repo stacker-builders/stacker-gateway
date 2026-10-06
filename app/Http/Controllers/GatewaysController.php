@@ -128,6 +128,9 @@ class GatewaysController extends Controller
         } elseif ($slug === 'cielo') {
             $webhookUrl = GatewayWebhookUrl::forGateway('cielo');
             $webhookHelp = 'Cadastre esta URL HTTPS no Site Cielo (E-commerce → Gestão API E-commerce → URL de notificações), método POST, JSON. A URL é estática (não vai em cada cobrança). Recomendado: configure o mesmo header Key/Value no portal e nos campos abaixo. O Post de Notificação só traz PaymentId; o sistema confirma o status em GET /1/sales/{PaymentId}. PIX Cielo2 (Provider Cielo2) não tem sandbox de pagamento confirmado.';
+        } elseif ($slug === 'stripe') {
+            $webhookUrl = GatewayWebhookUrl::forGateway('stripe');
+            $webhookHelp = 'Cadastre esta URL HTTPS no Stripe Dashboard (Developers → Webhooks), no mesmo modo da Secret Key (teste ou live). Evento: payment_intent.succeeded. Depois cole o signing secret (whsec_…) no campo Webhook Secret abaixo.';
         } elseif ($slug === 'paypal') {
             $webhookUrl = GatewayWebhookUrl::forGateway('paypal');
             $webhookHelp = 'Cadastre esta URL HTTPS no PayPal Developer Dashboard (Webhooks) do mesmo app REST. Eventos: PAYMENT.CAPTURE.COMPLETED, PAYMENT.CAPTURE.DENIED, PAYMENT.CAPTURE.REFUNDED. Depois cole o Webhook ID no campo abaixo. Não altera PIX/cartão das outras adquirentes.';
