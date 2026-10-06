@@ -58,7 +58,7 @@ fi
 log "Projeto compose: $PROJECT"
 
 # Sem stacker-agent: o processo atual morreria no meio e nao gravaria status completed.
-TARGETS="app scheduler worker queue worker-webhooks-in worker-payments worker-webhooks-out worker-payouts worker-meta-tracking worker-utmify-tracking worker-integrax-sms caddy"
+TARGETS="app scheduler worker queue worker-webhooks-in worker-payments worker-webhooks-out worker-payouts worker-meta-tracking worker-utmify-tracking worker-integrax-sms worker-uazapi caddy"
 
 RESTART_IDS=""
 for svc in $TARGETS; do

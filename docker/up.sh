@@ -315,7 +315,7 @@ if [ -f docker/ensure-db-credentials.sh ]; then
   if [ "$NEED_RECREATE" -eq 1 ]; then
     echo "Recriando app/workers/postgres com credenciais corrigidas..."
     RECREATE_LIST=""
-    for svc in app postgres queue scheduler worker worker-payments worker-webhooks-out worker-webhooks-in worker-payouts worker-meta-tracking worker-utmify-tracking worker-integrax-sms; do
+    for svc in app postgres queue scheduler worker worker-payments worker-webhooks-out worker-webhooks-in worker-payouts worker-meta-tracking worker-utmify-tracking worker-integrax-sms worker-uazapi; do
       # shellcheck disable=SC2086
       if docker compose $COMPOSE_ARGS --env-file "$ENV_FILE" config --services 2>/dev/null | grep -qx "$svc"; then
         RECREATE_LIST="$RECREATE_LIST $svc"
