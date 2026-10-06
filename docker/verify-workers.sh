@@ -66,7 +66,7 @@ is_running() {
 
 case "$PROFILE" in
   standard)
-    for svc in app postgres redis scheduler worker-payments worker-webhooks-out worker-webhooks-in worker-payouts; do
+    for svc in app postgres redis scheduler worker-payments worker-webhooks-out worker-webhooks-in worker-payouts worker-uazapi; do
       if is_running "$svc"; then
         echo "OK: $svc em execução"
       else
