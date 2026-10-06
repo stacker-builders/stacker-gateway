@@ -362,6 +362,40 @@ services:
       redis:
         condition: service_healthy
 
+  worker-uazapi:
+    image: getfy_app:latest
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+    command:
+      - "php"
+      - "artisan"
+      - "queue:work"
+      - "--queue=uazapi"
+      - "--sleep=1"
+      - "--tries=3"
+      - "--timeout=90"
+    volumes:
+      - getfy_storage:/var/www/html/storage
+      - getfy_env:/var/www/html/.docker
+    environment:
+      QUEUE_CONNECTION: ${GETFY_QUEUE_CONNECTION:-redis}
+      REDIS_HOST: ${GETFY_REDIS_HOST:-redis}
+      DB_CONNECTION: ${GETFY_DB_CONNECTION:-pgsql}
+      DB_HOST: ${GETFY_DB_HOST:-postgres}
+      GETFY_DOCKER: "true"
+      GETFY_RUN_SETUP: "false"
+      LOG_CHANNEL: ${LOG_CHANNEL:-stack}
+      LOG_STACK: ${LOG_STACK:-daily}
+      LOG_LEVEL: ${LOG_LEVEL:-warning}
+      LOG_DAILY_DAYS: ${LOG_DAILY_DAYS:-7}
+    depends_on:
+      redis:
+        condition: service_healthy
+
   stacker-agent:
     build:
       context: ./agent
