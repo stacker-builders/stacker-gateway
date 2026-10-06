@@ -47,6 +47,22 @@ class GatewayStepUpTest extends TestCase
         return [$admin->fresh(), $setup['secret']];
     }
 
+    public function test_stripe_gateway_show_includes_webhook_url(): void
+    {
+        config([
+            'getfy.webhook_public_url' => 'https://pay.exemplo.com',
+            'app.url' => 'http://localhost',
+        ]);
+
+        $admin = $this->platformAdmin();
+
+        $this->actingAs($admin)
+            ->getJson('/plataforma/financeiro/gateways/stripe')
+            ->assertOk()
+            ->assertJsonPath('webhook_url', 'https://pay.exemplo.com/webhooks/gateways/stripe')
+            ->assertJsonPath('slug', 'stripe');
+    }
+
     public function test_gateway_update_without_totp_when_not_enabled(): void
     {
         $admin = $this->platformAdmin();
