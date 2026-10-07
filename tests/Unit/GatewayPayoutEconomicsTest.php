@@ -55,4 +55,19 @@ class GatewayPayoutEconomicsTest extends TestCase
         $this->assertSame(1.2, $e['admin_fee_payout_brl']);
         $this->assertSame(1.5, $e['admin_fee_payout_percent']);
     }
+
+    public function test_from_credentials_array_reads_fees_for_checkout_only_slug(): void
+    {
+        $e = GatewayPayoutEconomics::fromCredentialsArray('stripe', [
+            'stripe_admin_fee_pix_brl' => '0,50',
+            'stripe_admin_fee_pix_percent' => '1',
+            'stripe_admin_fee_payout_brl' => '0.50',
+            'stripe_admin_fee_payout_percent' => '2',
+        ]);
+
+        $this->assertSame(0.5, $e['admin_fee_pix_brl']);
+        $this->assertSame(1.0, $e['admin_fee_pix_percent']);
+        $this->assertSame(0.5, $e['admin_fee_payout_brl']);
+        $this->assertSame(2.0, $e['admin_fee_payout_percent']);
+    }
 }

@@ -137,6 +137,10 @@ return [
                 ['key' => 'payee_code', 'label' => 'Identificador de conta (payee_code) — para cartão', 'type' => 'text'],
                 ['key' => 'sandbox', 'label' => 'Usar ambiente de homologação (sandbox)', 'type' => 'boolean'],
                 ['key' => 'certificate', 'label' => 'Certificado P12', 'type' => 'file'],
+                ['key' => 'efi_admin_fee_pix_brl', 'label' => 'Taxa PIX paga à Efí (R$ fixo)', 'type' => 'text', 'optional' => true],
+                ['key' => 'efi_admin_fee_pix_percent', 'label' => 'Taxa PIX paga à Efí (% entrada)', 'type' => 'text', 'optional' => true],
+                ['key' => 'efi_admin_fee_payout_brl', 'label' => 'Taxa de saque paga à Efí (R$ fixo)', 'type' => 'text', 'optional' => true],
+                ['key' => 'efi_admin_fee_payout_percent', 'label' => 'Taxa de saque paga à Efí (% saída)', 'type' => 'text', 'optional' => true],
             ],
         ],
         'stripe' => [
@@ -155,6 +159,10 @@ return [
                 ['key' => 'webhook_secret', 'label' => 'Webhook Secret (whsec_...)', 'type' => 'password'],
                 ['key' => 'sandbox', 'label' => 'Usar ambiente de teste', 'type' => 'boolean'],
                 ['key' => 'link_enabled', 'label' => 'Habilitar Stripe Link no checkout', 'type' => 'boolean'],
+                ['key' => 'stripe_admin_fee_pix_brl', 'label' => 'Taxa de entrada paga à Stripe (R$ fixo)', 'type' => 'text', 'optional' => true],
+                ['key' => 'stripe_admin_fee_pix_percent', 'label' => 'Taxa de entrada paga à Stripe (%)', 'type' => 'text', 'optional' => true],
+                ['key' => 'stripe_admin_fee_payout_brl', 'label' => 'Taxa de saída paga à Stripe (R$ fixo)', 'type' => 'text', 'optional' => true],
+                ['key' => 'stripe_admin_fee_payout_percent', 'label' => 'Taxa de saída paga à Stripe (%)', 'type' => 'text', 'optional' => true],
             ],
         ],
         'paypal' => [
@@ -193,6 +201,10 @@ return [
                     'type' => 'boolean',
                     'hint' => 'Ative com credenciais sandbox; desative em produção com Client ID/Secret live.',
                 ],
+                ['key' => 'paypal_admin_fee_pix_brl', 'label' => 'Taxa de entrada paga à PayPal (R$ fixo)', 'type' => 'text', 'optional' => true],
+                ['key' => 'paypal_admin_fee_pix_percent', 'label' => 'Taxa de entrada paga à PayPal (%)', 'type' => 'text', 'optional' => true],
+                ['key' => 'paypal_admin_fee_payout_brl', 'label' => 'Taxa de saída paga à PayPal (R$ fixo)', 'type' => 'text', 'optional' => true],
+                ['key' => 'paypal_admin_fee_payout_percent', 'label' => 'Taxa de saída paga à PayPal (%)', 'type' => 'text', 'optional' => true],
             ],
         ],
         'mercadopago' => [
@@ -219,6 +231,10 @@ return [
                 ['key' => 'public_key', 'label' => 'Public Key', 'type' => 'text'],
                 ['key' => 'access_token', 'label' => 'Access Token', 'type' => 'password'],
                 ['key' => 'sandbox', 'label' => 'Usar sandbox (credenciais de teste)', 'type' => 'boolean'],
+                ['key' => 'mercadopago_admin_fee_pix_brl', 'label' => 'Taxa PIX paga ao Mercado Pago (R$ fixo)', 'type' => 'text', 'optional' => true],
+                ['key' => 'mercadopago_admin_fee_pix_percent', 'label' => 'Taxa PIX paga ao Mercado Pago (% entrada)', 'type' => 'text', 'optional' => true],
+                ['key' => 'mercadopago_admin_fee_payout_brl', 'label' => 'Taxa de saque paga ao Mercado Pago (R$ fixo)', 'type' => 'text', 'optional' => true],
+                ['key' => 'mercadopago_admin_fee_payout_percent', 'label' => 'Taxa de saque paga ao Mercado Pago (% saída)', 'type' => 'text', 'optional' => true],
             ],
         ],
         'pushinpay' => [
@@ -235,6 +251,10 @@ return [
             'credential_keys' => [
                 ['key' => 'api_token', 'label' => 'API Token', 'type' => 'password'],
                 ['key' => 'sandbox', 'label' => 'Usar ambiente de homologação (sandbox)', 'type' => 'boolean'],
+                ['key' => 'pushinpay_admin_fee_pix_brl', 'label' => 'Taxa PIX paga à Pushin Pay (R$ fixo)', 'type' => 'text', 'optional' => true],
+                ['key' => 'pushinpay_admin_fee_pix_percent', 'label' => 'Taxa PIX paga à Pushin Pay (% entrada)', 'type' => 'text', 'optional' => true],
+                ['key' => 'pushinpay_admin_fee_payout_brl', 'label' => 'Taxa de saque paga à Pushin Pay (R$ fixo)', 'type' => 'text', 'optional' => true],
+                ['key' => 'pushinpay_admin_fee_payout_percent', 'label' => 'Taxa de saque paga à Pushin Pay (% saída)', 'type' => 'text', 'optional' => true],
             ],
         ],
         'asaas' => [
@@ -252,6 +272,10 @@ return [
                 ['key' => 'api_key', 'label' => 'API Key', 'type' => 'password'],
                 ['key' => 'webhook_secret', 'label' => 'Token de autenticação do webhook (authToken do painel Asaas)', 'type' => 'password'],
                 ['key' => 'sandbox', 'label' => 'Usar ambiente de homologação (sandbox)', 'type' => 'boolean'],
+                ['key' => 'asaas_admin_fee_pix_brl', 'label' => 'Taxa PIX paga à Asaas (R$ fixo)', 'type' => 'text', 'optional' => true],
+                ['key' => 'asaas_admin_fee_pix_percent', 'label' => 'Taxa PIX paga à Asaas (% entrada)', 'type' => 'text', 'optional' => true],
+                ['key' => 'asaas_admin_fee_payout_brl', 'label' => 'Taxa de saque paga à Asaas (R$ fixo)', 'type' => 'text', 'optional' => true],
+                ['key' => 'asaas_admin_fee_payout_percent', 'label' => 'Taxa de saque paga à Asaas (% saída)', 'type' => 'text', 'optional' => true],
             ],
         ],
         'pagarme' => [
@@ -270,6 +294,10 @@ return [
                 ['key' => 'secret_key', 'label' => 'Secret Key', 'type' => 'password'],
                 ['key' => 'public_key', 'label' => 'Public Key', 'type' => 'text'],
                 ['key' => 'sandbox', 'label' => 'Sandbox', 'type' => 'boolean'],
+                ['key' => 'pagarme_admin_fee_pix_brl', 'label' => 'Taxa PIX paga à Pagar.me (R$ fixo)', 'type' => 'text', 'optional' => true],
+                ['key' => 'pagarme_admin_fee_pix_percent', 'label' => 'Taxa PIX paga à Pagar.me (% entrada)', 'type' => 'text', 'optional' => true],
+                ['key' => 'pagarme_admin_fee_payout_brl', 'label' => 'Taxa de saque paga à Pagar.me (R$ fixo)', 'type' => 'text', 'optional' => true],
+                ['key' => 'pagarme_admin_fee_payout_percent', 'label' => 'Taxa de saque paga à Pagar.me (% saída)', 'type' => 'text', 'optional' => true],
             ],
         ],
         'linaopenx' => [
@@ -300,6 +328,10 @@ return [
                 ['key' => 'creditor_issuer', 'label' => 'Credor: agência (1 a 4 dígitos, obrigatório)', 'type' => 'text'],
                 ['key' => 'creditor_number', 'label' => 'Credor: número da conta (sem dígito ou com, só números, obrigatório)', 'type' => 'text'],
                 ['key' => 'creditor_account_type', 'label' => 'Credor: tipo de conta: CACC (corrente), SVGS (poupança) ou TRAN', 'type' => 'text', 'optional' => true],
+                ['key' => 'linaopenx_admin_fee_pix_brl', 'label' => 'Taxa de entrada paga à Lina OpenX (R$ fixo)', 'type' => 'text', 'optional' => true],
+                ['key' => 'linaopenx_admin_fee_pix_percent', 'label' => 'Taxa de entrada paga à Lina OpenX (%)', 'type' => 'text', 'optional' => true],
+                ['key' => 'linaopenx_admin_fee_payout_brl', 'label' => 'Taxa de saída paga à Lina OpenX (R$ fixo)', 'type' => 'text', 'optional' => true],
+                ['key' => 'linaopenx_admin_fee_payout_percent', 'label' => 'Taxa de saída paga à Lina OpenX (%)', 'type' => 'text', 'optional' => true],
             ],
         ],
          /*
@@ -361,6 +393,10 @@ return [
                 ['key' => 'webhook_header_value', 'label' => 'Header do webhook (valor secreto)', 'type' => 'password', 'optional' => true, 'group' => 'api', 'group_label' => 'API de pagamentos'],
                 ['key' => 'sop_client_id', 'label' => 'ClientId Silent Order Post (cartão)', 'type' => 'text', 'optional' => true, 'group' => 'sop', 'group_label' => 'Silent Order Post (cartão)'],
                 ['key' => 'sop_client_secret', 'label' => 'ClientSecret Silent Order Post (cartão)', 'type' => 'password', 'optional' => true, 'group' => 'sop', 'group_label' => 'Silent Order Post (cartão)'],
+                ['key' => 'cielo_admin_fee_pix_brl', 'label' => 'Taxa PIX paga à Cielo (R$ fixo)', 'type' => 'text', 'optional' => true, 'group' => 'fees', 'group_label' => 'Taxas'],
+                ['key' => 'cielo_admin_fee_pix_percent', 'label' => 'Taxa PIX paga à Cielo (% entrada)', 'type' => 'text', 'optional' => true, 'group' => 'fees', 'group_label' => 'Taxas'],
+                ['key' => 'cielo_admin_fee_payout_brl', 'label' => 'Taxa de saque paga à Cielo (R$ fixo)', 'type' => 'text', 'optional' => true, 'group' => 'fees', 'group_label' => 'Taxas'],
+                ['key' => 'cielo_admin_fee_payout_percent', 'label' => 'Taxa de saque paga à Cielo (% saída)', 'type' => 'text', 'optional' => true, 'group' => 'fees', 'group_label' => 'Taxas'],
             ],
         ],
         'xflow' => [
