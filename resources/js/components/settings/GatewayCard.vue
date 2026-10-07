@@ -189,6 +189,12 @@ const canToggleEnabled = computed(
                     {{ method }}
                 </span>
             </div>
+            <p
+                v-if="gateway.admin_fee_label"
+                class="mt-1 text-[11px] leading-4 tabular-nums text-zinc-500 dark:text-zinc-400"
+            >
+                {{ gateway.admin_fee_label }}
+            </p>
             <div class="mt-1.5 flex flex-wrap items-center justify-between gap-2">
                 <div class="flex items-center gap-2 text-xs">
                     <span

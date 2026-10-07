@@ -9,18 +9,6 @@ class GatewayPayoutEconomics
 {
     public const DEFAULT_MIN_PAYOUT_BRL = 7.0;
 
-    /** @var list<string> */
-    private const ECONOMICS_SLUGS = [
-        'cajupay',
-        'spacepag',
-        'woovi',
-        'bspay',
-        'versell',
-        'xflow',
-        'okto',
-        'onlyup',
-    ];
-
     /**
      * Economia mínima para o gateway de payout ativo (primeiro conectado na ordem fixa).
      *
@@ -90,10 +78,7 @@ class GatewayPayoutEconomics
      */
     public static function fromCredentialsArray(string $slug, array $credentials): array
     {
-        if (! in_array($slug, self::ECONOMICS_SLUGS, true)) {
-            return self::defaults();
-        }
-
+        // Qualquer adquirente: chaves {slug}_admin_fee_pix_* e {slug}_admin_fee_payout_*.
         $minPayout = self::parseNonNegative($credentials[$slug.'_payout_min_brl'] ?? null, self::DEFAULT_MIN_PAYOUT_BRL);
         $feePix = self::parseNonNegative($credentials[$slug.'_admin_fee_pix_brl'] ?? null, 0.0);
         $feePayout = self::parseNonNegative($credentials[$slug.'_admin_fee_payout_brl'] ?? null, 0.0);

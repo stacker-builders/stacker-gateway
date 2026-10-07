@@ -6,6 +6,7 @@ use App\Gateways\GatewayRegistry;
 use App\Models\CajuPayAccount;
 use App\Models\GatewayCredential;
 use App\Models\Setting;
+use App\Support\GatewayAdminFeeSummary;
 use App\Support\GatewayInboundWebhookAuth;
 use App\Support\GatewayPluginRequirement;
 use App\Support\GatewayWebhookSecurityAlert;
@@ -66,6 +67,7 @@ trait ProvidesPlatformGatewayProps
                 'is_enabled' => $isCajuPayMulti
                     ? $cajupayStatus['is_enabled']
                     : ($cred === null ? true : ($cred->is_enabled ?? true)),
+                'admin_fee_label' => GatewayAdminFeeSummary::labelForCredential($slug, $cred),
                 'multi_account' => $isCajuPayMulti,
                 'inbound_webhook_secret_required' => in_array($slug, ['asaas', 'pushinpay', 'spacepag', 'woovi'], true),
                 'webhook_secret_configured' => $isCajuPayMulti
