@@ -34,9 +34,9 @@ return [
     ],
 
     'labels' => [
-        'abandoned' => ['name' => 'Stacker · abandonou', 'color' => 16],
-        'hot' => ['name' => 'Stacker · quente', 'color' => 2],
-        'paid' => ['name' => 'Stacker · pagou', 'color' => 15],
+        'abandoned' => ['name' => '{platform} · abandonou', 'color' => 16],
+        'hot' => ['name' => '{platform} · quente', 'color' => 2],
+        'paid' => ['name' => '{platform} · pagou', 'color' => 15],
     ],
 
     'campaign' => [
