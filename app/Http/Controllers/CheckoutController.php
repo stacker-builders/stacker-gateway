@@ -2530,6 +2530,8 @@ class CheckoutController extends Controller
      */
     public function paypalCreateOrder(Request $request): JsonResponse
     {
+        $this->forgetInvalidMetricsSessionKey($request);
+
         $product = Product::where('id', $request->input('product_id'))->availableForPurchase()->first();
         if (! $product) {
             return response()->json(['message' => 'Produto não encontrado.'], 404);
