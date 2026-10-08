@@ -149,6 +149,67 @@ class EvolutionDispatcher
     }
 
     /**
+     * Confirmação enviada quando o PIX do pedido é pago.
+     *
+     * @param  array<string, string>  $vars
+     */
+    public function dispatchOrderPaid(
+        EvolutionInstance $instance,
+        Order $order,
+        string $phone,
+        array $vars,
+    ): bool {
+        if (! $instance->canSendRecovery() || ! $instance->order_paid_enabled) {
+            return false;
+        }
+
+        if ($order->paymentMethodReportKey() !== 'pix') {
+            return false;
+        }
+
+        if ($order->api_application_id !== null || $order->api_checkout_session_id !== null) {
+            return false;
+        }
+
+        $normalized = $this->client->normalizePhone($phone);
+        if ($normalized === null) {
+            return false;
+        }
+
+        if (WhatsappRecoveryGuard::isOptedOut((int) $order->tenant_id, $normalized)) {
+            return false;
+        }
+
+        if (WhatsappRecoveryGuard::orderStepTaken((int) $order->id, EvolutionInstance::EVENT_ORDER_PAID, 0)) {
+            return false;
+        }
+
+        $message = trim($this->messageBuilder->render($instance->orderPaidMessageTemplate(), $vars));
+        if ($message === '') {
+            return false;
+        }
+        $this->assertMessageLength($message);
+
+        $order->loadMissing('product');
+        $accessUrl = trim((string) ($vars['link_acesso'] ?? ''));
+
+        return $this->queueDispatch(
+            instance: $instance,
+            eventType: EvolutionInstance::EVENT_ORDER_PAID,
+            phone: $normalized,
+            message: $message,
+            tenantId: (int) $order->tenant_id,
+            checkoutSessionId: null,
+            orderId: (int) $order->id,
+            sequenceStep: 0,
+            extra: [
+                'button_url' => $accessUrl !== '' ? $accessUrl : (string) ($vars['link'] ?? ''),
+                ...$this->imageExtra($instance, $order->product),
+            ],
+        );
+    }
+
+    /**
      * @param  array<string, mixed>  $extra
      */
     private function queueDispatch(

@@ -105,6 +105,7 @@ function statusLabel(status) {
                                 <th class="px-2 py-2">Perfil</th>
                                 <th class="px-2 py-2">Carrinho</th>
                                 <th class="px-2 py-2">PIX</th>
+                                <th class="px-2 py-2">PIX pago</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -120,6 +121,7 @@ function statusLabel(status) {
                                 <td class="px-2 py-2">{{ row.profile_name || '—' }}</td>
                                 <td class="px-2 py-2">{{ row.cart_recovery_enabled ? 'Sim' : 'Não' }}</td>
                                 <td class="px-2 py-2">{{ row.pix_recovery_enabled ? 'Sim' : 'Não' }}</td>
+                                <td class="px-2 py-2">{{ row.order_paid_enabled ? 'Sim' : 'Não' }}</td>
                             </tr>
                         </tbody>
                     </table>

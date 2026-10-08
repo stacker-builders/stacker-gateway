@@ -20,6 +20,8 @@ class EvolutionInstance extends Model
 
     public const EVENT_PIX_GENERATED = 'pix_generated';
 
+    public const EVENT_ORDER_PAID = 'order_paid';
+
     protected $fillable = [
         'tenant_id',
         'name',
@@ -36,10 +38,12 @@ class EvolutionInstance extends Model
         'is_default',
         'cart_recovery_enabled',
         'pix_recovery_enabled',
+        'order_paid_enabled',
         'send_product_image',
         'cart_recovery_steps',
         'pix_recovery_steps',
         'message_pix',
+        'message_order_paid',
         'last_error',
         'connected_at',
         'webhook_synced_at',
@@ -54,6 +58,7 @@ class EvolutionInstance extends Model
             'is_default' => 'boolean',
             'cart_recovery_enabled' => 'boolean',
             'pix_recovery_enabled' => 'boolean',
+            'order_paid_enabled' => 'boolean',
             'send_product_image' => 'boolean',
             'cart_recovery_steps' => 'array',
             'pix_recovery_steps' => 'array',
@@ -144,10 +149,12 @@ class EvolutionInstance extends Model
         $instance->is_default = $template === null;
         $instance->cart_recovery_enabled = (bool) ($template?->cart_recovery_enabled ?? false);
         $instance->pix_recovery_enabled = (bool) ($template?->pix_recovery_enabled ?? false);
+        $instance->order_paid_enabled = (bool) ($template?->order_paid_enabled ?? false);
         $instance->send_product_image = $template?->send_product_image ?? true;
         $instance->cart_recovery_steps = $template?->cart_recovery_steps ?: UazapiCartRecoverySteps::defaults();
         $instance->pix_recovery_steps = $template?->pix_recovery_steps ?: UazapiCartRecoverySteps::pixDefaults();
         $instance->message_pix = (string) ($template?->message_pix ?: (config('evolution.defaults.messages.pix_generated') ?? ''));
+        $instance->message_order_paid = (string) ($template?->message_order_paid ?: (config('evolution.defaults.messages.order_paid') ?? ''));
 
         return $instance;
     }
@@ -240,6 +247,16 @@ class EvolutionInstance extends Model
         return (string) (config('evolution.defaults.messages.pix_generated') ?? '');
     }
 
+    public function orderPaidMessageTemplate(): string
+    {
+        $message = trim((string) ($this->message_order_paid ?? ''));
+        if ($message !== '') {
+            return $message;
+        }
+
+        return (string) (config('evolution.defaults.messages.order_paid') ?? '');
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -264,10 +281,12 @@ class EvolutionInstance extends Model
             'product_ids' => $this->linkedProductIds(),
             'cart_recovery_enabled' => (bool) $this->cart_recovery_enabled,
             'pix_recovery_enabled' => (bool) $this->pix_recovery_enabled,
+            'order_paid_enabled' => (bool) $this->order_paid_enabled,
             'send_product_image' => (bool) $this->send_product_image,
             'cart_recovery_steps' => UazapiCartRecoverySteps::toUiSteps($this),
             'pix_recovery_steps' => UazapiCartRecoverySteps::toUiPixSteps($this),
             'message_pix' => $this->pixMessageTemplate(),
+            'message_order_paid' => $this->orderPaidMessageTemplate(),
             'last_error' => $this->last_error,
             'connected_at' => $this->connected_at?->toIso8601String(),
             'connected' => $this->isConnected(),

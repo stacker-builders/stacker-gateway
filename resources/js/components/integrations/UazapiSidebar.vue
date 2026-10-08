@@ -70,10 +70,12 @@ function emptyInstance() {
         product_ids: [],
         cart_recovery_enabled: false,
         pix_recovery_enabled: false,
+        order_paid_enabled: false,
         send_product_image: true,
         cart_recovery_steps: defaultSteps(),
         pix_recovery_steps: defaultPixSteps(),
         message_pix: '{nome}, seu PIX de {valor} para {produto} está pronto. Pague para concluir: {link}',
+        message_order_paid: '{nome}, seu PIX de {valor} para {produto} foi confirmado. Obrigado pela compra! Acesso: {link_acesso}',
         last_error: null,
         connected: false,
         has_instance: false,
@@ -267,8 +269,10 @@ function recoveryPayload() {
         product_ids: instance.value.product_ids || [],
         cart_recovery_enabled: instance.value.cart_recovery_enabled,
         pix_recovery_enabled: instance.value.pix_recovery_enabled,
+        order_paid_enabled: instance.value.order_paid_enabled,
         send_product_image: instance.value.send_product_image,
         message_pix: instance.value.message_pix,
+        message_order_paid: instance.value.message_order_paid,
         cart_recovery_steps: instance.value.cart_recovery_steps,
         pix_recovery_steps: instance.value.pix_recovery_steps,
     };
@@ -800,6 +804,22 @@ function close() {
                                 </div>
                                 <Toggle v-model="instance.send_product_image" />
                             </div>
+                        </section>
+
+                        <section class="space-y-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+                            <div class="flex items-center justify-between gap-3">
+                                <div>
+                                    <p class="text-sm font-medium text-zinc-900 dark:text-white">PIX pago</p>
+                                    <p class="text-xs text-zinc-500">Mensagem enviada quando o PIX é confirmado. Placeholders: {nome}, {produto}, {valor}, {link_acesso}</p>
+                                </div>
+                                <Toggle v-model="instance.order_paid_enabled" />
+                            </div>
+                            <textarea
+                                v-model="instance.message_order_paid"
+                                rows="3"
+                                maxlength="1000"
+                                class="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
+                            />
                         </section>
 
                         <section class="space-y-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">

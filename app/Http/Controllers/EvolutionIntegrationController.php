@@ -132,8 +132,10 @@ class EvolutionIntegrationController extends Controller
             'product_ids.*' => ['required', 'exists:products,id'],
             'cart_recovery_enabled' => ['nullable', 'boolean'],
             'pix_recovery_enabled' => ['nullable', 'boolean'],
+            'order_paid_enabled' => ['nullable', 'boolean'],
             'send_product_image' => ['nullable', 'boolean'],
             'message_pix' => ['nullable', 'string', 'max:'.(int) config('evolution.max_message_length', 1000)],
+            'message_order_paid' => ['nullable', 'string', 'max:'.(int) config('evolution.max_message_length', 1000)],
             'cart_recovery_steps' => ['nullable', 'array', 'max:10'],
             'cart_recovery_steps.*.delay_value' => ['required_with:cart_recovery_steps', 'integer', 'min:1', 'max:9999'],
             'cart_recovery_steps.*.delay_unit' => ['required_with:cart_recovery_steps', 'string', 'in:minutes,hours,days'],
@@ -173,8 +175,10 @@ class EvolutionIntegrationController extends Controller
         $instance->is_active = $request->boolean('is_active', true);
         $instance->cart_recovery_enabled = $request->boolean('cart_recovery_enabled');
         $instance->pix_recovery_enabled = $request->boolean('pix_recovery_enabled');
+        $instance->order_paid_enabled = $request->boolean('order_paid_enabled');
         $instance->send_product_image = $request->boolean('send_product_image', true);
         $instance->message_pix = $validated['message_pix'] ?? $instance->message_pix;
+        $instance->message_order_paid = $validated['message_order_paid'] ?? $instance->message_order_paid;
         $instance->cart_recovery_steps = $steps !== [] ? $steps : UazapiCartRecoverySteps::defaults();
         $instance->pix_recovery_steps = $pixSteps;
         $instance->save();
@@ -213,6 +217,7 @@ class EvolutionIntegrationController extends Controller
             'name' => $instance->displayName(),
             'cart_recovery_enabled' => $instance->cart_recovery_enabled,
             'pix_recovery_enabled' => $instance->pix_recovery_enabled,
+            'order_paid_enabled' => $instance->order_paid_enabled,
         ]);
 
         return response()->json($this->payload($instanceService, $resolver, $tenantId, $instance));
@@ -413,10 +418,12 @@ class EvolutionIntegrationController extends Controller
             'product_ids' => [],
             'cart_recovery_enabled' => false,
             'pix_recovery_enabled' => false,
+            'order_paid_enabled' => false,
             'send_product_image' => true,
             'cart_recovery_steps' => UazapiCartRecoverySteps::toUiSteps(null),
             'pix_recovery_steps' => UazapiCartRecoverySteps::toUiPixSteps(null),
             'message_pix' => (string) (config('evolution.defaults.messages.pix_generated') ?? ''),
+            'message_order_paid' => (string) (config('evolution.defaults.messages.order_paid') ?? ''),
             'last_error' => null,
             'connected_at' => null,
             'connected' => false,

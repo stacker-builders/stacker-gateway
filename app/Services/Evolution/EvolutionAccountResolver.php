@@ -14,6 +14,8 @@ class EvolutionAccountResolver
 
     public const CAPABILITY_PIX = 'pix';
 
+    public const CAPABILITY_ORDER_PAID = 'order_paid';
+
     public const CAPABILITY_SEND = 'send';
 
     /**
@@ -71,6 +73,17 @@ class EvolutionAccountResolver
         return $this->stickyOrNext(
             (int) $order->tenant_id,
             self::CAPABILITY_PIX,
+            'order_id',
+            (int) $order->id,
+            fn (EvolutionInstance $instance) => $instance->appliesToOrder($order)
+        );
+    }
+
+    public function resolveForPaidOrder(Order $order): ?EvolutionInstance
+    {
+        return $this->stickyOrNext(
+            (int) $order->tenant_id,
+            self::CAPABILITY_ORDER_PAID,
             'order_id',
             (int) $order->id,
             fn (EvolutionInstance $instance) => $instance->appliesToOrder($order)
@@ -143,6 +156,7 @@ class EvolutionAccountResolver
         return match ($capability) {
             self::CAPABILITY_CART => (bool) $instance->cart_recovery_enabled,
             self::CAPABILITY_PIX => (bool) $instance->pix_recovery_enabled,
+            self::CAPABILITY_ORDER_PAID => (bool) $instance->order_paid_enabled,
             default => true,
         };
     }

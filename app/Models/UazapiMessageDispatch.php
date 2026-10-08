@@ -102,6 +102,7 @@ class UazapiMessageDispatch extends Model
     {
         return static::query()
             ->where('status', self::STATUS_PENDING)
+            ->where('event_type', '!=', UazapiInstance::EVENT_ORDER_PAID)
             ->where(function ($query) use ($orderId, $checkoutSessionId) {
                 $query->where('order_id', $orderId);
                 if ($checkoutSessionId !== null) {

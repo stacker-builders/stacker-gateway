@@ -53,6 +53,32 @@ class EvolutionEventSubscriber
                 $order->product_id
             );
         }
+
+        $this->dispatchOrderPaid($order);
+    }
+
+    private function dispatchOrderPaid(Order $order): void
+    {
+        $tenantId = $order->tenant_id !== null ? (int) $order->tenant_id : null;
+        if ($tenantId === null || $order->paymentMethodReportKey() !== 'pix') {
+            return;
+        }
+
+        $instance = $this->resolver->resolveForPaidOrder($order);
+        if (! $instance) {
+            return;
+        }
+
+        $phone = $this->resolveOrderPhone($order);
+        if ($phone === null) {
+            Log::debug('EvolutionEventSubscriber: order_paid skipped (sem telefone)', ['order_id' => $order->id]);
+
+            return;
+        }
+
+        if ($this->dispatcher->dispatchOrderPaid($instance, $order, $phone, $this->messageBuilder->fromOrder($order))) {
+            Log::info('EvolutionEventSubscriber: order_paid enfileirado', ['order_id' => $order->id]);
+        }
     }
 
     public function handlePixGenerated(PixGenerated $event): void

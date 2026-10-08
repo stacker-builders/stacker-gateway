@@ -38,6 +38,8 @@ class UazapiRecoveryInsights
             + (clone $evolutionSentQuery)->where('event_type', EvolutionInstance::EVENT_CART_RECOVERY)->count();
         $pixSent = (clone $uazapiSentQuery)->where('event_type', UazapiInstance::EVENT_PIX_GENERATED)->count()
             + (clone $evolutionSentQuery)->where('event_type', EvolutionInstance::EVENT_PIX_GENERATED)->count();
+        $orderPaidSent = (clone $uazapiSentQuery)->where('event_type', UazapiInstance::EVENT_ORDER_PAID)->count()
+            + (clone $evolutionSentQuery)->where('event_type', EvolutionInstance::EVENT_ORDER_PAID)->count();
 
         $delivered = (clone $uazapiSentQuery)->whereIn('wa_status', ['Delivered', 'Read', 'Played'])->count()
             + (clone $evolutionSentQuery)->whereIn('wa_status', ['Delivered', 'Read', 'Played'])->count();
@@ -107,6 +109,7 @@ class UazapiRecoveryInsights
             'canceled' => $canceled,
             'cart_sent' => $cartSent,
             'pix_sent' => $pixSent,
+            'order_paid_sent' => $orderPaidSent,
             'cart_converted' => count($cartConverted['order_ids']),
             'pix_converted' => count($pixConverted['order_ids']),
         ];
@@ -174,8 +177,10 @@ class UazapiRecoveryInsights
         return in_array($eventType, [
             EvolutionInstance::EVENT_CART_RECOVERY,
             EvolutionInstance::EVENT_PIX_GENERATED,
+            EvolutionInstance::EVENT_ORDER_PAID,
             UazapiInstance::EVENT_CART_RECOVERY,
             UazapiInstance::EVENT_PIX_GENERATED,
+            UazapiInstance::EVENT_ORDER_PAID,
         ], true);
     }
 
