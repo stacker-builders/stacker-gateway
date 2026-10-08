@@ -25,6 +25,7 @@ use App\Support\PlatformCompanySettings;
 use App\Support\DatabaseBackupSettings;
 use App\Services\Platform\DatabaseBackupService;
 use App\Support\BrazilianDocuments;
+use App\Services\CurrencyRateSyncService;
 use App\Services\InstallationPublicUrlService;
 use App\Services\Stacker\ContainerRestartRequestService;
 use App\Support\DockerSetupState;
@@ -175,6 +176,7 @@ class SettingsController extends Controller
             ] : null,
             'legal_defaults' => $tenantId === null ? ($legalForm['legal_defaults'] ?? []) : [],
             'seller_integrations_catalog' => $tenantId === null ? SellerIntegrationVisibility::catalog() : [],
+            'currencies_rates_updated_at_label' => $tenantId === null ? CurrencyRateSyncService::updatedAtLabel() : null,
         ]);
     }
 

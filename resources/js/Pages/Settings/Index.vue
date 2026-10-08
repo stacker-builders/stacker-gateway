@@ -52,6 +52,10 @@ const props = defineProps({
         type: Object,
         required: true,
     },
+    currencies_rates_updated_at_label: {
+        type: String,
+        default: '',
+    },
     current_version: {
         type: String,
         default: '1.0.0',
@@ -1472,7 +1476,10 @@ const selectClass =
                         <div class="border-b border-zinc-200 bg-zinc-50 px-6 py-5 dark:border-zinc-700 dark:bg-zinc-800">
                             <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Moedas disponíveis no checkout</h2>
                             <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                                Configure as moedas e suas taxas de conversão. Use o botão "Buscar taxa" para atualizar automaticamente.
+                                As taxas das moedas estrangeiras são atualizadas automaticamente de segunda a sexta, às 14:00 (horário de Brasília). O botão ao lado de cada moeda busca a cotação na hora; essa alteração manual só vale depois de salvar.
+                            </p>
+                            <p class="mt-2 text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                                {{ currencies_rates_updated_at_label ? `Última atualização efetiva: ${currencies_rates_updated_at_label}` : 'Ainda não houve atualização efetiva.' }}
                             </p>
                         </div>
                         <div v-if="rateFetchError" class="mx-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800 dark:border-amber-800/50 dark:bg-amber-900/20 dark:text-amber-200">
