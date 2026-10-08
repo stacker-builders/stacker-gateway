@@ -357,6 +357,65 @@ class UazapiRecoveryTest extends TestCase
         $this->assertSame(UazapiMessageDispatch::STATUS_CANCELED, $dispatch->fresh()->status);
     }
 
+    public function test_pix_paid_queues_purchase_message_when_enabled(): void
+    {
+        Queue::fake();
+        Http::fake();
+        $this->seedPlatform();
+        $this->connectedInstance([
+            'order_paid_enabled' => true,
+            'message_order_paid' => '{nome}, PIX de {valor} confirmado para {produto}',
+        ]);
+
+        $product = $this->createTestProduct(['tenant_id' => 1, 'name' => 'Curso Pix']);
+        $order = Order::create([
+            'tenant_id' => 1,
+            'product_id' => $product->id,
+            'status' => 'completed',
+            'amount' => 49.90,
+            'email' => 'buyer@example.com',
+            'phone' => '11977665544',
+            'payment_method' => 'pix',
+        ]);
+
+        event(new OrderCompleted($order));
+        event(new OrderCompleted($order));
+
+        Queue::assertPushed(UazapiSendMessageJob::class, 1);
+        $dispatch = UazapiMessageDispatch::query()
+            ->where('event_type', UazapiInstance::EVENT_ORDER_PAID)
+            ->first();
+        $this->assertNotNull($dispatch);
+        $this->assertSame($order->id, $dispatch->order_id);
+        $this->assertSame(UazapiMessageDispatch::STATUS_PENDING, $dispatch->status);
+        $this->assertStringContainsString('PIX de R$ 49,90 confirmado', $dispatch->message);
+        $this->assertStringContainsString('Curso Pix', $dispatch->message);
+    }
+
+    public function test_order_paid_skips_non_pix_payments(): void
+    {
+        Queue::fake();
+        Http::fake();
+        $this->seedPlatform();
+        $this->connectedInstance(['order_paid_enabled' => true]);
+
+        $product = $this->createTestProduct(['tenant_id' => 1]);
+        $order = Order::create([
+            'tenant_id' => 1,
+            'product_id' => $product->id,
+            'status' => 'completed',
+            'amount' => 49.90,
+            'email' => 'buyer@example.com',
+            'phone' => '11977665544',
+            'payment_method' => 'card',
+        ]);
+
+        event(new OrderCompleted($order));
+
+        Queue::assertNotPushed(UazapiSendMessageJob::class);
+        $this->assertSame(0, UazapiMessageDispatch::query()->count());
+    }
+
     public function test_send_job_skips_when_cart_already_converted(): void
     {
         Http::fake();

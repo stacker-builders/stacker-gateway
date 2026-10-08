@@ -91,6 +91,7 @@ class UazapiController extends Controller
                 'is_default' => $instance->is_default,
                 'cart_recovery_enabled' => $instance->cart_recovery_enabled,
                 'pix_recovery_enabled' => $instance->pix_recovery_enabled,
+                'order_paid_enabled' => $instance->order_paid_enabled,
                 'connected_at' => $instance->connected_at?->toIso8601String(),
             ])
             ->values()
@@ -132,6 +133,7 @@ class UazapiController extends Controller
                 'is_default' => $instance->is_default,
                 'cart_recovery_enabled' => $instance->cart_recovery_enabled,
                 'pix_recovery_enabled' => $instance->pix_recovery_enabled,
+                'order_paid_enabled' => $instance->order_paid_enabled,
                 'connected_at' => $instance->connected_at?->toIso8601String(),
             ])
             ->values()

@@ -16,6 +16,7 @@ import {
     Eye,
     Reply,
     CircleDollarSign,
+    BadgeCheck,
     Ban,
     ShoppingCart,
     CreditCard,
@@ -111,6 +112,7 @@ function formatDate(iso) {
 function eventLabel(type) {
     return {
         pix_generated: 'PIX',
+        order_paid: 'PIX pago',
         cart_recovery: 'Carrinho',
         campaign: 'Campanha',
     }[type] || type;
@@ -193,6 +195,7 @@ async function resendFailed(row) {
             <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <AuroraStatCard :icon="ShoppingCart" label="Carrinho enviadas" :value="String(metrics.cart_sent ?? 0)" />
                 <AuroraStatCard :icon="CreditCard" label="PIX enviadas" :value="String(metrics.pix_sent ?? 0)" />
+                <AuroraStatCard :icon="BadgeCheck" label="PIX pago enviadas" :value="String(metrics.order_paid_sent ?? 0)" />
                 <AuroraStatCard :icon="MessageCircle" label="Receita recuperada" :value="formatBRL(metrics.converted_amount)" />
                 <AuroraStatCard :icon="Ban" label="Opt-outs" :value="String(metrics.opt_outs ?? 0)" />
             </div>
