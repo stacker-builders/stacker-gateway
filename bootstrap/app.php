@@ -204,6 +204,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->job(new \App\Jobs\ChargeDueSubscriptionsWithSavedCardJob)->dailyAt('07:00');
         $schedule->command('subscriptions:expire-due')->dailyAt('00:10');
         $schedule->command('coproduction:expire')->hourly();
+        $schedule->command('currencies:sync-rates')
+            ->dailyAt('14:00')
+            ->timezone('America/Sao_Paulo')
+            ->weekdays()
+            ->withoutOverlapping();
         $schedule->command('checkout:fire-abandoned-cart-webhooks --minutes=10')->everyMinute();
         $schedule->command('integrax:process-cart-recovery')->everyMinute();
         $schedule->command('uazapi:process-cart-recovery')->everyMinute();
