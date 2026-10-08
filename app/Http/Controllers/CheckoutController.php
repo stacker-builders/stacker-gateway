@@ -53,6 +53,7 @@ use App\Support\CheckoutCardContract;
 use App\Support\CheckoutPaymentConsumer;
 use App\Support\CheckoutTranslations;
 use App\Support\CheckoutTurnstileSettings;
+use App\Support\MoneyDecimal;
 use App\Support\PlatformCompanySettings;
 use App\Support\SafeUrl;
 use App\Support\GatewayWebhookUrl;
@@ -2667,7 +2668,11 @@ class CheckoutController extends Controller
         if (strlen($chargeCurrency) !== 3) {
             $chargeCurrency = 'BRL';
         }
-        $chargeAmount = (float) ($context['total_amount'] ?? $order->amount);
+        // total_amount do contexto é sempre BRL; converter para a moeda de display (igual ao front).
+        $chargeAmount = $this->convertBrlAmountToDisplayCurrency(
+            (float) ($context['total_amount'] ?? $order->amount),
+            $chargeCurrency
+        );
 
         try {
             /** @var \App\Gateways\PayPal\PayPalDriver|null $driver */
@@ -3656,6 +3661,45 @@ class CheckoutController extends Controller
         if (! is_string($value) || ! Str::isUuid($value)) {
             $request->merge(['metrics_session_key' => null]);
         }
+    }
+
+    /**
+     * Converte valor em BRL para a moeda de exibição do checkout (mesmas taxas do front).
+     */
+    private function convertBrlAmountToDisplayCurrency(float $amountBrl, string $displayCurrency): float
+    {
+        $displayCurrency = strtoupper(trim($displayCurrency));
+        if ($displayCurrency === '' || $displayCurrency === 'BRL') {
+            return round($amountBrl, 2);
+        }
+
+        $currenciesRaw = Setting::get('currencies', null, null);
+        $currencies = $currenciesRaw
+            ? (is_string($currenciesRaw) ? json_decode($currenciesRaw, true) : $currenciesRaw)
+            : config('products.currencies');
+        $currencies = is_array($currencies) ? $currencies : config('products.currencies');
+
+        $rates = [
+            'brl_eur' => (float) config('products.rates.brl_eur', 0.16),
+            'brl_usd' => (float) config('products.rates.brl_usd', 0.18),
+        ];
+        foreach ($currencies as $currency) {
+            if (! is_array($currency)) {
+                continue;
+            }
+            $code = strtoupper((string) ($currency['code'] ?? ''));
+            $rate = (float) ($currency['rate_to_brl'] ?? 0);
+            if ($rate <= 0) {
+                continue;
+            }
+            if ($code === 'EUR') {
+                $rates['brl_eur'] = $rate;
+            } elseif ($code === 'USD') {
+                $rates['brl_usd'] = $rate;
+            }
+        }
+
+        return MoneyDecimal::storageFromBrl($amountBrl, $displayCurrency, $rates);
     }
 
     private function resolveValidMetricsSessionKey(mixed $candidate): ?string
