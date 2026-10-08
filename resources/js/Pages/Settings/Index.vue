@@ -433,7 +433,7 @@ async function fetchRate(curr, index) {
     refreshLoadingByIndex.value = { ...refreshLoadingByIndex.value, [index]: true };
     rateFetchError.value = null;
     try {
-        const res = await fetch(`https://api.frankfurter.app/latest?from=BRL&to=${code}`);
+        const res = await fetch(`https://api.frankfurter.dev/v1/latest?from=BRL&to=${code}`);
         const data = await res.json();
         if (data.rates && typeof data.rates[code] === 'number') {
             curr.rate_to_brl = data.rates[code];
