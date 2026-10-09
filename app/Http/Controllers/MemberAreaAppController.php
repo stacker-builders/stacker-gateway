@@ -72,6 +72,7 @@ class MemberAreaAppController extends Controller
             'internal_products' => $internalProducts->map(fn (MemberInternalProduct $ip) => [
                 'id' => $ip->related_product_id,
                 'name' => $ip->relatedProduct?->name,
+                'type' => $ip->relatedProduct?->type,
                 'image_url' => $ip->relatedProduct?->image ? (new StorageService($product->tenant_id))->url($ip->relatedProduct->image) : null,
                 'checkout_slug' => $ip->relatedProduct?->checkout_slug,
                 'checkout_url' => $ip->relatedProduct?->checkout_slug ? url('/c/'.$ip->relatedProduct->checkout_slug) : null,
@@ -557,6 +558,7 @@ class MemberAreaAppController extends Controller
         $items = $internalProducts->map(fn (MemberInternalProduct $ip) => [
             'id' => $ip->related_product_id,
             'name' => $ip->relatedProduct?->name,
+            'type' => $ip->relatedProduct?->type,
             'description' => $ip->relatedProduct?->description,
             'image_url' => $ip->relatedProduct?->image ? (new StorageService($product->tenant_id))->url($ip->relatedProduct->image) : null,
             'checkout_slug' => $ip->relatedProduct?->checkout_slug,
