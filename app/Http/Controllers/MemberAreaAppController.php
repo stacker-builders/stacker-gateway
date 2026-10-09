@@ -16,6 +16,7 @@ use App\Models\BrandingSetting;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
+use App\Services\DeliverableAccessLinkService;
 use App\Services\GamificationService;
 use App\Services\MemberAreaResolver;
 use App\Services\MemberCommentService;
@@ -24,6 +25,7 @@ use App\Services\MemberProgressService;
 use App\Services\MemberStudentActivityLogService;
 use App\Services\StorageService;
 use App\Support\MemberAreaAdminPreview;
+use App\Support\PublicAppUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -52,7 +54,7 @@ class MemberAreaAppController extends Controller
         $continueWatching = $this->getContinueWatching($product, $user);
         $internalProducts = $product->memberInternalProducts()->with('relatedProduct')->orderBy('position')->get();
         $baseUrl = $this->baseUrlForRequest($product, $request);
-        $userProductIds = $user->products()->pluck('products.id')->flip()->all();
+        $userProductIds = $this->userOwnedProductIdMap($user);
         $push = $this->pushProps($product);
 
         return Inertia::render('MemberAreaApp/Show', [
@@ -73,7 +75,10 @@ class MemberAreaAppController extends Controller
                 'image_url' => $ip->relatedProduct?->image ? (new StorageService($product->tenant_id))->url($ip->relatedProduct->image) : null,
                 'checkout_slug' => $ip->relatedProduct?->checkout_slug,
                 'checkout_url' => $ip->relatedProduct?->checkout_slug ? url('/c/'.$ip->relatedProduct->checkout_slug) : null,
-                'has_access' => $user->products()->where('products.id', $ip->related_product_id)->exists(),
+                'access_url' => $ip->relatedProduct
+                    ? $this->relatedProductAccessUrl($ip->relatedProduct, $user, isset($userProductIds[(string) $ip->related_product_id]))
+                    : null,
+                'has_access' => isset($userProductIds[(string) $ip->related_product_id]),
             ])->values()->all(),
             'community_enabled' => (bool) ($config['community_enabled'] ?? false),
             'base_url' => $baseUrl,
@@ -123,7 +128,7 @@ class MemberAreaAppController extends Controller
     public function moduleContent(Request $request, string $slug, MemberModule $module): Response|RedirectResponse
     {
         $product = $this->getProduct($request);
-        if ($module->product_id !== $product->id) {
+        if (! $this->belongsToMemberProduct($module->product_id, $product)) {
             abort(404);
         }
         $user = $request->user();
@@ -256,7 +261,7 @@ class MemberAreaAppController extends Controller
     public function lesson(Request $request, string $slug, MemberLesson $lesson): Response|RedirectResponse
     {
         $product = $this->getProduct($request);
-        if ($lesson->product_id !== $product->id) {
+        if (! $this->belongsToMemberProduct($lesson->product_id, $product)) {
             abort(404);
         }
         $user = $request->user();
@@ -347,7 +352,7 @@ class MemberAreaAppController extends Controller
             return response()->json(['success' => false, 'message' => 'Não autenticado.'], 401);
         }
         $product = $this->getProduct($request);
-        if ($lesson->product_id !== $product->id) {
+        if (! $this->belongsToMemberProduct($lesson->product_id, $product)) {
             abort(404);
         }
         $this->assertNotAdminPreviewMutation($request, $product);
@@ -392,7 +397,7 @@ class MemberAreaAppController extends Controller
             abort(401);
         }
         $product = $this->getProduct($request);
-        if ($lesson->product_id !== $product->id) {
+        if (! $this->belongsToMemberProduct($lesson->product_id, $product)) {
             abort(404);
         }
         $now = now();
@@ -502,7 +507,7 @@ class MemberAreaAppController extends Controller
     {
         $product = $this->getProduct($request);
         $this->assertNotAdminPreviewMutation($request, $product);
-        if ($lesson->product_id !== $product->id) {
+        if (! $this->belongsToMemberProduct($lesson->product_id, $product)) {
             abort(404);
         }
         $lesson->loadMissing('module');
@@ -547,7 +552,7 @@ class MemberAreaAppController extends Controller
         $product = $this->getProduct($request);
         $user = $request->user();
         $internalProducts = $product->memberInternalProducts()->with('relatedProduct')->orderBy('position')->get();
-        $userProductIds = $user->products()->pluck('products.id')->flip()->all();
+        $userProductIds = $this->userOwnedProductIdMap($user);
 
         $items = $internalProducts->map(fn (MemberInternalProduct $ip) => [
             'id' => $ip->related_product_id,
@@ -556,8 +561,11 @@ class MemberAreaAppController extends Controller
             'image_url' => $ip->relatedProduct?->image ? (new StorageService($product->tenant_id))->url($ip->relatedProduct->image) : null,
             'checkout_slug' => $ip->relatedProduct?->checkout_slug,
             'checkout_url' => $ip->relatedProduct?->checkout_slug ? url('/c/'.$ip->relatedProduct->checkout_slug) : null,
+            'access_url' => $ip->relatedProduct
+                ? $this->relatedProductAccessUrl($ip->relatedProduct, $user, isset($userProductIds[(string) $ip->related_product_id]))
+                : null,
             'price' => $ip->relatedProduct?->price,
-            'has_access' => isset($userProductIds[$ip->related_product_id]),
+            'has_access' => isset($userProductIds[(string) $ip->related_product_id]),
         ])->values()->all();
 
         return Inertia::render('MemberAreaApp/Loja', [
@@ -963,6 +971,55 @@ class MemberAreaAppController extends Controller
         return $product;
     }
 
+    private function belongsToMemberProduct(mixed $ownerProductId, Product $product): bool
+    {
+        return (string) $ownerProductId === (string) $product->id;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function userOwnedProductIdMap(User $user): array
+    {
+        return $user->products()
+            ->pluck('products.id')
+            ->map(fn ($id) => (string) $id)
+            ->flip()
+            ->all();
+    }
+
+    /**
+     * URL de acesso ao produto relacionado no card (área de membros, link rastreado, etc.).
+     * Nunca força /m/{checkout_slug} para produtos que não são área de membros.
+     */
+    private function relatedProductAccessUrl(Product $related, User $user, bool $hasAccess): ?string
+    {
+        if (! $hasAccess) {
+            return null;
+        }
+
+        if ($related->type === Product::TYPE_AREA_MEMBROS && $related->checkout_slug) {
+            return $this->resolver->baseUrlForProduct($related);
+        }
+
+        if (in_array($related->type, DeliverableAccessLinkService::trackedProductTypes(), true)) {
+            $tracked = app(DeliverableAccessLinkService::class)->trackedUrl($user, $related);
+            if (is_string($tracked) && $tracked !== '') {
+                return $tracked;
+            }
+        }
+
+        if ($related->type === Product::TYPE_AREA_MEMBROS_EXTERNA) {
+            $config = is_array($related->checkout_config) ? $related->checkout_config : [];
+            $external = trim((string) ($config['deliverable_link'] ?? $config['external_member_area_url'] ?? ''));
+            if ($external !== '' && preg_match('#^https?://#i', $external)) {
+                return $external;
+            }
+        }
+
+        return null;
+    }
+
     /** @return array{push_enabled: bool, vapid_public: string|null} */
     private function pushProps(Product $product): array
     {
@@ -1084,7 +1141,13 @@ class MemberAreaAppController extends Controller
 
         if ($sectionType === 'products') {
             $related = $m->relatedProduct;
-            $hasAccess = $m->related_product_id ? isset($userProductIds[$m->related_product_id]) : false;
+            $hasAccess = $m->related_product_id
+                ? isset($userProductIds[(string) $m->related_product_id])
+                : false;
+            // access_type free: liberado sem compra
+            if (($m->access_type ?? '') === 'free') {
+                $hasAccess = true;
+            }
 
             return [
                 'id' => $m->id,
@@ -1096,10 +1159,13 @@ class MemberAreaAppController extends Controller
                 'related_product' => $related ? [
                     'id' => $related->id,
                     'name' => $related->name,
+                    'type' => $related->type,
                     'image_url' => $related->image ? (new StorageService($product->tenant_id))->url($related->image) : null,
                     'checkout_slug' => $related->checkout_slug,
-                    'checkout_url' => url('/c/'.$related->checkout_slug),
-                    'member_area_slug' => $related->checkout_slug,
+                    'checkout_url' => $related->checkout_slug
+                        ? rtrim(PublicAppUrl::base(), '/').'/c/'.$related->checkout_slug
+                        : null,
+                    'access_url' => $this->relatedProductAccessUrl($related, $user, $hasAccess),
                 ] : null,
                 'has_access' => $hasAccess,
             ];

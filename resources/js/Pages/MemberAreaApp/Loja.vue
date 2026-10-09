@@ -40,7 +40,14 @@ function checkoutHref(item) {
                     <h2 class="font-semibold">{{ item.name }}</h2>
                     <p v-if="item.description" class="mt-1 text-sm text-zinc-400 line-clamp-2">{{ item.description }}</p>
                     <div class="mt-4">
-                        <Link v-if="item.has_access" :href="href('/')" class="text-sm text-[var(--ma-primary)] hover:underline">Acessar área</Link>
+                        <a
+                            v-if="item.has_access && item.access_url"
+                            :href="item.access_url"
+                            class="text-sm text-[var(--ma-primary)] hover:underline"
+                            :target="/^https?:\/\//i.test(item.access_url) ? '_blank' : undefined"
+                            :rel="/^https?:\/\//i.test(item.access_url) ? 'noopener' : undefined"
+                        >Acessar</a>
+                        <Link v-else-if="item.has_access" :href="href('/')" class="text-sm text-[var(--ma-primary)] hover:underline">Acessar área</Link>
                         <Button
                             v-else
                             as="a"
