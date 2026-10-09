@@ -85,4 +85,44 @@ class DeliverableAccessRedirectTest extends TestCase
     {
         $this->get(route('deliverable.access', ['ref' => 'abcdefghjkmn']))->assertNotFound();
     }
+
+    public function test_go_still_redirects_when_click_logging_throws(): void
+    {
+        $buyer = User::factory()->create(['role' => User::ROLE_CLIENTE]);
+        $product = $this->createTestProduct([
+            'type' => Product::TYPE_LINK,
+            'checkout_slug' => 'curso-link-throw',
+            'checkout_config' => [
+                'deliverable_link' => 'https://conteudo.externo.test/com-erro-log',
+            ],
+        ]);
+        Order::create([
+            'tenant_id' => 1,
+            'user_id' => $buyer->id,
+            'product_id' => $product->id,
+            'status' => 'completed',
+            'amount' => 10,
+            'email' => $buyer->email,
+        ]);
+
+        $url = app(DeliverableAccessLinkService::class)->trackedUrl($buyer, $product);
+        $this->assertIsString($url);
+        $ref = substr($url, -12);
+
+        $this->mock(DeliverableAccessLinkService::class, function ($mock) use ($buyer, $product) {
+            $mock->shouldReceive('resolveRef')
+                ->once()
+                ->andReturn([
+                    'user' => $buyer,
+                    'product' => $product,
+                    'destination' => 'https://conteudo.externo.test/com-erro-log',
+                ]);
+            $mock->shouldReceive('recordClick')
+                ->once()
+                ->andThrow(new \RuntimeException('falha ao gravar clique'));
+        });
+
+        $this->get(route('deliverable.access.go', ['ref' => $ref]))
+            ->assertRedirect('https://conteudo.externo.test/com-erro-log');
+    }
 }

@@ -29,7 +29,11 @@ class DeliverableAccessController extends Controller
             abort(404);
         }
 
-        $links->recordClick($resolved['user'], $resolved['product'], $request);
+        try {
+            $links->recordClick($resolved['user'], $resolved['product'], $request);
+        } catch (\Throwable $e) {
+            report($e);
+        }
 
         return redirect()->away($resolved['destination']);
     }
