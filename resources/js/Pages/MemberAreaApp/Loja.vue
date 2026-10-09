@@ -25,6 +25,17 @@ function checkoutHref(item) {
     }
     return '#';
 }
+
+/** Área de membros na mesma aba; links/deliverables em nova aba. */
+function accessOpensInNewTab(url, type) {
+    if (type === 'area_membros') {
+        return false;
+    }
+    if (!url || url === '#') {
+        return false;
+    }
+    return /^https?:\/\//i.test(url) || url.startsWith('/a/');
+}
 </script>
 
 <template>
@@ -44,8 +55,8 @@ function checkoutHref(item) {
                             v-if="item.has_access && item.access_url"
                             :href="item.access_url"
                             class="text-sm text-[var(--ma-primary)] hover:underline"
-                            :target="/^https?:\/\//i.test(item.access_url) ? '_blank' : undefined"
-                            :rel="/^https?:\/\//i.test(item.access_url) ? 'noopener' : undefined"
+                            :target="accessOpensInNewTab(item.access_url, item.type) ? '_blank' : undefined"
+                            :rel="accessOpensInNewTab(item.access_url, item.type) ? 'noopener' : undefined"
                         >Acessar</a>
                         <Link v-else-if="item.has_access" :href="href('/')" class="text-sm text-[var(--ma-primary)] hover:underline">Acessar área</Link>
                         <Button

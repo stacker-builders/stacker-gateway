@@ -66,9 +66,33 @@ function productCardHref(mod) {
     return mod.related_product?.access_url || '#';
 }
 
-function productCardIsExternal(mod) {
+/** Nova aba só para checkout, links externos e deliverables — área de membros fica na mesma aba. */
+function productCardOpensInNewTab(mod) {
+    if (productCardNeedsPurchase(mod)) {
+        return true;
+    }
+    if (mod.related_product?.type === 'area_membros') {
+        return false;
+    }
     const url = productCardHref(mod);
-    return /^https?:\/\//i.test(url);
+    if (!url || url === '#') {
+        return false;
+    }
+    return /^https?:\/\//i.test(url) || url.startsWith('/a/');
+}
+
+function productCardUsesPlainAnchor(mod) {
+    return productCardNeedsPurchase(mod) || productCardOpensInNewTab(mod) || /^https?:\/\//i.test(productCardHref(mod));
+}
+
+function accessOpensInNewTab(url, type) {
+    if (type === 'area_membros') {
+        return false;
+    }
+    if (!url || url === '#') {
+        return false;
+    }
+    return /^https?:\/\//i.test(url) || url.startsWith('/a/');
 }
 
 function internalProductAccessHref(ip) {
@@ -253,10 +277,10 @@ function checkoutHref(item) {
                     <component
                         v-for="mod in section.modules"
                         :key="mod.id"
-                        :is="(productCardNeedsPurchase(mod) || productCardIsExternal(mod)) ? 'a' : Link"
+                        :is="productCardUsesPlainAnchor(mod) ? 'a' : Link"
                         :href="productCardHref(mod)"
-                        :target="(productCardNeedsPurchase(mod) || productCardIsExternal(mod)) ? '_blank' : undefined"
-                        :rel="(productCardNeedsPurchase(mod) || productCardIsExternal(mod)) ? 'noopener' : undefined"
+                        :target="productCardOpensInNewTab(mod) ? '_blank' : undefined"
+                        :rel="productCardOpensInNewTab(mod) ? 'noopener' : undefined"
                         :class="[
                             'flex w-64 shrink-0 flex-col rounded-xl overflow-hidden bg-zinc-800/50 text-left transition hover:bg-zinc-800',
                             productCardNeedsPurchase(mod) ? 'touch-manipulation' : '',
@@ -319,8 +343,8 @@ function checkoutHref(item) {
                             v-if="ip.has_access && ip.access_url"
                             :href="internalProductAccessHref(ip)"
                             class="mt-2 inline-block text-sm text-[var(--ma-primary)] hover:underline"
-                            :target="/^https?:\/\//i.test(ip.access_url) ? '_blank' : undefined"
-                            :rel="/^https?:\/\//i.test(ip.access_url) ? 'noopener' : undefined"
+                            :target="accessOpensInNewTab(ip.access_url, ip.type) ? '_blank' : undefined"
+                            :rel="accessOpensInNewTab(ip.access_url, ip.type) ? 'noopener' : undefined"
                         >
                             Acessar
                         </a>
