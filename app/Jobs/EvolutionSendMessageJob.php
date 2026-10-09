@@ -60,11 +60,12 @@ class EvolutionSendMessageJob implements ShouldQueue
 
         $instance = $dispatch->instance;
         if (! $instance instanceof EvolutionInstance || ! $instance->canSendRecovery()) {
-            $capability = $dispatch->event_type === EvolutionInstance::EVENT_CART_RECOVERY
-                ? EvolutionAccountResolver::CAPABILITY_CART
-                : ($dispatch->event_type === EvolutionInstance::EVENT_PIX_GENERATED
-                    ? EvolutionAccountResolver::CAPABILITY_PIX
-                    : EvolutionAccountResolver::CAPABILITY_SEND);
+            $capability = match ($dispatch->event_type) {
+                EvolutionInstance::EVENT_CART_RECOVERY => EvolutionAccountResolver::CAPABILITY_CART,
+                EvolutionInstance::EVENT_PIX_GENERATED => EvolutionAccountResolver::CAPABILITY_PIX,
+                EvolutionInstance::EVENT_ORDER_PAID => EvolutionAccountResolver::CAPABILITY_ORDER_PAID,
+                default => EvolutionAccountResolver::CAPABILITY_SEND,
+            };
             $resolver = app(EvolutionAccountResolver::class);
             $applies = null;
             if ($dispatch->order_id) {
@@ -162,6 +163,17 @@ class EvolutionSendMessageJob implements ShouldQueue
             return true;
         }
 
+        // Confirmação de PIX pago: não aborta por resposta na recuperação nem por status completed.
+        if ($dispatch->event_type === EvolutionInstance::EVENT_ORDER_PAID) {
+            if (! $dispatch->order_id) {
+                return false;
+            }
+
+            $order = Order::query()->find($dispatch->order_id);
+
+            return $order !== null && in_array($order->status, ['refunded', 'chargeback', 'cancelled', 'canceled'], true);
+        }
+
         $startedAt = $this->recoveryStartedAt($dispatch);
         if ($startedAt && WhatsappRecoveryGuard::blocks((int) $dispatch->tenant_id, $dispatch->phone, $startedAt)) {
             return true;
@@ -193,6 +205,10 @@ class EvolutionSendMessageJob implements ShouldQueue
     {
         if (WhatsappRecoveryGuard::isOptedOut((int) $dispatch->tenant_id, $dispatch->phone)) {
             return 'Número em opt-out — envio cancelado.';
+        }
+
+        if ($dispatch->event_type === EvolutionInstance::EVENT_ORDER_PAID) {
+            return 'Pedido reembolsado ou cancelado — confirmação não enviada.';
         }
 
         $startedAt = $this->recoveryStartedAt($dispatch);
