@@ -1751,12 +1751,12 @@ class CheckoutController extends Controller
                     $order->update(['status' => 'completed']);
                     $order->load('orderItems');
                     $grantAccessForOrder($order);
-                    if ($plan) {
-                        $result = app(SubscriptionRenewalService::class)->syncFromPaidOrder($order->fresh());
-                        $subscription = $result['subscription'] ?? null;
-                        if ($subscription) {
-                            $this->attachStripeSavedPaymentMethodForSubscription($subscription, $order, $card, $tenantId, $user->id);
-                        }
+                    // Sempre sincroniza assinatura: o service resolve o plano do pedido
+                    // (ou da assinatura existente) mesmo quando $plan veio null no request.
+                    $result = app(SubscriptionRenewalService::class)->syncFromPaidOrder($order->fresh());
+                    $subscription = $result['subscription'] ?? null;
+                    if ($subscription) {
+                        $this->attachStripeSavedPaymentMethodForSubscription($subscription, $order, $card, $tenantId, $user->id);
                     }
                     event(new OrderCompleted($order));
                 } elseif ($isApproved && $alreadyCompleted) {
@@ -2823,7 +2823,7 @@ class CheckoutController extends Controller
             $order->load('orderItems');
             $order->grantPurchasedProductAccessToBuyer();
 
-            if ($plan && $order->user_id) {
+            if ($order->user_id) {
                 app(SubscriptionRenewalService::class)->syncFromPaidOrder($order->fresh());
             }
 

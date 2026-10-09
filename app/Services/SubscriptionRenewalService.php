@@ -143,10 +143,23 @@ class SubscriptionRenewalService
             return null;
         }
 
+        // Renovação sem plan_id no pedido: preferir o plano da assinatura existente
+        // (não o fallback vitalício/primeiro do produto).
+        if ($order->user_id) {
+            $existing = $this->findRenewableForUserProduct((int) $order->user_id, $order->product_id);
+            if ($existing?->subscription_plan_id) {
+                $plan = SubscriptionPlan::query()->find($existing->subscription_plan_id);
+                if ($plan) {
+                    $this->attachPlanToOrder($order, $plan);
+
+                    return $plan;
+                }
+            }
+        }
+
         $plan = app(MemberAccessGrantService::class)->resolvePlan($product);
-        if ($plan && ! $order->subscription_plan_id) {
-            $order->update(['subscription_plan_id' => $plan->id]);
-            $order->setRelation('subscriptionPlan', $plan);
+        if ($plan) {
+            $this->attachPlanToOrder($order, $plan);
         }
 
         return $plan;
@@ -157,11 +170,11 @@ class SubscriptionRenewalService
      */
     public function resolvePeriod(Order $order, SubscriptionPlan $plan, ?Subscription $subscription): array
     {
-        if ($order->period_start && $order->period_end) {
-            return [$order->period_start, $order->period_end];
-        }
-
-        if ($subscription?->current_period_end && $subscription->current_period_end->copy()->startOfDay()->gte(now()->startOfDay())) {
+        // Renovação com período ainda válido: estende a partir do fim atual usando o
+        // intervalo do plano do checkout (mensal/anual/etc.), não "reinicia" do dia.
+        if ($subscription?->current_period_end
+            && $subscription->current_period_end->copy()->startOfDay()->gte(now()->startOfDay())
+        ) {
             $start = $subscription->current_period_end->copy()->startOfDay();
             if ($plan->isLifetime()) {
                 return [$start, null];
@@ -179,7 +192,23 @@ class SubscriptionRenewalService
             return [$start, $end];
         }
 
+        if ($order->period_start && ($order->period_end || $plan->isLifetime())) {
+            return [$order->period_start, $order->period_end];
+        }
+
         return $plan->getCurrentPeriod();
+    }
+
+    private function attachPlanToOrder(Order $order, SubscriptionPlan $plan): void
+    {
+        if ($order->subscription_plan_id) {
+            $order->setRelation('subscriptionPlan', $plan);
+
+            return;
+        }
+
+        $order->update(['subscription_plan_id' => $plan->id]);
+        $order->setRelation('subscriptionPlan', $plan);
     }
 
     /**

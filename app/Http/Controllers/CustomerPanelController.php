@@ -11,6 +11,7 @@ use App\Services\MemberAreaResolver;
 use App\Services\RefundRequestService;
 use App\Services\StorageService;
 use App\Support\RefundEligibility;
+use App\Support\SaleOrigin;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -140,6 +141,7 @@ class CustomerPanelController extends Controller
             'can_request_refund' => $position === 0 && RefundEligibility::canCustomerRequestRefund($order),
             'is_renewal' => (bool) $order->is_renewal,
             'billing_type' => $product?->billing_type,
+            'sale_origin' => $order->sale_origin ?: (is_array($order->metadata) ? ($order->metadata['sale_origin'] ?? null) : null),
             'renewal_count' => 0,
         ];
     }
@@ -179,35 +181,50 @@ class CustomerPanelController extends Controller
             'can_request_refund' => false,
             'is_renewal' => false,
             'billing_type' => $product->billing_type,
+            'sale_origin' => null,
             'renewal_count' => 0,
         ];
     }
 
     /**
      * Assinaturas/renovações do mesmo produto viram um único card (data do último pagamento).
+     * Se qualquer linha do produto for assinatura/renovação, todas as compras desse
+     * produto (não bump) colapsam — evita duplicar quando o 1º pedido veio sem flag.
      *
      * @param  list<array<string, mixed>>  $items
      * @return list<array<string, mixed>>
      */
     private function collapseSubscriptionPurchases(array $items): array
     {
+        $collapsibleIds = [];
+        foreach ($items as $item) {
+            if (! empty($item['is_order_bump']) || ! empty($item['is_manual_grant'])) {
+                continue;
+            }
+            $productId = $item['product_id'] ?? null;
+            if ($productId === null || $productId === '') {
+                continue;
+            }
+            if ($this->purchaseRowIsSubscriptionLike($item)) {
+                $collapsibleIds[(string) $productId] = true;
+            }
+        }
+
         $seen = [];
         $collapsed = [];
 
         foreach ($items as $item) {
             $productId = $item['product_id'] ?? null;
+            $key = ($productId !== null && $productId !== '') ? (string) $productId : null;
             $isBump = (bool) ($item['is_order_bump'] ?? false);
             $isGrant = (bool) ($item['is_manual_grant'] ?? false);
-            $isSubscription = ($item['billing_type'] ?? null) === Product::BILLING_SUBSCRIPTION
-                || (bool) ($item['is_renewal'] ?? false);
 
-            if ($isBump || $isGrant || ! $isSubscription || $productId === null || $productId === '') {
+            if ($isBump || $isGrant || $key === null || ! isset($collapsibleIds[$key])) {
                 $collapsed[] = $item;
 
                 continue;
             }
 
-            $key = (string) $productId;
             if (isset($seen[$key])) {
                 $collapsed[$seen[$key]]['renewal_count'] = (int) ($collapsed[$seen[$key]]['renewal_count'] ?? 0) + 1;
                 $collapsed[$seen[$key]]['is_renewal'] = true;
@@ -221,6 +238,21 @@ class CustomerPanelController extends Controller
         }
 
         return $collapsed;
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    private function purchaseRowIsSubscriptionLike(array $item): bool
+    {
+        if (($item['billing_type'] ?? null) === Product::BILLING_SUBSCRIPTION) {
+            return true;
+        }
+        if (! empty($item['is_renewal'])) {
+            return true;
+        }
+
+        return ($item['sale_origin'] ?? null) === SaleOrigin::MEMBER_MODULE_RENEWAL;
     }
 
     private function productAccessUrl(?Product $product, MemberAreaResolver $resolver, User $user): ?string
