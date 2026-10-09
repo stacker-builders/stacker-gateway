@@ -63,11 +63,12 @@ class UazapiSendMessageJob implements ShouldQueue
 
         $instance = $dispatch->instance;
         if (! $instance instanceof UazapiInstance || ! $instance->canSendRecovery()) {
-            $capability = $dispatch->event_type === UazapiInstance::EVENT_CART_RECOVERY
-                ? UazapiAccountResolver::CAPABILITY_CART
-                : ($dispatch->event_type === UazapiInstance::EVENT_PIX_GENERATED
-                    ? UazapiAccountResolver::CAPABILITY_PIX
-                    : UazapiAccountResolver::CAPABILITY_SEND);
+            $capability = match ($dispatch->event_type) {
+                UazapiInstance::EVENT_CART_RECOVERY => UazapiAccountResolver::CAPABILITY_CART,
+                UazapiInstance::EVENT_PIX_GENERATED => UazapiAccountResolver::CAPABILITY_PIX,
+                UazapiInstance::EVENT_ORDER_PAID => UazapiAccountResolver::CAPABILITY_ORDER_PAID,
+                default => UazapiAccountResolver::CAPABILITY_SEND,
+            };
             $resolver = app(UazapiAccountResolver::class);
             $applies = null;
             if ($dispatch->order_id) {
@@ -169,6 +170,17 @@ class UazapiSendMessageJob implements ShouldQueue
             return false;
         }
 
+        // Confirmação de PIX pago: não aborta por resposta na recuperação nem por status completed.
+        if ($dispatch->event_type === UazapiInstance::EVENT_ORDER_PAID) {
+            if (! $dispatch->order_id) {
+                return false;
+            }
+
+            $order = Order::query()->find($dispatch->order_id);
+
+            return $order !== null && in_array($order->status, ['refunded', 'chargeback', 'cancelled', 'canceled'], true);
+        }
+
         $startedAt = $this->recoveryStartedAt($dispatch);
         if ($startedAt && UazapiRecoveryStop::blocks((int) $dispatch->tenant_id, $dispatch->phone, $startedAt)) {
             return true;
@@ -200,6 +212,10 @@ class UazapiSendMessageJob implements ShouldQueue
     {
         if (UazapiOptOut::isOptedOut((int) $dispatch->tenant_id, $dispatch->phone)) {
             return 'Número em opt-out — envio cancelado.';
+        }
+
+        if ($dispatch->event_type === UazapiInstance::EVENT_ORDER_PAID) {
+            return 'Pedido reembolsado ou cancelado — confirmação não enviada.';
         }
 
         $startedAt = $this->recoveryStartedAt($dispatch);

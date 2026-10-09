@@ -244,6 +244,82 @@ class EvolutionRecoveryTest extends TestCase
         $this->assertSame(0, EvolutionMessageDispatch::query()->count());
     }
 
+    public function test_send_job_sends_order_paid_when_order_is_completed(): void
+    {
+        Http::fake([
+            'https://stacker.evo.com/chat/whatsappNumbers/*' => Http::response([['exists' => true]]),
+            'https://stacker.evo.com/message/sendText/*' => Http::response(['key' => ['id' => 'evo-paid-1']]),
+            'https://stacker.evo.com/*' => Http::response(['ok' => true]),
+        ]);
+
+        $this->seedSeller();
+        $instance = $this->connectedInstance(['order_paid_enabled' => true]);
+        $product = $this->createTestProduct(['tenant_id' => 1]);
+        $order = Order::create([
+            'tenant_id' => 1,
+            'product_id' => $product->id,
+            'status' => 'completed',
+            'amount' => 49.90,
+            'email' => 'buyer@example.com',
+            'phone' => '11977665544',
+            'payment_method' => 'pix',
+        ]);
+
+        $dispatch = EvolutionMessageDispatch::query()->create([
+            'tenant_id' => 1,
+            'evolution_instance_id' => $instance->id,
+            'order_id' => $order->id,
+            'event_type' => EvolutionInstance::EVENT_ORDER_PAID,
+            'sequence_step' => 0,
+            'phone' => '5511977665544',
+            'message' => 'Compra confirmada',
+            'payload' => [],
+            'status' => EvolutionMessageDispatch::STATUS_PENDING,
+        ]);
+
+        (new EvolutionSendMessageJob($dispatch->id))->handle(app(\App\Services\Evolution\EvolutionClient::class));
+
+        $dispatch->refresh();
+        $this->assertSame(EvolutionMessageDispatch::STATUS_SENT, $dispatch->status);
+        $this->assertNull($dispatch->error);
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/message/sendText/'));
+    }
+
+    public function test_send_job_cancels_order_paid_when_order_refunded(): void
+    {
+        Http::fake();
+        $this->seedSeller();
+        $instance = $this->connectedInstance(['order_paid_enabled' => true]);
+        $product = $this->createTestProduct(['tenant_id' => 1]);
+        $order = Order::create([
+            'tenant_id' => 1,
+            'product_id' => $product->id,
+            'status' => 'refunded',
+            'amount' => 49.90,
+            'email' => 'buyer@example.com',
+            'phone' => '11977665544',
+            'payment_method' => 'pix',
+        ]);
+
+        $dispatch = EvolutionMessageDispatch::query()->create([
+            'tenant_id' => 1,
+            'evolution_instance_id' => $instance->id,
+            'order_id' => $order->id,
+            'event_type' => EvolutionInstance::EVENT_ORDER_PAID,
+            'sequence_step' => 0,
+            'phone' => '5511977665544',
+            'message' => 'Compra confirmada',
+            'status' => EvolutionMessageDispatch::STATUS_PENDING,
+        ]);
+
+        (new EvolutionSendMessageJob($dispatch->id))->handle(app(\App\Services\Evolution\EvolutionClient::class));
+
+        $dispatch->refresh();
+        $this->assertSame(EvolutionMessageDispatch::STATUS_CANCELED, $dispatch->status);
+        $this->assertStringContainsString('reembolsado ou cancelado', (string) $dispatch->error);
+        Http::assertNothingSent();
+    }
+
     public function test_seller_cannot_open_evolution_when_hidden(): void
     {
         SellerIntegrationVisibility::setGlobal(SellerIntegrationVisibility::EVOLUTION, false);
