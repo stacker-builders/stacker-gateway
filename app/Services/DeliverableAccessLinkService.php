@@ -130,7 +130,13 @@ class DeliverableAccessLinkService
             return null;
         }
 
-        $destination = $this->destinationUrl($product);
+        try {
+            $destination = $this->destinationUrl($product);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return null;
+        }
         if ($destination === null) {
             return null;
         }
@@ -142,33 +148,45 @@ class DeliverableAccessLinkService
         ];
     }
 
+    /**
+     * Registra o clique no entregável. Nunca deve lançar: falha de log não pode
+     * impedir o redirect para o conteúdo externo.
+     */
     public function recordClick(User $user, Product $product, Request $request): void
     {
-        $ip = (string) $request->ip();
-        $recent = MemberStudentActivityLog::query()
-            ->where('user_id', $user->id)
-            ->where('product_id', (string) $product->id)
-            ->where('event', MemberStudentActivityLog::EVENT_EXTERNAL_LINK_CLICKED)
-            ->where('ip', $ip !== '' ? $ip : null)
-            ->where('created_at', '>=', now()->subSeconds(15))
-            ->exists();
-        if ($recent) {
-            return;
-        }
+        try {
+            if (! Schema::hasTable('member_student_activity_logs')) {
+                return;
+            }
 
-        app(MemberStudentActivityLogService::class)->record(
-            $user,
-            $product,
-            MemberStudentActivityLog::EVENT_EXTERNAL_LINK_CLICKED,
-            $request,
-            null,
-            $product->name,
-            null,
-            [
-                'source' => 'access_ref',
-                'logged_in' => $request->user()?->id === $user->id,
-            ],
-        );
+            $ip = (string) $request->ip();
+            $recent = MemberStudentActivityLog::query()
+                ->where('user_id', $user->id)
+                ->where('product_id', (string) $product->id)
+                ->where('event', MemberStudentActivityLog::EVENT_EXTERNAL_LINK_CLICKED)
+                ->where('ip', $ip !== '' ? $ip : null)
+                ->where('created_at', '>=', now()->subSeconds(15))
+                ->exists();
+            if ($recent) {
+                return;
+            }
+
+            app(MemberStudentActivityLogService::class)->record(
+                $user,
+                $product,
+                MemberStudentActivityLog::EVENT_EXTERNAL_LINK_CLICKED,
+                $request,
+                null,
+                $product->name,
+                null,
+                [
+                    'source' => 'access_ref',
+                    'logged_in' => $request->user()?->id === $user->id,
+                ],
+            );
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
     private function newRef(): string
