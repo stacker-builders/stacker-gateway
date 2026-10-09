@@ -221,6 +221,113 @@ class SubscriptionPixRenewalTest extends TestCase
         $this->assertNotSame($first->id, $renewal->id);
     }
 
+    public function test_customer_panel_collapses_when_renewal_flag_marks_product_even_if_first_order_is_one_time(): void
+    {
+        $this->withoutMiddleware([EnsureInstalled::class]);
+        [, $buyer, $product, $plan] = $this->pastDueSubscriptionContext();
+        $product->forceFill(['billing_type' => Product::BILLING_ONE_TIME])->save();
+
+        Order::create([
+            'tenant_id' => $product->tenant_id,
+            'user_id' => $buyer->id,
+            'product_id' => $product->id,
+            'subscription_plan_id' => $plan->id,
+            'status' => 'completed',
+            'amount' => 29.9,
+            'email' => $buyer->email,
+            'is_renewal' => false,
+        ]);
+        $renewal = Order::create([
+            'tenant_id' => $product->tenant_id,
+            'user_id' => $buyer->id,
+            'product_id' => $product->id,
+            'subscription_plan_id' => $plan->id,
+            'status' => 'completed',
+            'amount' => 29.9,
+            'email' => $buyer->email,
+            'is_renewal' => true,
+        ]);
+
+        $this->actingAs($buyer)->get('/painel-cliente')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Cliente/Index')
+                ->has('purchases', 1)
+                ->where('purchases.0.order_id', $renewal->id)
+                ->where('purchases.0.is_renewal', true)
+                ->where('purchases.0.renewal_count', 1)
+            );
+    }
+
+    public function test_checkout_plan_interval_is_applied_when_reactivating_subscription(): void
+    {
+        Event::fake([OrderCompleted::class, SubscriptionRenewed::class]);
+        [, $buyer, $product, $monthly, $subscription] = $this->pastDueSubscriptionContext();
+
+        $annual = SubscriptionPlan::create([
+            'product_id' => $product->id,
+            'name' => 'Anual',
+            'price' => 299,
+            'currency' => 'BRL',
+            'interval' => SubscriptionPlan::INTERVAL_ANNUAL,
+            'checkout_slug' => 'p-anual-'.uniqid(),
+            'position' => 2,
+        ]);
+
+        $order = $this->makeRenewalOrder($buyer, $product, $annual, [
+            'amount' => 299,
+            'period_start' => now()->startOfDay(),
+            'period_end' => now()->addYear()->startOfDay(),
+        ]);
+
+        $this->mockStripePaid();
+        $this->saveStripeCredential((int) $product->tenant_id);
+
+        ProcessPaymentWebhook::dispatchSync('stripe', (string) $order->gateway_id, 'payment_intent.succeeded', 'paid', []);
+
+        $subscription->refresh();
+        $this->assertSame(Subscription::STATUS_ACTIVE, $subscription->status);
+        $this->assertSame($annual->id, (int) $subscription->subscription_plan_id);
+        $this->assertTrue($subscription->current_period_end->gte(now()->addMonths(11)->startOfDay()));
+        $this->assertTrue($product->fresh()->hasMemberAreaAccess($buyer));
+        $this->assertNotSame($monthly->id, $annual->id);
+    }
+
+    public function test_resolve_plan_falls_back_to_existing_subscription_plan_not_lifetime(): void
+    {
+        [, $buyer, $product, $monthly, $subscription] = $this->pastDueSubscriptionContext();
+
+        SubscriptionPlan::create([
+            'product_id' => $product->id,
+            'name' => 'Vitalício',
+            'price' => 999,
+            'currency' => 'BRL',
+            'interval' => SubscriptionPlan::INTERVAL_LIFETIME,
+            'checkout_slug' => 'p-life-'.uniqid(),
+            'position' => 0,
+        ]);
+
+        $order = Order::create([
+            'tenant_id' => $product->tenant_id,
+            'user_id' => $buyer->id,
+            'product_id' => $product->id,
+            'subscription_plan_id' => null,
+            'status' => 'pending',
+            'amount' => 29.9,
+            'email' => $buyer->email,
+            'is_renewal' => true,
+        ]);
+        $order->setRelation('product', $product);
+        $order->unsetRelation('subscriptionPlan');
+
+        $resolved = app(SubscriptionRenewalService::class)->resolvePlanForOrder($order);
+
+        $this->assertNotNull($resolved);
+        $this->assertSame($monthly->id, $resolved->id);
+        $this->assertSame($monthly->id, (int) $order->fresh()->subscription_plan_id);
+        $this->assertSame($subscription->subscription_plan_id, $monthly->id);
+    }
+
     public function test_reminder_service_sends_mail_for_overdue_subscription(): void
     {
         Mail::fake();
