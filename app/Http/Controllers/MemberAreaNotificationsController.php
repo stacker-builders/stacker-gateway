@@ -98,10 +98,12 @@ class MemberAreaNotificationsController extends Controller
 
     private function getProduct(Request $request): Product
     {
-        $product = $request->route('product');
+        $product = $request->attributes->get('member_area_product')
+            ?? $request->route('product');
         if (! $product instanceof Product) {
             abort(404, 'Área de membros não encontrada.');
         }
+
         return $product;
     }
 }

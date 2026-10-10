@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Http\Middleware\EnsureInstalled;
 use App\Http\Middleware\EnsureStackerLicense;
+use App\Models\MemberAreaDomain;
 use App\Models\MemberLesson;
 use App\Models\MemberModule;
 use App\Models\MemberSection;
@@ -11,6 +12,7 @@ use App\Models\Product;
 use App\Models\User;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\DB;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class MemberAreaLessonNavigationTest extends TestCase
@@ -103,6 +105,25 @@ class MemberAreaLessonNavigationTest extends TestCase
                 'module' => $lesson->member_module_id,
             ]))
             ->assertRedirect(route('member-area-app.show', $product->checkout_slug));
+    }
+
+    public function test_custom_domain_module_content_does_not_type_error_with_product_route_param(): void
+    {
+        [, $product, $student, $lesson] = $this->enrolledStudent();
+
+        MemberAreaDomain::create([
+            'product_id' => $product->id,
+            'type' => MemberAreaDomain::TYPE_CUSTOM,
+            'value' => 'area-curso.test',
+        ]);
+
+        $this->actingAs($student)
+            ->get('http://area-curso.test/modulo/'.$lesson->member_module_id)
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('MemberAreaApp/ModuleContent')
+                ->where('module.id', $lesson->member_module_id)
+            );
     }
 
     /**

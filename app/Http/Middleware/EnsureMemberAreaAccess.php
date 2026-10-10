@@ -37,7 +37,8 @@ class EnsureMemberAreaAccess
             return redirect()->route('login')->with('error', 'Faça login para acessar.');
         }
 
-        $product = $request->route('product') ?? $request->attributes->get('member_area_product');
+        $product = $request->attributes->get('member_area_product')
+            ?? $request->route('product');
         if (! $product) {
             abort(404, 'Área de membros não encontrada.');
         }
