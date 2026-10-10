@@ -29,7 +29,8 @@ class ResolveMemberAreaByHost
         $request->attributes->set('member_area_product', $resolved['product']);
         $request->attributes->set('member_area_access_type', $resolved['access_type']);
         $request->attributes->set('member_area_slug', $resolved['slug']);
-        $request->route()?->setParameter('product', $resolved['product']);
+        // Não colocar Product nos route parameters: o Dispatcher usa array_values() e
+        // o Product desloca MemberModule/Lesson tipados (TypeError 500 em /modulo/{id}).
         $request->route()?->setParameter('slug', $resolved['slug']);
 
         return $next($request);

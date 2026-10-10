@@ -23,8 +23,9 @@ class MemberModuleRenewalController extends Controller
         protected MemberModuleAccessService $accessService
     ) {}
 
-    public function createPix(Request $request, string $slug, MemberModule $module): JsonResponse
+    public function createPix(Request $request): JsonResponse
     {
+        $module = $this->moduleFromRequest($request);
         $product = $this->productFromRequest($request);
         $user = $request->user();
         $this->assertModuleBelongsToProduct($module, $product);
@@ -127,8 +128,10 @@ class MemberModuleRenewalController extends Controller
         ]);
     }
 
-    public function status(Request $request, string $slug, MemberModule $module, Order $order): JsonResponse
+    public function status(Request $request): JsonResponse
     {
+        $module = $this->moduleFromRequest($request);
+        $order = $this->orderFromRequest($request);
         $product = $this->productFromRequest($request);
         $user = $request->user();
         $this->assertModuleBelongsToProduct($module, $product);
@@ -152,12 +155,39 @@ class MemberModuleRenewalController extends Controller
 
     private function productFromRequest(Request $request): Product
     {
-        $product = $request->route('product') ?? $request->attributes->get('member_area_product');
+        $product = $request->attributes->get('member_area_product')
+            ?? $request->route('product');
         if (! $product instanceof Product) {
             abort(404);
         }
 
         return $product;
+    }
+
+    private function moduleFromRequest(Request $request): MemberModule
+    {
+        $module = $request->route('module');
+        if ($module instanceof MemberModule) {
+            return $module;
+        }
+        if ($module === null || $module === '') {
+            abort(404);
+        }
+
+        return MemberModule::query()->findOrFail($module);
+    }
+
+    private function orderFromRequest(Request $request): Order
+    {
+        $order = $request->route('order');
+        if ($order instanceof Order) {
+            return $order;
+        }
+        if ($order === null || $order === '') {
+            abort(404);
+        }
+
+        return Order::query()->findOrFail($order);
     }
 
     private function assertModuleBelongsToProduct(MemberModule $module, Product $product): void

@@ -126,8 +126,12 @@ class MemberAreaAppController extends Controller
         ] + $this->gamificationProps($product, $user));
     }
 
-    public function moduleContent(Request $request, string $slug, MemberModule $module): Response|RedirectResponse
+    public function moduleContent(Request $request): Response|RedirectResponse
     {
+        // Só Request na assinatura: em host customizado o Dispatcher (array_values)
+        // deslocava Product/slug e gerava TypeError 500 em MemberModule/Lesson.
+        $slug = $this->routeSlug($request);
+        $module = $this->routeMemberModule($request);
         $product = $this->getProduct($request);
         if (! $this->belongsToMemberProduct($module->product_id, $product)) {
             abort(404);
@@ -259,8 +263,10 @@ class MemberAreaAppController extends Controller
         ]);
     }
 
-    public function lesson(Request $request, string $slug, MemberLesson $lesson): Response|RedirectResponse
+    public function lesson(Request $request): Response|RedirectResponse
     {
+        $slug = $this->routeSlug($request);
+        $lesson = $this->routeMemberLesson($request);
         $product = $this->getProduct($request);
         if (! $this->belongsToMemberProduct($lesson->product_id, $product)) {
             abort(404);
@@ -346,8 +352,10 @@ class MemberAreaAppController extends Controller
         ] + $this->gamificationProps($product, $user));
     }
 
-    public function completeLesson(Request $request, string $slug, MemberLesson $lesson): JsonResponse|RedirectResponse
+    public function completeLesson(Request $request): JsonResponse|RedirectResponse
     {
+        $slug = $this->routeSlug($request);
+        $lesson = $this->routeMemberLesson($request);
         $user = $request->user();
         if (! $user) {
             return response()->json(['success' => false, 'message' => 'Não autenticado.'], 401);
@@ -391,8 +399,11 @@ class MemberAreaAppController extends Controller
         return response()->json(['success' => true, 'progress_percent' => $percent, 'newly_unlocked_achievements' => $newlyUnlocked]);
     }
 
-    public function downloadLessonMaterial(Request $request, string $slug, MemberLesson $lesson, int $index): RedirectResponse
+    public function downloadLessonMaterial(Request $request): RedirectResponse
     {
+        $slug = $this->routeSlug($request);
+        $lesson = $this->routeMemberLesson($request);
+        $index = (int) $request->route('index');
         $user = $request->user();
         if (! $user) {
             abort(401);
@@ -504,8 +515,10 @@ class MemberAreaAppController extends Controller
         return '/m/'.$slug.$suffix;
     }
 
-    public function storeLessonComment(Request $request, string $slug, MemberLesson $lesson): JsonResponse|RedirectResponse
+    public function storeLessonComment(Request $request): JsonResponse|RedirectResponse
     {
+        $slug = $this->routeSlug($request);
+        $lesson = $this->routeMemberLesson($request);
         $product = $this->getProduct($request);
         $this->assertNotAdminPreviewMutation($request, $product);
         if (! $this->belongsToMemberProduct($lesson->product_id, $product)) {
@@ -965,12 +978,44 @@ class MemberAreaAppController extends Controller
 
     private function getProduct(Request $request): Product
     {
-        $product = $request->route('product') ?? $request->attributes->get('member_area_product');
+        $product = $request->attributes->get('member_area_product')
+            ?? $request->route('product');
         if (! $product instanceof Product) {
             abort(404);
         }
 
         return $product;
+    }
+
+    private function routeSlug(Request $request): string
+    {
+        return (string) ($request->route('slug') ?? $request->attributes->get('member_area_slug') ?? '');
+    }
+
+    private function routeMemberModule(Request $request): MemberModule
+    {
+        $module = $request->route('module');
+        if ($module instanceof MemberModule) {
+            return $module;
+        }
+        if ($module === null || $module === '') {
+            abort(404);
+        }
+
+        return MemberModule::query()->findOrFail($module);
+    }
+
+    private function routeMemberLesson(Request $request): MemberLesson
+    {
+        $lesson = $request->route('lesson');
+        if ($lesson instanceof MemberLesson) {
+            return $lesson;
+        }
+        if ($lesson === null || $lesson === '') {
+            abort(404);
+        }
+
+        return MemberLesson::query()->findOrFail($lesson);
     }
 
     private function belongsToMemberProduct(mixed $ownerProductId, Product $product): bool
