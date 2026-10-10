@@ -423,7 +423,7 @@ class BspayDriver implements GatewayDriver
 
         return match ($status) {
             'confirmed', 'paid', 'completed', 'success', 'approved' => 'paid',
-            'cancelled', 'canceled' => 'cancelled',
+            'cancelled', 'canceled', 'refunded' => 'cancelled',
             'failed' => 'failed',
             'pending' => 'pending',
             default => 'pending',

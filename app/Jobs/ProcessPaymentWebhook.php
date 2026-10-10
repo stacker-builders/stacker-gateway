@@ -307,10 +307,6 @@ class ProcessPaymentWebhook implements ShouldQueue
             if ($apiStatus !== 'paid' && $trustedCajuCheckoutWebhook) {
                 $apiStatus = 'paid';
             }
-            if ($apiStatus !== 'paid' && $this->isTrustedBspayPaidWebhook()) {
-                // cashin.confirmed é a fonte de verdade; o extrato list da BSPay frequentemente não devolve a linha.
-                $apiStatus = 'paid';
-            }
             // Mercado Pago: NUNCA liberar só pelo webhook/evento. Fonte de verdade = GET /v1/payments/{id}
             // (status approved). Se a API falhar (null) ou ainda estiver pending → retry; rejected → não liberar.
             if ($apiStatus !== 'paid') {
@@ -336,6 +332,8 @@ class ProcessPaymentWebhook implements ShouldQueue
                     event(new OrderRejected($order));
                 } elseif ($this->gatewaySlug === 'linaopenx' && ($apiStatus === null || $apiStatus === 'pending')) {
                     $this->releasePaidBranchForRetry(10, 'lina_reconfirm_pending', $order, $apiStatus);
+                } elseif ($this->gatewaySlug === 'bspay' && ($apiStatus === null || $apiStatus === 'pending')) {
+                    $this->releasePaidBranchForRetry(15, 'bspay_reconfirm_pending', $order, $apiStatus);
                 } elseif ($this->gatewaySlug === 'versell' && $order->payment_method === 'pix_auto' && ($apiStatus === null || $apiStatus === 'pending')) {
                     $this->releasePaidBranchForRetry(10, 'versell_pix_auto_reconfirm', $order, $apiStatus);
                 }
@@ -463,14 +461,6 @@ class ProcessPaymentWebhook implements ShouldQueue
             'reconcile_mercadopago',
             'order_status_poll',
         ], true);
-    }
-
-    private function isTrustedBspayPaidWebhook(): bool
-    {
-        return $this->gatewaySlug === 'bspay'
-            && ($this->payload['webhook_source'] ?? '') === 'bspay_webhook'
-            && $this->event === 'order.paid'
-            && $this->status === 'paid';
     }
 
     private function fetchGatewayTransactionStatus(Order $order): ?string

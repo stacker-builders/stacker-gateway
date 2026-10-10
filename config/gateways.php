@@ -89,6 +89,7 @@ return [
             'credential_keys' => [
                 ['key' => 'client_id', 'label' => 'Client ID', 'type' => 'text'],
                 ['key' => 'client_secret', 'label' => 'Client Secret', 'type' => 'password'],
+                ['key' => 'webhook_secret', 'label' => 'Segredo do webhook (HMAC SHA-256 do corpo)', 'type' => 'password'],
                 ['key' => 'bspay_payout_min_brl', 'label' => 'Mínimo líquido de payout (R$)', 'type' => 'text', 'optional' => true],
                 ['key' => 'bspay_admin_fee_pix_brl', 'label' => 'Taxa PIX paga à BSPay (R$ fixo)', 'type' => 'text', 'optional' => true],
                 ['key' => 'bspay_admin_fee_pix_percent', 'label' => 'Taxa PIX paga à BSPay (% entrada)', 'type' => 'text', 'optional' => true],

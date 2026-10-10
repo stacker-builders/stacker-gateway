@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\EnsureInstalled;
 use App\Jobs\ReconcileBspayWithdrawalJob;
 use App\Models\GatewayCredential;
 use App\Models\User;
@@ -17,6 +18,7 @@ class BspayPayoutFlowTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->withoutMiddleware(EnsureInstalled::class);
         Queue::fake();
     }
 
@@ -177,6 +179,37 @@ class BspayPayoutFlowTest extends TestCase
             'payout_external_id' => 'bspay-cashout-wh',
         ]);
 
+        $secret = 'bspay-payout-secret';
+        $cred = GatewayCredential::query()->firstOrNew([
+            'tenant_id' => null,
+            'gateway_slug' => 'bspay',
+        ]);
+        $cred->is_connected = true;
+        $cred->setEncryptedCredentials([
+            'client_id' => 'client-id',
+            'client_secret' => 'client-secret',
+            'webhook_secret' => $secret,
+        ]);
+        $cred->save();
+
+        Http::fake([
+            'https://api.bspay.co/v2/oauth/token' => Http::response([
+                'access_token' => 'jwt-token',
+                'expires_in' => 3600,
+            ], 200),
+            'https://api.bspay.co/v2/account/transactions/list' => Http::response([
+                'success' => true,
+                'data' => [
+                    'items' => [
+                        [
+                            'transaction_id' => 'bspay-cashout-wh',
+                            'status' => 'confirmed',
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
         $response = $this->postSignedBspayWebhook([
             'event' => 'cashout.confirmed',
             'transaction_id' => 'bspay-cashout-wh',
@@ -184,9 +217,69 @@ class BspayPayoutFlowTest extends TestCase
                 'transaction_id' => 'bspay-cashout-wh',
                 'status' => 'confirmed',
             ],
-        ], 'unused', null, 'cashout.confirmed');
+        ], $secret, null, 'cashout.confirmed');
 
         $response->assertOk()->assertJson(['received' => true]);
         $this->assertSame('paid', $w->fresh()->status);
+    }
+
+    public function test_webhook_cashout_failed_does_not_refund_without_api_confirmation(): void
+    {
+        if (! Schema::hasTable('withdrawals')) {
+            $this->markTestSkipped('withdrawals table');
+        }
+
+        $seller = User::factory()->create(['role' => User::ROLE_INFOPRODUTOR]);
+        $seller->forceFill(['tenant_id' => $seller->id])->save();
+
+        $secret = 'bspay-payout-secret';
+        $cred = GatewayCredential::query()->firstOrNew([
+            'tenant_id' => null,
+            'gateway_slug' => 'bspay',
+        ]);
+        $cred->is_connected = true;
+        $cred->setEncryptedCredentials([
+            'client_id' => 'client-id',
+            'client_secret' => 'client-secret',
+            'webhook_secret' => $secret,
+        ]);
+        $cred->save();
+
+        $w = Withdrawal::query()->create([
+            'tenant_id' => $seller->id,
+            'user_id' => $seller->id,
+            'amount' => 100,
+            'fee_amount' => 0,
+            'net_amount' => 100,
+            'bucket' => 'pix',
+            'status' => 'processing',
+            'currency' => 'BRL',
+            'payout_provider' => 'bspay',
+            'payout_external_id' => 'bspay-cashout-fail',
+        ]);
+
+        Http::fake([
+            'https://api.bspay.co/v2/oauth/token' => Http::response([
+                'access_token' => 'jwt-token',
+                'expires_in' => 3600,
+            ], 200),
+            'https://api.bspay.co/v2/account/transactions/list' => Http::response([
+                'success' => true,
+                'data' => ['items' => []],
+            ], 200),
+        ]);
+
+        $response = $this->postSignedBspayWebhook([
+            'event' => 'cashout.failed',
+            'transaction_id' => 'bspay-cashout-fail',
+            'external_id' => (string) $w->id,
+            'data' => [
+                'transaction_id' => 'bspay-cashout-fail',
+                'status' => 'failed',
+            ],
+        ], $secret, null, 'cashout.failed');
+
+        $response->assertStatus(503);
+        $this->assertSame('processing', $w->fresh()->status);
     }
 }

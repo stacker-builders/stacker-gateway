@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Http\Middleware\EnsureInstalled;
 use App\Models\ApiApplication;
+use App\Models\GatewayCredential;
 use App\Models\MedDispute;
 use App\Models\Order;
 use App\Models\User;
@@ -12,9 +14,12 @@ use Tests\TestCase;
 
 class BspayMedWebhookTest extends TestCase
 {
+    private const WEBHOOK_SECRET = 'bspay-med-secret';
+
     protected function setUp(): void
     {
         parent::setUp();
+        $this->withoutMiddleware(EnsureInstalled::class);
         Mail::fake();
         config([
             'queue.default' => 'sync',
@@ -30,7 +35,7 @@ class BspayMedWebhookTest extends TestCase
 
         [$order] = $this->makeBspayPaidOrder();
 
-        $this->postSignedBspayWebhook($this->openedPayload('tx-bspay-med-1'), 'unused', event: 'chargeback.opened')
+        $this->postSignedBspayWebhook($this->openedPayload('tx-bspay-med-1'), self::WEBHOOK_SECRET, event: 'chargeback.opened')
             ->assertOk()
             ->assertJson(['received' => true]);
 
@@ -52,7 +57,7 @@ class BspayMedWebhookTest extends TestCase
 
         [$order] = $this->makeBspayPaidOrder(apiPix: true);
 
-        $this->postSignedBspayWebhook($this->openedPayload('tx-bspay-med-1'), 'unused', event: 'chargeback.opened')
+        $this->postSignedBspayWebhook($this->openedPayload('tx-bspay-med-1'), self::WEBHOOK_SECRET, event: 'chargeback.opened')
             ->assertOk();
 
         $this->assertSame('disputed', $order->fresh()->status);
@@ -70,7 +75,7 @@ class BspayMedWebhookTest extends TestCase
         }
 
         [$order] = $this->makeBspayPaidOrder();
-        $this->postSignedBspayWebhook($this->openedPayload('tx-bspay-med-1'), 'unused', event: 'chargeback.opened');
+        $this->postSignedBspayWebhook($this->openedPayload('tx-bspay-med-1'), self::WEBHOOK_SECRET, event: 'chargeback.opened');
 
         $this->postSignedBspayWebhook([
             'event' => 'chargeback.won',
@@ -81,7 +86,7 @@ class BspayMedWebhookTest extends TestCase
                 'amount' => '25.00',
                 'currency' => 'BRL',
             ],
-        ], 'unused', event: 'chargeback.won')->assertOk();
+        ], self::WEBHOOK_SECRET, event: 'chargeback.won')->assertOk();
 
         $this->assertDatabaseHas('med_disputes', [
             'cajupay_dispute_id' => 'bspay:abc-uuid-1234',
@@ -98,7 +103,7 @@ class BspayMedWebhookTest extends TestCase
         }
 
         [$order] = $this->makeBspayPaidOrder(apiPix: true);
-        $this->postSignedBspayWebhook($this->openedPayload('tx-bspay-med-1'), 'unused', event: 'chargeback.opened');
+        $this->postSignedBspayWebhook($this->openedPayload('tx-bspay-med-1'), self::WEBHOOK_SECRET, event: 'chargeback.opened');
         $this->assertSame('disputed', $order->fresh()->status);
 
         $this->postSignedBspayWebhook([
@@ -111,7 +116,7 @@ class BspayMedWebhookTest extends TestCase
                 'amount_refunded' => '25.00',
                 'currency' => 'BRL',
             ],
-        ], 'unused', event: 'chargeback.lost')->assertOk();
+        ], self::WEBHOOK_SECRET, event: 'chargeback.lost')->assertOk();
 
         $this->assertSame('refunded', $order->fresh()->status);
         $this->assertDatabaseHas('med_disputes', [
@@ -129,8 +134,8 @@ class BspayMedWebhookTest extends TestCase
 
         [$order] = $this->makeBspayPaidOrder();
         $payload = $this->openedPayload('tx-bspay-med-1');
-        $this->postSignedBspayWebhook($payload, 'unused', event: 'chargeback.opened')->assertOk();
-        $this->postSignedBspayWebhook($payload, 'unused', event: 'chargeback.opened')->assertOk();
+        $this->postSignedBspayWebhook($payload, self::WEBHOOK_SECRET, event: 'chargeback.opened')->assertOk();
+        $this->postSignedBspayWebhook($payload, self::WEBHOOK_SECRET, event: 'chargeback.opened')->assertOk();
 
         $this->assertSame(1, MedDispute::query()->where('order_id', $order->id)->count());
     }
@@ -140,6 +145,18 @@ class BspayMedWebhookTest extends TestCase
      */
     private function makeBspayPaidOrder(bool $apiPix = false): array
     {
+        $cred = GatewayCredential::query()->firstOrNew([
+            'tenant_id' => null,
+            'gateway_slug' => 'bspay',
+        ]);
+        $cred->is_connected = true;
+        $cred->setEncryptedCredentials([
+            'client_id' => 'client-id',
+            'client_secret' => 'client-secret',
+            'webhook_secret' => self::WEBHOOK_SECRET,
+        ]);
+        $cred->save();
+
         $user = User::factory()->create(['tenant_id' => 1]);
         $product = $this->createTestProduct(['tenant_id' => 1]);
 

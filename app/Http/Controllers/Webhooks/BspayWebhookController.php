@@ -2,7 +2,10 @@
 
 namespace App\Http\Controllers\Webhooks;
 
+use App\Gateways\Bspay\BspayDriver;
+use App\Gateways\GatewayRegistry;
 use App\Http\Controllers\Controller;
+use App\Models\GatewayCredential;
 use App\Models\Order;
 use App\Models\Withdrawal;
 use App\Services\Bspay\BspayMedService;
@@ -150,17 +153,72 @@ class BspayWebhookController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        if ($event === 'cashout.confirmed' && in_array($withdrawal->status, ['pending', 'processing'], true)) {
-            MerchantWithdrawalService::markPaid($withdrawal->fresh());
-        } elseif (in_array($event, ['cashout.failed', 'cashout.refunded'], true)
-            && in_array($withdrawal->status, ['pending', 'processing'], true)) {
-            MerchantWithdrawalService::markFailed(
-                $withdrawal->fresh(),
-                'Payout BSPay falhou (webhook '.$event.').'
-            );
+        return $this->applyCashoutFromApi($withdrawal, $event);
+    }
+
+    /**
+     * O corpo do webhook não liquida nem estorna. Só a consulta do extrato BSPay altera o saque.
+     */
+    private function applyCashoutFromApi(Withdrawal $withdrawal, string $event): JsonResponse
+    {
+        if (! in_array($withdrawal->status, ['pending', 'processing'], true)) {
+            return response()->json(['received' => true, 'ignored' => true]);
         }
 
-        return response()->json(['received' => true]);
+        $transactionId = trim((string) $withdrawal->payout_external_id);
+        if ($transactionId === '') {
+            return response()->json(['message' => 'Withdrawal has no provider transaction'], 422);
+        }
+
+        $apiStatus = $this->cashoutStatusFromApi($withdrawal, $transactionId);
+        if ($apiStatus === 'paid') {
+            MerchantWithdrawalService::markPaid($withdrawal->fresh());
+
+            return response()->json(['received' => true]);
+        }
+
+        if (in_array($apiStatus, ['cancelled', 'failed'], true)) {
+            MerchantWithdrawalService::markFailed(
+                $withdrawal->fresh(),
+                'Payout BSPay falhou (API '.$apiStatus.', aviso '.$event.').'
+            );
+
+            return response()->json(['received' => true]);
+        }
+
+        Log::warning('Bspay webhook: cashout não confirmado na API', [
+            'withdrawal_id' => $withdrawal->id,
+            'event' => $event,
+            'transaction_id' => $transactionId,
+            'api_status' => $apiStatus,
+        ]);
+
+        return response()->json(['message' => 'Cashout not confirmed by BSPay API'], 503);
+    }
+
+    private function cashoutStatusFromApi(Withdrawal $withdrawal, string $transactionId): ?string
+    {
+        $credential = GatewayCredential::resolveForPayment($withdrawal->tenant_id, 'bspay');
+        if ($credential === null) {
+            return null;
+        }
+
+        $credentials = $credential->getDecryptedCredentials();
+        $driver = GatewayRegistry::driver('bspay');
+        if (! $driver instanceof BspayDriver || $credentials === []) {
+            return null;
+        }
+
+        try {
+            return $driver->getCashoutStatus($transactionId, $credentials);
+        } catch (\Throwable $e) {
+            Log::warning('Bspay webhook: falha ao consultar cashout', [
+                'withdrawal_id' => $withdrawal->id,
+                'message' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
     }
 
     private function findBspayWithdrawal(Request $request, string $transactionId): ?Withdrawal

@@ -23,6 +23,7 @@ return [
         'asaas' => env('WEBHOOK_RECONFIRM_FAIL_POLICY_ASAAS', 'reject'),
         'woovi' => env('WEBHOOK_RECONFIRM_FAIL_POLICY_WOOVI', 'reject'),
         'xflow' => env('WEBHOOK_RECONFIRM_FAIL_POLICY_XFLOW', 'reject'),
+        'bspay' => env('WEBHOOK_RECONFIRM_FAIL_POLICY_BSPAY', 'reject'),
         'okto' => env('WEBHOOK_RECONFIRM_FAIL_POLICY_OKTO', 'reject'),
         'efi' => env('WEBHOOK_RECONFIRM_FAIL_POLICY_EFI'),
         'stripe' => env('WEBHOOK_RECONFIRM_FAIL_POLICY_STRIPE'),

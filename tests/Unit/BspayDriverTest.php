@@ -25,7 +25,7 @@ class BspayDriverTest extends TestCase
         $keys = array_column($def['credential_keys'] ?? [], 'key');
         $this->assertContains('client_id', $keys);
         $this->assertContains('client_secret', $keys);
-        $this->assertNotContains('webhook_secret', $keys);
+        $this->assertContains('webhook_secret', $keys);
         $this->assertInstanceOf(BspayDriver::class, GatewayRegistry::driver('bspay'));
         $this->assertContains('bspay', config('gateways.default_order.pix'));
         $this->assertSame('Brasil, México', $def['country_name'] ?? null);
