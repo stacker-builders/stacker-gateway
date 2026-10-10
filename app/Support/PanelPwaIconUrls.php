@@ -2,6 +2,9 @@
 
 namespace App\Support;
 
+use App\Models\BrandingSetting;
+use Illuminate\Support\Facades\Schema;
+
 /**
  * Ícones do PWA do painel — mesma prioridade que {@see \App\Http\Controllers\PanelPwaController::manifest}.
  */
@@ -65,9 +68,10 @@ final class PanelPwaIconUrls
         return $specs;
     }
 
-    /** URL única para icon/badge de Web Push (prefere entrada 192x192). */
+    /** URL única para icon de Web Push (prefere entrada 192x192). */
     public static function primaryNotificationIconUrl(): string
     {
+        self::ensureBrandingIconsInConfig();
         $specs = self::manifestIconSpecs();
         foreach ($specs as $spec) {
             if (($spec['sizes'] ?? '') === '192x192') {
@@ -89,6 +93,49 @@ final class PanelPwaIconUrls
         }
 
         return str_contains($src, '?') ? ($src.'&v='.$v) : ($src.'?v='.$v);
+    }
+
+    /**
+     * Fila e comandos não passam pelo middleware de branding. Sem isto o push
+     * cai no arquivo padrão do produto em vez do ícone configurado no admin.
+     */
+    private static function ensureBrandingIconsInConfig(): void
+    {
+        $pwa192 = is_string($v = config('getfy.pwa_icon_192')) ? trim($v) : '';
+        $pwa512 = is_string($v = config('getfy.pwa_icon_512')) ? trim($v) : '';
+        if ($pwa192 !== '' || $pwa512 !== '') {
+            return;
+        }
+
+        try {
+            if (! Schema::hasTable('branding_settings')) {
+                return;
+            }
+            $row = BrandingSetting::query()->whereNull('tenant_id')->first();
+        } catch (\Throwable) {
+            return;
+        }
+
+        $data = is_array($row?->data) ? $row->data : [];
+        $merge = [];
+        foreach ([
+            'pwa_icon_192' => 'getfy.pwa_icon_192',
+            'pwa_icon_512' => 'getfy.pwa_icon_512',
+            'app_logo_icon' => 'getfy.app_logo_icon',
+        ] as $jsonKey => $configKey) {
+            $value = $data[$jsonKey] ?? null;
+            if (! is_string($value) || trim($value) === '') {
+                continue;
+            }
+            $resolved = BrandingAssetUrls::resolve(trim($value));
+            if ($resolved !== '') {
+                $merge[$configKey] = $resolved;
+            }
+        }
+
+        if ($merge !== []) {
+            config($merge);
+        }
     }
 
     private static function toAbsoluteUrl(string $src): string

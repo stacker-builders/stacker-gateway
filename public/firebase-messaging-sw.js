@@ -10,18 +10,22 @@ function showNotificationFromPayload(payload) {
     const title = data.title || 'Notificação';
     const body = data.body || '';
     const url = data.url || null;
-    const icon = data.icon || data.badge || new URL('/icons/icon-192x192.png', self.location.origin).href;
-    const badge = data.badge || icon;
+    const icon = data.icon || data.badge || null;
     const tag = data.tag || url || 'panel-fcm-push';
-
-    return self.registration.showNotification(title, {
+    const options = {
         body: body,
-        icon: icon,
-        badge: badge,
         tag: tag,
         renotify: false,
         data: { url: url },
-    });
+    };
+    // No Android o ícone do PWA (logo da plataforma no manifesto) já fica à esquerda.
+    // icon/badge desenham uma segunda logo à direita.
+    const android = /Android/i.test((self.navigator && self.navigator.userAgent) || '');
+    if (!android && icon) {
+        options.icon = icon;
+    }
+
+    return self.registration.showNotification(title, options);
 }
 
 function initFirebase(config) {
