@@ -13,6 +13,7 @@ use App\Services\MemberLessonPdfDrmValidator;
 use FPDF;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class MemberBuilderPdfDrmValidationTest extends TestCase
@@ -86,6 +87,38 @@ class MemberBuilderPdfDrmValidationTest extends TestCase
         $this->assertDatabaseHas('member_lessons', [
             'product_id' => $product->id,
             'title' => 'Apostila',
+            'watermark_enabled' => 1,
+        ]);
+    }
+
+    public function test_store_lesson_accepts_local_storage_upload_url_when_drm_enabled(): void
+    {
+        Storage::fake('public');
+        config(['app.url' => 'http://localhost']);
+        [$owner, $product, $module] = $this->sellerWithModule();
+
+        $path = 'member-area/'.$product->id.'/apostila.pdf';
+        Storage::disk('public')->put($path, $this->samplePdf());
+        // Simula o host do request diferente do APP_URL (caso comum em local/dev).
+        $url = 'http://127.0.0.1:8000/storage/'.$path;
+
+        $response = $this->actingAs($owner)->postJson(
+            route('member-builder.lessons.store', [$product, $module]),
+            [
+                'title' => 'Apostila local',
+                'type' => MemberLesson::TYPE_PDF,
+                'content_url' => $url,
+                'content_files' => [
+                    ['url' => $url, 'name' => 'Apostila.pdf'],
+                ],
+                'watermark_enabled' => true,
+            ]
+        );
+
+        $response->assertOk();
+        $this->assertDatabaseHas('member_lessons', [
+            'product_id' => $product->id,
+            'title' => 'Apostila local',
             'watermark_enabled' => 1,
         ]);
     }

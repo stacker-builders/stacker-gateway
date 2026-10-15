@@ -649,6 +649,12 @@ class StorageService
         }
 
         if (preg_match('#^https?://#i', $path)) {
+            $urlPath = parse_url($path, PHP_URL_PATH);
+            // Upload local devolve http(s)://host/storage/... — a chave no disco é sem o prefixo /storage/.
+            if (is_string($urlPath) && str_starts_with($urlPath, '/storage/')) {
+                return ltrim(substr($urlPath, strlen('/storage/')), '/');
+            }
+
             $bucket = $this->resolveRemoteCredentials()['bucket'] ?? '';
             $key = RemoteStorage::extractObjectKeyFromUrl(
                 $path,

@@ -144,6 +144,14 @@ class StorageServiceResolveUrlTest extends TestCase
         $this->assertSame('avatars/photo.png', $key);
     }
 
+    public function test_normalize_storage_path_strips_storage_prefix_from_absolute_local_url(): void
+    {
+        $service = new StorageService(null);
+        $key = $service->normalizeStoragePath('http://127.0.0.1:8000/storage/member-area/9/apostila.pdf');
+
+        $this->assertSame('member-area/9/apostila.pdf', $key);
+    }
+
     public function test_repair_malformed_app_path_with_embedded_cdn_host(): void
     {
         Setting::set('storage_provider', 'r2', null);

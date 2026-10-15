@@ -21,7 +21,9 @@ class MemberLessonPdfSource
             return $this->assertPdf($this->readStorage($storage, $storage->normalizeStoragePath($url)));
         }
 
-        if ($this->isOwnStorageUrl($storage, $url)) {
+        // URL absoluta do próprio painel (/storage/...) deve ler o disco — não HTTP local
+        // (localhost/IP privado são bloqueados no fetch e quebravam a validação de DRM no envio).
+        if ($this->isOwnStorageUrl($storage, $url) || $this->hasLocalStoragePath($url)) {
             $path = $storage->normalizeStoragePath($url);
             if ($path !== '' && $storage->exists($path)) {
                 return $this->assertPdf($this->readStorage($storage, $path));
@@ -68,6 +70,13 @@ class MemberLessonPdfSource
         }
 
         return strcasecmp($appHost, $host) === 0 && str_starts_with($path, '/storage/');
+    }
+
+    private function hasLocalStoragePath(string $url): bool
+    {
+        $path = parse_url($url, PHP_URL_PATH);
+
+        return is_string($path) && str_starts_with($path, '/storage/');
     }
 
     private function fetchRemote(string $url): string
