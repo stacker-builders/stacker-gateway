@@ -94,13 +94,14 @@ class MemberBuilderPdfDrmValidationTest extends TestCase
     public function test_store_lesson_accepts_local_storage_upload_url_when_drm_enabled(): void
     {
         Storage::fake('public');
-        config(['app.url' => 'http://localhost']);
+        config(['app.url' => 'https://app.asgardpay.com.br']);
         [$owner, $product, $module] = $this->sellerWithModule();
 
         $path = 'member-area/'.$product->id.'/apostila.pdf';
         Storage::disk('public')->put($path, $this->samplePdf());
-        // Simula o host do request diferente do APP_URL (caso comum em local/dev).
-        $url = 'http://127.0.0.1:8000/storage/'.$path;
+        $url = 'https://app.asgardpay.com.br/storage/'.$path;
+
+        Http::fake();
 
         $response = $this->actingAs($owner)->postJson(
             route('member-builder.lessons.store', [$product, $module]),
@@ -121,6 +122,38 @@ class MemberBuilderPdfDrmValidationTest extends TestCase
             'title' => 'Apostila local',
             'watermark_enabled' => 1,
         ]);
+        Http::assertNothingSent();
+    }
+
+    public function test_store_lesson_reports_read_failure_distinct_from_incompatible_pdf(): void
+    {
+        Storage::fake('public');
+        config(['app.url' => 'https://app.asgardpay.com.br']);
+        [$owner, $product, $module] = $this->sellerWithModule();
+
+        $url = 'https://app.asgardpay.com.br/storage/member-area/'.$product->id.'/ausente.pdf';
+        Http::fake();
+
+        $response = $this->actingAs($owner)->postJson(
+            route('member-builder.lessons.store', [$product, $module]),
+            [
+                'title' => 'Apostila ausente',
+                'type' => MemberLesson::TYPE_PDF,
+                'content_url' => $url,
+                'content_files' => [
+                    ['url' => $url, 'name' => 'Ausente.pdf'],
+                ],
+                'watermark_enabled' => true,
+            ]
+        );
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['watermark_enabled']);
+        $this->assertSame(
+            MemberLessonPdfDrmValidator::PRODUCER_READ_MESSAGE,
+            $response->json('errors.watermark_enabled.0')
+        );
+        Http::assertNothingSent();
     }
 
     public function test_update_lesson_rejects_enabling_drm_on_incompatible_pdf(): void

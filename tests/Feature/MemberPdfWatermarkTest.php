@@ -193,6 +193,39 @@ class MemberPdfWatermarkTest extends TestCase
         Http::assertNothingSent();
     }
 
+    public function test_own_domain_storage_url_is_stamped_without_http(): void
+    {
+        Storage::fake('public');
+        config(['app.url' => 'https://app.asgardpay.com.br']);
+
+        [$product, $student, $lesson] = $this->enrolledPdfLesson();
+        $student->forceFill(['name' => 'Ana Costa'])->save();
+
+        $path = 'member-area/'.$product->id.'/apostila.pdf';
+        Storage::disk('public')->put($path, $this->samplePdf());
+        $url = 'https://app.asgardpay.com.br/storage/'.$path;
+
+        $lesson->update([
+            'watermark_enabled' => true,
+            'content_files' => [
+                ['url' => $url, 'name' => 'Apostila.pdf'],
+            ],
+        ]);
+
+        Http::fake();
+
+        $response = $this->actingAs($student->fresh())->get(route('member-area-app.lesson.material', [
+            'slug' => $product->checkout_slug,
+            'lesson' => $lesson->id,
+            'index' => 0,
+        ]));
+
+        $response->assertOk();
+        $response->assertHeader('content-type', 'application/pdf');
+        $this->assertStringContainsString($this->latin('Ana Costa'), $this->pdfPlainText($response->getContent()));
+        Http::assertNothingSent();
+    }
+
     private function samplePdf(): string
     {
         $pdf = new FPDF;

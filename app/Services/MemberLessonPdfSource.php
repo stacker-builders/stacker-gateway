@@ -17,14 +17,28 @@ class MemberLessonPdfSource
         }
 
         $storage = new StorageService($tenantId);
+
         if (! preg_match('#^https?://#i', $url)) {
-            return $this->assertPdf($this->readStorage($storage, $storage->normalizeStoragePath($url)));
+            return $this->assertPdf($this->readStorage(
+                $storage,
+                $this->assertSafeRelativePath($storage->normalizeStoragePath($url))
+            ));
         }
 
-        // URL absoluta do próprio painel (/storage/...) deve ler o disco — não HTTP local
-        // (localhost/IP privado são bloqueados no fetch e quebravam a validação de DRM no envio).
-        if ($this->isOwnStorageUrl($storage, $url) || $this->hasLocalStoragePath($url)) {
-            $path = $storage->normalizeStoragePath($url);
+        // Armazenamento local: URL do próprio app (/storage/...) lê o disco public.
+        // Nunca fazer HTTP para a própria aplicação (timeout / loop).
+        if ($storage->isLocal() && ($this->isOwnStorageUrl($storage, $url) || $this->hasLocalStoragePath($url))) {
+            $relative = $this->localPublicRelativePathFromUrl($url);
+            if ($relative === null) {
+                throw new MemberPdfWatermarkException('Não foi possível ler o PDF desta aula.');
+            }
+
+            return $this->assertPdf($this->readStorage($storage, $relative));
+        }
+
+        // S3/R2 (ou CDN próprio): tenta o disco remoto pela chave normalizada.
+        if ($this->isOwnStorageUrl($storage, $url)) {
+            $path = $this->assertSafeRelativePath($storage->normalizeStoragePath($url));
             if ($path !== '' && $storage->exists($path)) {
                 return $this->assertPdf($this->readStorage($storage, $path));
             }
@@ -35,12 +49,21 @@ class MemberLessonPdfSource
 
     private function readStorage(StorageService $storage, string $path): string
     {
-        if ($path === '' || preg_match('#^https?://#i', $path) || ! $storage->exists($path)) {
+        $path = $this->assertSafeRelativePath($path);
+        if ($path === '' || preg_match('#^https?://#i', $path)) {
             throw new MemberPdfWatermarkException('Não foi possível ler o PDF desta aula.');
         }
 
+        // exists()/get() re-normalizam; para path relativo local já limpo, usar o disco direto
+        // evita o bug em que normalizeStoragePath(URL) devolvia "storage/member-area/...".
         try {
-            $bytes = $storage->disk()->get($path);
+            $disk = $storage->disk();
+            if (! $disk->exists($path)) {
+                throw new MemberPdfWatermarkException('Não foi possível ler o PDF desta aula.');
+            }
+            $bytes = $disk->get($path);
+        } catch (MemberPdfWatermarkException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             Log::warning('member_pdf_watermark.storage_read_failed', [
                 'message' => $e->getMessage(),
@@ -53,6 +76,48 @@ class MemberLessonPdfSource
         }
 
         return $bytes;
+    }
+
+    /**
+     * Extrai member-area/... a partir de https://app.../storage/member-area/...
+     */
+    private function localPublicRelativePathFromUrl(string $url): ?string
+    {
+        $urlPath = parse_url($url, PHP_URL_PATH);
+        if (! is_string($urlPath) || $urlPath === '') {
+            return null;
+        }
+
+        if (str_starts_with($urlPath, '/storage/')) {
+            $relative = substr($urlPath, strlen('/storage/'));
+        } elseif (str_starts_with($urlPath, 'storage/')) {
+            $relative = substr($urlPath, strlen('storage/'));
+        } else {
+            return null;
+        }
+
+        $relative = $this->assertSafeRelativePath($relative);
+        if ($relative === '') {
+            return null;
+        }
+
+        // Defesa: se ainda vier com prefixo storage/, remove (diagnóstico confirmado).
+        if (str_starts_with($relative, 'storage/')) {
+            $relative = $this->assertSafeRelativePath(substr($relative, strlen('storage/')));
+        }
+
+        return $relative !== '' ? $relative : null;
+    }
+
+    private function assertSafeRelativePath(string $path): string
+    {
+        $path = str_replace('\\', '/', trim($path));
+        $path = ltrim($path, '/');
+        if ($path === '' || str_contains($path, "\0") || str_contains($path, '..')) {
+            return '';
+        }
+
+        return $path;
     }
 
     private function isOwnStorageUrl(StorageService $storage, string $url): bool

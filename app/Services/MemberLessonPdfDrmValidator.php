@@ -8,6 +8,8 @@ class MemberLessonPdfDrmValidator
 {
     public const PRODUCER_REJECT_MESSAGE = 'Não foi possível ativar a proteção DRM neste PDF. Remova senha (se houver), exporte novamente como PDF (Imprimir → Salvar como PDF) ou use uma ferramenta de reparo/conversão, e envie de novo.';
 
+    public const PRODUCER_READ_MESSAGE = 'Não foi possível ler este PDF para ativar a proteção DRM. Confirme se o arquivo ainda está disponível no armazenamento e tente enviar novamente.';
+
     public function __construct(
         private MemberLessonPdfSource $pdfSource,
         private MemberLessonPdfWatermarker $pdfWatermarker,
@@ -31,8 +33,10 @@ class MemberLessonPdfDrmValidator
             try {
                 $binary = $this->pdfSource->read($url, $tenantId);
                 $this->pdfWatermarker->stamp($binary, $this->probeIdentity());
-            } catch (MemberPdfWatermarkException) {
-                throw new MemberPdfWatermarkException(self::PRODUCER_REJECT_MESSAGE);
+            } catch (MemberPdfWatermarkException $e) {
+                throw new MemberPdfWatermarkException(
+                    $this->isReadFailure($e) ? self::PRODUCER_READ_MESSAGE : self::PRODUCER_REJECT_MESSAGE
+                );
             }
         }
     }
@@ -50,6 +54,17 @@ class MemberLessonPdfDrmValidator
         $path = parse_url((string) ($file['url'] ?? ''), PHP_URL_PATH);
 
         return is_string($path) && str_ends_with(strtolower($path), '.pdf');
+    }
+
+    private function isReadFailure(MemberPdfWatermarkException $e): bool
+    {
+        $message = $e->getMessage();
+
+        return str_contains($message, 'Não foi possível ler')
+            || str_contains($message, 'Não foi possível obter')
+            || str_contains($message, 'Material não encontrado')
+            || str_contains($message, 'não pode ser acessado')
+            || str_contains($message, 'Não foi possível localizar');
     }
 
     /**
