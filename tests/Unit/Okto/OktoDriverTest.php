@@ -169,6 +169,23 @@ class OktoDriverTest extends TestCase
         }
     }
 
+    public function test_diagnose_pix_deposit_returns_api_error(): void
+    {
+        Http::fake([
+            'demo-pix.oktopay.eu/transactions/deposit' => Http::response([
+                'errorList' => [
+                    ['code' => 2001, 'message' => 'The tax id is invalid.', 'detailedMessage' => 'taxId rejected'],
+                ],
+            ], 400),
+        ]);
+
+        $result = (new OktoDriver)->diagnosePixDeposit($this->credentials());
+
+        $this->assertFalse($result['ok']);
+        $this->assertStringContainsString('2001', $result['message']);
+        $this->assertStringContainsString('demo-pix.oktopay.eu', $result['message']);
+    }
+
     public function test_create_pix_rejects_cnpj_payer(): void
     {
         $this->expectException(\RuntimeException::class);

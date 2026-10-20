@@ -208,6 +208,12 @@ class GatewaysController extends Controller
             'oauth_connected' => $oauthConnected,
             'file_fields_configured' => $fileFieldsConfigured,
             'secrets_configured' => $versellSecretsConfigured,
+            'last_pix_error' => $slug === 'okto'
+                ? (trim((string) ($decrypted['last_pix_error'] ?? '')) ?: null)
+                : null,
+            'last_pix_error_at' => $slug === 'okto'
+                ? (trim((string) ($decrypted['last_pix_error_at'] ?? '')) ?: null)
+                : null,
         ];
 
         return response()->json($payload)->header('Cache-Control', 'no-store, no-cache, must-revalidate');
@@ -290,7 +296,7 @@ class GatewaysController extends Controller
             $credentials[$key] = is_string($v) ? trim($v) : '';
         }
 
-        foreach (['checkout_webhook_signing_secret', 'webhook_signing_secret', 'webhook_endpoint_id', 'webhook_secret', 'payout_webhook_secret', 'payout_webhook_endpoint_id', 'dispute_webhook_secret', 'dispute_webhook_endpoint_id'] as $preserveKey) {
+        foreach (['checkout_webhook_signing_secret', 'webhook_signing_secret', 'webhook_endpoint_id', 'webhook_secret', 'payout_webhook_secret', 'payout_webhook_endpoint_id', 'dispute_webhook_secret', 'dispute_webhook_endpoint_id', 'last_pix_error', 'last_pix_error_at'] as $preserveKey) {
             if (
                 (! isset($credentials[$preserveKey]) || $credentials[$preserveKey] === '' || $credentials[$preserveKey] === null)
                 && ! empty($existingCredentials[$preserveKey])
@@ -642,7 +648,7 @@ class GatewaysController extends Controller
             return response()->json(['success' => false, 'message' => 'Driver do gateway não disponível.'], 422);
         }
 
-        foreach (['checkout_webhook_signing_secret', 'webhook_signing_secret', 'webhook_endpoint_id', 'webhook_secret', 'payout_webhook_secret', 'payout_webhook_endpoint_id', 'dispute_webhook_secret', 'dispute_webhook_endpoint_id'] as $preserveKey) {
+        foreach (['checkout_webhook_signing_secret', 'webhook_signing_secret', 'webhook_endpoint_id', 'webhook_secret', 'payout_webhook_secret', 'payout_webhook_endpoint_id', 'dispute_webhook_secret', 'dispute_webhook_endpoint_id', 'last_pix_error', 'last_pix_error_at'] as $preserveKey) {
             if (
                 (! isset($credentials[$preserveKey]) || $credentials[$preserveKey] === '' || $credentials[$preserveKey] === null)
                 && ! empty($existingCredentials[$preserveKey])
@@ -705,11 +711,29 @@ class GatewaysController extends Controller
                 if (! empty($boot['warning'])) {
                     $webhookWarning = $boot['warning'];
                 }
+                $pixProbe = $driver instanceof \App\Gateways\Okto\OktoDriver
+                    ? $driver->diagnosePixDeposit($credentials)
+                    : ['ok' => false, 'message' => 'Driver Okto indisponível.'];
+                if ($pixProbe['ok'] ?? false) {
+                    unset($credentials['last_pix_error'], $credentials['last_pix_error_at']);
+                } else {
+                    $credentials['last_pix_error'] = mb_substr((string) ($pixProbe['message'] ?? 'Falha no depósito PIX.'), 0, 500);
+                    $credentials['last_pix_error_at'] = now()->toIso8601String();
+                }
                 if ($credential) {
                     $credential->setEncryptedCredentials($credentials);
                     $credential->is_connected = true;
                     $credential->save();
                 }
+
+                return response()->json([
+                    'success' => (bool) ($pixProbe['ok'] ?? false),
+                    'message' => $pixProbe['ok'] ?? false
+                        ? 'Token OK. '.$pixProbe['message']
+                        : 'Token/saldo OK, mas o PIX falhou: '.($pixProbe['message'] ?? 'erro desconhecido'),
+                    'webhook_warning' => $webhookWarning,
+                    'last_pix_error' => $pixProbe['ok'] ?? false ? null : ($pixProbe['message'] ?? null),
+                ]);
             }
             $failMessage = 'Falha na autenticação. Verifique as credenciais.';
             if (! $ok && $slug === 'woovi') {

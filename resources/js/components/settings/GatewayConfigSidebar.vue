@@ -38,6 +38,7 @@ const saving = ref(false);
 const testing = ref(false);
 const testMessage = ref(null);
 const testSuccess = ref(null);
+const lastPixError = ref(null);
 const credentialValues = ref({});
 const certificateFile = ref(null);
 /** Arquivos extras (ex.: OnlyUp mTLS) por campo `credential_keys.key` */
@@ -78,6 +79,7 @@ watch(
         if (open && slug) {
             loading.value = true;
             testMessage.value = null;
+            lastPixError.value = null;
             webhookCopied.value = false;
             credentialValues.value = {};
             try {
@@ -85,6 +87,7 @@ watch(
                     params: { t: Date.now() },
                 });
                 gateway.value = data;
+                lastPixError.value = data.last_pix_error || null;
                 const keys = data.credential_keys || [];
                 const saved = data.credential_values || {};
                 const initial = {};
@@ -262,6 +265,11 @@ async function testConnection() {
         );
         testSuccess.value = data.success;
         testMessage.value = data.message || (data.success ? 'Conexão OK.' : 'Falha.');
+        if (data.last_pix_error) {
+            lastPixError.value = data.last_pix_error;
+        } else if (data.success) {
+            lastPixError.value = null;
+        }
     } catch (err) {
         testSuccess.value = false;
         testMessage.value =
@@ -719,6 +727,12 @@ const canTestConnection = computed(() => {
                         </p>
                     </div>
 
+                    <p
+                        v-if="lastPixError && lastPixError !== testMessage"
+                        class="mt-4 rounded-lg bg-red-100 px-3 py-2 text-sm text-red-800 dark:bg-red-900/30 dark:text-red-300"
+                    >
+                        Último erro PIX: {{ lastPixError }}
+                    </p>
                     <p
                         v-if="testMessage"
                         :class="[

@@ -76,15 +76,31 @@ class OktoDriver implements GatewayDriver
             'expiration' => $expiration,
             'externalId' => $oktoExternalId,
         ];
+        if (isset($options['tags']) && is_array($options['tags']) && $options['tags'] !== []) {
+            $body['tags'] = array_values(array_filter(array_map('strval', $options['tags'])));
+        }
 
-        $response = $this->http($credentials)->post($this->url($credentials, '/transactions/deposit'), $body);
+        $url = $this->url($credentials, '/transactions/deposit');
+        try {
+            $response = $this->http($credentials)->post($url, $body);
+        } catch (\Throwable $e) {
+            Log::error('OktoDriver createPixPayment connection failed', [
+                'order_id' => $externalId,
+                'url' => $url,
+                'message' => $e->getMessage(),
+            ]);
+
+            throw new RuntimeException('Okto: falha de conexão com '.$this->baseUrl($credentials).' — '.$e->getMessage());
+        }
+
         if (! $response->successful()) {
             $message = $this->errorMessage($response, 'Erro ao gerar cobrança PIX.');
-            Log::warning('OktoDriver createPixPayment rejected', [
+            Log::error('OktoDriver createPixPayment rejected', [
                 'order_id' => $externalId,
+                'url' => $url,
                 'http' => $response->status(),
                 'message' => $message,
-                'body' => mb_substr($response->body(), 0, 500),
+                'body' => mb_substr($response->body(), 0, 800),
             ]);
 
             throw new RuntimeException('Okto: '.$message);
@@ -104,16 +120,58 @@ class OktoDriver implements GatewayDriver
         if ($brcode === '') {
             $brcode = $this->fetchBrcodePayload($credentials, $transactionId);
         }
+        $qrImage = $this->fetchQrImage($credentials, $transactionId);
 
         return [
             'transaction_id' => $transactionId,
-            'qrcode' => null,
+            'qrcode' => $qrImage !== '' ? $qrImage : null,
             'copy_paste' => $brcode !== '' ? $brcode : null,
             'raw' => $payload,
             'metadata' => [
                 'okto_external_id' => $oktoExternalId,
             ],
         ];
+    }
+
+    /**
+     * Depósito de diagnóstico (persona oficial Marion Schuppe) para o botão Testar conexão.
+     *
+     * @param  array<string, mixed>  $credentials
+     * @return array{ok: bool, message: string, transaction_id?: string}
+     */
+    public function diagnosePixDeposit(array $credentials): array
+    {
+        try {
+            $result = $this->createPixPayment(
+                $credentials,
+                1.00,
+                ['name' => 'Marion Schuppe', 'document' => '60418443734'],
+                (string) Str::uuid(),
+                '',
+                ['tags' => ['stacker-okto-probe'], 'expiration' => 600]
+            );
+            $hasCode = (is_string($result['copy_paste'] ?? null) && $result['copy_paste'] !== '')
+                || (is_string($result['qrcode'] ?? null) && $result['qrcode'] !== '');
+
+            if (! $hasCode) {
+                return [
+                    'ok' => false,
+                    'message' => 'Okto criou a cobrança (id '.($result['transaction_id'] ?? '?').') mas não devolveu brcode/QR. Host: '.$this->baseUrl($credentials),
+                    'transaction_id' => $result['transaction_id'] ?? null,
+                ];
+            }
+
+            return [
+                'ok' => true,
+                'message' => 'PIX de teste gerado em '.$this->baseUrl($credentials).' (R$ 1,00, persona 604.184.437-34).',
+                'transaction_id' => $result['transaction_id'] ?? null,
+            ];
+        } catch (\Throwable $e) {
+            return [
+                'ok' => false,
+                'message' => $e->getMessage().' Host: '.$this->baseUrl($credentials),
+            ];
+        }
     }
 
     /**
@@ -464,11 +522,16 @@ class OktoDriver implements GatewayDriver
      */
     private function http(array $credentials): PendingRequest
     {
+        $token = $this->accessToken($credentials);
+        if (str_starts_with(strtolower($token), 'bearer ')) {
+            $token = trim(substr($token, 7));
+        }
+
         return Http::timeout(30)
             ->connectTimeout(8)
             ->acceptJson()
             ->asJson()
-            ->withToken($this->accessToken($credentials));
+            ->withToken($token);
     }
 
     private function errorMessage(Response $response, string $fallback): string
@@ -605,6 +668,39 @@ class OktoDriver implements GatewayDriver
         $body = trim($body, "\" \n\r\t");
 
         return (str_starts_with($body, '00020') || strlen($body) > 40) ? $body : '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     */
+    private function fetchQrImage(array $credentials, string $depositId): string
+    {
+        try {
+            $response = $this->http($credentials)
+                ->get($this->url($credentials, '/transactions/qrcode/'.rawurlencode($depositId)), [
+                    'format' => 'base64',
+                ]);
+        } catch (\Throwable) {
+            return '';
+        }
+
+        if (! $response->successful()) {
+            return '';
+        }
+
+        $body = trim($response->body());
+        $body = trim($body, "\" \n\r\t");
+        if ($body === '') {
+            return '';
+        }
+        if (str_starts_with($body, 'data:image')) {
+            return $body;
+        }
+        if (str_starts_with($body, '00020')) {
+            return '';
+        }
+
+        return 'data:image/png;base64,'.$body;
     }
 
     private function payerFullName(string $name): string

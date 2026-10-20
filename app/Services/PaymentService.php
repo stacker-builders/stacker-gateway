@@ -41,14 +41,29 @@ class PaymentService
                 break;
             }
             if (! $this->isPixAcquirerAllowedForOrder($gatewaySlug, $order)) {
+                if ($gatewaySlug === 'okto') {
+                    Log::error('PaymentService: Okto skipped (channel not allowed for this order).', [
+                        'order_id' => $order->id,
+                    ]);
+                }
                 continue;
             }
             $resolved = $this->resolveGatewayPaymentContext($tenantId, $gatewaySlug, 'pix');
             if ($resolved === null) {
+                if ($gatewaySlug === 'okto') {
+                    Log::error('PaymentService: Okto skipped (no connected credential).', [
+                        'order_id' => $order->id,
+                    ]);
+                }
                 continue;
             }
             $credentials = $resolved['credentials'];
             if (! GatewayApiCredentials::isReadyForGateway($gatewaySlug, $credentials)) {
+                if ($gatewaySlug === 'okto') {
+                    Log::error('PaymentService: Okto skipped (access token missing).', [
+                        'order_id' => $order->id,
+                    ]);
+                }
                 continue;
             }
             $driver = GatewayRegistry::driver($gatewaySlug);
@@ -114,12 +129,20 @@ class PaymentService
                     'copy_paste' => $copyPaste,
                 ];
             } catch (\Throwable $e) {
-                Log::warning('PaymentService: PIX gateway failed.', [
+                $log = $gatewaySlug === 'okto' ? 'error' : 'warning';
+                Log::{$log}('PaymentService: PIX gateway failed.', [
                     'gateway' => $gatewaySlug,
                     'order_id' => $order->id,
                     'message' => $e->getMessage(),
                     'duration_ms' => isset($startedAt) ? (int) round((microtime(true) - $startedAt) * 1000) : null,
                 ]);
+                if ($gatewaySlug === 'okto') {
+                    $this->rememberOktoPixError(
+                        isset($resolved['gateway_credential_id']) ? (int) $resolved['gateway_credential_id'] : null,
+                        $e->getMessage(),
+                        $order
+                    );
+                }
                 $lastException = $e;
             }
         }
@@ -820,5 +843,38 @@ class PaymentService
             'cajupay_account_id' => null,
             'gateway_credential_id' => (int) $credential->id,
         ];
+    }
+
+    private function rememberOktoPixError(?int $credentialId, string $message, Order $order): void
+    {
+        $message = mb_substr(trim($message), 0, 500);
+        if ($message === '') {
+            return;
+        }
+
+        $meta = is_array($order->metadata) ? $order->metadata : [];
+        $errors = is_array($meta['pix_gateway_errors'] ?? null) ? $meta['pix_gateway_errors'] : [];
+        $errors[] = [
+            'gateway' => 'okto',
+            'message' => $message,
+            'at' => now()->toIso8601String(),
+        ];
+        $meta['pix_gateway_errors'] = array_slice($errors, -5);
+        $order->update(['metadata' => $meta]);
+
+        if ($credentialId === null || $credentialId < 1) {
+            return;
+        }
+
+        $credential = GatewayCredential::query()->find($credentialId);
+        if ($credential === null) {
+            return;
+        }
+
+        $creds = $credential->getDecryptedCredentials();
+        $creds['last_pix_error'] = $message;
+        $creds['last_pix_error_at'] = now()->toIso8601String();
+        $credential->setEncryptedCredentials($creds);
+        $credential->save();
     }
 }
