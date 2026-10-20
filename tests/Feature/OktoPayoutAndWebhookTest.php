@@ -241,6 +241,41 @@ class OktoPayoutAndWebhookTest extends TestCase
         $this->assertSame('paid', $w->fresh()->status);
     }
 
+    public function test_connection_probe_returns_pix_failure_not_generic_success(): void
+    {
+        $this->seedOktoCredential();
+
+        Http::fake([
+            'demo-pix.oktopay.eu/operator/v2/balance' => Http::response([
+                'availableBalance' => 10,
+            ], 200),
+            'demo-pix.oktopay.eu/operator' => Http::response(['name' => 'op'], 200),
+            'demo-pix.oktopay.eu/transactions/deposit' => Http::response([
+                'errorList' => [
+                    ['code' => 2001, 'message' => 'The tax id is invalid.', 'detailedMessage' => 'taxId rejected'],
+                ],
+            ], 400),
+        ]);
+
+        $admin = User::factory()->create([
+            'role' => User::ROLE_PLATFORM_ADMIN,
+            'tenant_id' => null,
+        ]);
+
+        $response = $this->actingAs($admin)->postJson('/plataforma/financeiro/gateways/okto/test', [
+            'access_token' => 'okto-token-test',
+            'rsa_public_key' => $this->rsa['public'],
+            'sandbox' => true,
+        ]);
+
+        $response->assertOk()
+            ->assertJsonPath('success', false)
+            ->assertJsonPath('pix_probe.balance_ok', true)
+            ->assertJsonPath('pix_probe.pix_ok', false);
+        $this->assertStringContainsString('2001', (string) $response->json('message'));
+        $this->assertStringContainsString('PIX: falhou', (string) $response->json('message'));
+    }
+
     public function test_webhook_rejects_invalid_signature(): void
     {
         $this->seedOktoCredential();

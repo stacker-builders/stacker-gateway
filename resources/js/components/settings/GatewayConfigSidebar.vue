@@ -263,12 +263,24 @@ async function testConnection() {
             payload,
             { headers: { 'X-XSRF-TOKEN': getCsrfToken(), Accept: 'application/json' } }
         );
-        testSuccess.value = data.success;
-        testMessage.value = data.message || (data.success ? 'Conexão OK.' : 'Falha.');
-        if (data.last_pix_error) {
-            lastPixError.value = data.last_pix_error;
-        } else if (data.success) {
-            lastPixError.value = null;
+        if (data.pix_probe) {
+            const pixOk = Boolean(data.pix_probe.pix_ok);
+            testSuccess.value = pixOk;
+            testMessage.value = [
+                data.pix_probe.balance_ok ? 'Saldo: OK' : 'Saldo: falhou',
+                pixOk
+                    ? `PIX: gerado. ${data.pix_probe.message || ''}`.trim()
+                    : `PIX: falhou. ${data.pix_probe.message || data.last_pix_error || 'sem detalhe da Okto'}`.trim(),
+            ].join('\n');
+            lastPixError.value = pixOk ? null : (data.pix_probe.message || data.last_pix_error || null);
+        } else {
+            testSuccess.value = data.success;
+            testMessage.value = data.message || (data.success ? 'Conexão OK.' : 'Falha.');
+            if (data.last_pix_error) {
+                lastPixError.value = data.last_pix_error;
+            } else if (data.success) {
+                lastPixError.value = null;
+            }
         }
     } catch (err) {
         testSuccess.value = false;
@@ -351,8 +363,14 @@ async function persistCredentials(totpCode = '') {
     }
 
     certificateFile.value = null;
-    testSuccess.value = true;
-    testMessage.value = data?.message || 'Credenciais salvas.';
+    if (data?.pix_probe) {
+        testSuccess.value = Boolean(data.pix_probe.pix_ok);
+        testMessage.value = data.message || (data.pix_probe.pix_ok ? 'PIX gerado.' : 'PIX falhou.');
+        lastPixError.value = data.pix_probe.pix_ok ? null : (data.pix_probe.message || data.last_pix_error || null);
+    } else {
+        testSuccess.value = true;
+        testMessage.value = data?.message || 'Credenciais salvas.';
+    }
     emit('saved');
     setTimeout(() => {
         emit('close');
@@ -736,7 +754,7 @@ const canTestConnection = computed(() => {
                     <p
                         v-if="testMessage"
                         :class="[
-                            'mt-4 rounded-lg px-3 py-2 text-sm',
+                            'mt-4 whitespace-pre-line rounded-lg px-3 py-2 text-sm',
                             testSuccess
                                 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'
                                 : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',

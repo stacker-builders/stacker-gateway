@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\RequiresPlatformStepUp;
 use App\Gateways\CajuPay\CajuPayDriver;
 use App\Gateways\GatewayRegistry;
+use App\Gateways\Okto\OktoDriver;
 use App\Gateways\Versell\VersellCredentials;
 use App\Gateways\Versell\VersellDriver;
 use App\Models\GatewayCredential;
@@ -400,6 +401,7 @@ class GatewaysController extends Controller
         $webhookWarning = null;
         $connectionMessage = null;
         $diagnosis = null;
+        $pixProbe = null;
         if ($driver && !empty($credentials)) {
             try {
                 if ($slug === 'versell' && $driver instanceof VersellDriver) {
@@ -434,6 +436,7 @@ class GatewaysController extends Controller
                 if (! empty($boot['warning'])) {
                     $webhookWarning = $boot['warning'];
                 }
+                $pixProbe = $this->probeOktoPix($credentials, $driver);
             }
         }
 
@@ -455,6 +458,11 @@ class GatewaysController extends Controller
         } elseif ($isConnected && ! $connectionMessage) {
             $message = 'Credenciais salvas e conexão verificada.';
         }
+        if (is_array($pixProbe)) {
+            $message = ($pixProbe['pix_ok'] ?? false)
+                ? 'Credenciais salvas. Saldo OK. PIX de teste gerado.'
+                : 'Credenciais salvas. Saldo OK, mas o depósito PIX falhou: '.($pixProbe['message'] ?? 'erro desconhecido');
+        }
 
         return response()->json([
             'success' => true,
@@ -462,6 +470,10 @@ class GatewaysController extends Controller
             'is_enabled' => $credential->is_enabled ?? true,
             'message' => $message,
             'webhook_warning' => $webhookWarning,
+            'pix_probe' => $pixProbe,
+            'last_pix_error' => is_array($pixProbe) && ! ($pixProbe['pix_ok'] ?? false)
+                ? ($pixProbe['message'] ?? null)
+                : null,
             'diagnosis' => $diagnosis !== null ? [
                 'cash_in' => $diagnosis['cash_in'],
                 'cash_out' => $diagnosis['cash_out'],
@@ -711,28 +723,23 @@ class GatewaysController extends Controller
                 if (! empty($boot['warning'])) {
                     $webhookWarning = $boot['warning'];
                 }
-                $pixProbe = $driver instanceof \App\Gateways\Okto\OktoDriver
-                    ? $driver->diagnosePixDeposit($credentials)
-                    : ['ok' => false, 'message' => 'Driver Okto indisponível.'];
-                if ($pixProbe['ok'] ?? false) {
-                    unset($credentials['last_pix_error'], $credentials['last_pix_error_at']);
-                } else {
-                    $credentials['last_pix_error'] = mb_substr((string) ($pixProbe['message'] ?? 'Falha no depósito PIX.'), 0, 500);
-                    $credentials['last_pix_error_at'] = now()->toIso8601String();
-                }
+                $pixProbe = $this->probeOktoPix($credentials, $driver);
                 if ($credential) {
                     $credential->setEncryptedCredentials($credentials);
                     $credential->is_connected = true;
                     $credential->save();
                 }
 
+                $pixOk = (bool) ($pixProbe['pix_ok'] ?? false);
+
                 return response()->json([
-                    'success' => (bool) ($pixProbe['ok'] ?? false),
-                    'message' => $pixProbe['ok'] ?? false
-                        ? 'Token OK. '.$pixProbe['message']
-                        : 'Token/saldo OK, mas o PIX falhou: '.($pixProbe['message'] ?? 'erro desconhecido'),
+                    'success' => $pixOk,
+                    'message' => $pixOk
+                        ? "Saldo: OK\nPIX: gerado. ".$pixProbe['message']
+                        : "Saldo: OK\nPIX: falhou. ".($pixProbe['message'] ?? 'erro desconhecido'),
                     'webhook_warning' => $webhookWarning,
-                    'last_pix_error' => $pixProbe['ok'] ?? false ? null : ($pixProbe['message'] ?? null),
+                    'pix_probe' => $pixProbe,
+                    'last_pix_error' => $pixOk ? null : ($pixProbe['message'] ?? null),
                 ]);
             }
             $failMessage = 'Falha na autenticação. Verifique as credenciais.';
@@ -757,6 +764,31 @@ class GatewaysController extends Controller
                 'message' => $e->getMessage() ?: 'Erro ao testar conexão.',
             ], 422);
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     * @return array{balance_ok: bool, pix_ok: bool, message: string, transaction_id?: string|null}
+     */
+    private function probeOktoPix(array &$credentials, mixed $driver): array
+    {
+        $okto = $driver instanceof OktoDriver ? $driver : app(OktoDriver::class);
+        $probe = $okto->diagnosePixDeposit($credentials);
+        $ok = (bool) ($probe['ok'] ?? false);
+        $message = trim((string) ($probe['message'] ?? ''));
+        if ($ok) {
+            unset($credentials['last_pix_error'], $credentials['last_pix_error_at']);
+        } else {
+            $credentials['last_pix_error'] = mb_substr($message !== '' ? $message : 'Falha no depósito PIX.', 0, 500);
+            $credentials['last_pix_error_at'] = now()->toIso8601String();
+        }
+
+        return [
+            'balance_ok' => true,
+            'pix_ok' => $ok,
+            'message' => $message,
+            'transaction_id' => $probe['transaction_id'] ?? null,
+        ];
     }
 
     /**
