@@ -33,6 +33,8 @@ function handleSendTest() {
 
 const hasFixedDefaults = computed(() => !!props.provider?.defaults);
 const isSendGrid = computed(() => props.provider?.id === 'sendgrid');
+const isResend = computed(() => props.provider?.id === 'resend');
+const isApiKeyProvider = computed(() => isSendGrid.value || isResend.value);
 
 const inputClass =
     'block w-full rounded-xl border-2 border-zinc-200 bg-white px-4 py-2.5 text-zinc-900 placeholder-zinc-400 transition focus:border-[var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:placeholder-zinc-500';
@@ -92,8 +94,33 @@ const fixedValueClass =
 
       <!-- Content -->
       <div class="p-6 space-y-6">
+        <!-- Resend: API Key + Remetente -->
+        <template v-if="isResend">
+          <section class="space-y-4">
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Configuração Resend</h3>
+            <p class="text-sm text-zinc-500 dark:text-zinc-400">
+              Crie uma API Key em <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer" class="text-[var(--color-primary)] underline">Resend &gt; API Keys</a>. Deixe em branco para manter a atual. O domínio do remetente precisa estar verificado no Resend.
+            </p>
+            <div class="space-y-4">
+              <div>
+                <label class="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">API Key (Resend)</label>
+                <input v-model="form.resend_api_key" type="password" autocomplete="new-password" :class="inputClass" placeholder="re_xxx..." />
+              </div>
+              <div>
+                <label class="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">E-mail do remetente</label>
+                <input v-model="form.resend_mail_from_address" type="email" :class="inputClass" placeholder="remetente@seudominio.com" />
+                <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Use um endereço de um domínio autenticado no Resend (Domain Authentication).</p>
+              </div>
+              <div>
+                <label class="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Nome do remetente</label>
+                <input v-model="form.resend_mail_from_name" type="text" :class="inputClass" placeholder="Ex: Minha Loja" />
+              </div>
+            </div>
+          </section>
+        </template>
+
         <!-- SendGrid: API Key + Remetente -->
-        <template v-if="isSendGrid">
+        <template v-else-if="isSendGrid">
           <section class="space-y-4">
             <h3 class="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Configuração SendGrid</h3>
             <p class="text-sm text-zinc-500 dark:text-zinc-400">
@@ -173,8 +200,8 @@ const fixedValueClass =
           </div>
         </section>
 
-        <!-- Sender Info (remetente = usuário SMTP; nome opcional) — oculto para SendGrid (já no bloco acima) -->
-        <section v-if="!isSendGrid" class="space-y-4">
+        <!-- Sender Info (remetente = usuário SMTP; nome opcional) — oculto para SendGrid/Resend (já no bloco acima) -->
+        <section v-if="!isApiKeyProvider" class="space-y-4">
           <h3 class="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Remetente (nome)</h3>
           <p class="text-sm text-zinc-500 dark:text-zinc-400">O e-mail do remetente é o mesmo do usuário SMTP acima. Defina apenas o nome exibido:</p>
           <div class="space-y-4">
