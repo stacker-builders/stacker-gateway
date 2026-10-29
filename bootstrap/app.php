@@ -49,6 +49,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'checkout/pixel/purchase-ack',
             'api/metrics/collect',
             'mcp',
+            'oauth/register',
+            'oauth/token',
         ]);
 
         $middleware->web(prepend: [

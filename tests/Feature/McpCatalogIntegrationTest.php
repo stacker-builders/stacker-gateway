@@ -187,7 +187,7 @@ class McpCatalogIntegrationTest extends TestCase
         ])
             ->assertOk()
             ->assertJsonPath('result.serverInfo.name', 'getfy-catalog')
-            ->assertJsonPath('result.serverInfo.version', '0.3.0')
+            ->assertJsonPath('result.serverInfo.version', '0.4.0')
             ->assertJsonPath('result.protocolVersion', '2025-03-26');
 
         $listed = $this->postJson('/mcp', [
@@ -207,7 +207,14 @@ class McpCatalogIntegrationTest extends TestCase
         $this->assertContains('sales.summary', $toolNames);
         $this->assertContains('sales.list_orders', $toolNames);
         $this->assertContains('sales.get_order', $toolNames);
+        $this->assertContains('members.get_structure', $toolNames);
+        $this->assertContains('members.create_lesson', $toolNames);
+        $this->assertContains('members.apply_plan', $toolNames);
+        $this->assertContains('students.grant', $toolNames);
+        $this->assertContains('students.list', $toolNames);
+        $this->assertContains('finance.get_balance', $toolNames);
         $this->assertNotContains('sales.refund', $toolNames);
+        $this->assertNotContains('finance.withdraw', $toolNames);
 
         $ping = $this->postJson('/mcp', [
             'jsonrpc' => '2.0',

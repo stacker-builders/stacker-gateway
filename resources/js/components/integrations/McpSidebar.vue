@@ -49,12 +49,16 @@ const canDo = [
     t('integrations.mcp.can.sales', 'Ler resumo e lista de vendas deste tenant para relatórios (sem CPF, telefone, e-mail ou IP)'),
     t('integrations.mcp.can.create', 'Criar e atualizar produto, oferta, cupom e order bump'),
     t('integrations.mcp.can.funnel', 'Montar upsell e downsell sem mexer no restante do checkout'),
+    t('integrations.mcp.can.members', 'Editar a área de membros: seções, módulos, aulas (vídeo, link, PDF por URL ou texto), drip, turmas, comentários, certificado e aparência'),
+    t('integrations.mcp.can.students', 'Listar alunos, conceder ou revogar acesso a um produto e ver o progresso na área de membros'),
+    t('integrations.mcp.can.balance', 'Consultar o saldo disponível e o que ainda está a receber (somente leitura)'),
     t('integrations.mcp.can.preview', 'Gerar um plano assinado (preview_id) e só gravar depois da sua confirmação'),
 ];
 
 const cannotDo = [
     t('integrations.mcp.cannot.pay', 'Cobrar, estornar, sacar ou ver chaves de API de pagamento'),
     t('integrations.mcp.cannot.pixels', 'Ler ou gravar pixels, scripts customizados ou gateways do checkout'),
+    t('integrations.mcp.cannot.mass', 'Importar alunos em massa, enviar push, alterar domínio da área ou senha padrão de login'),
     t('integrations.mcp.cannot.other', 'Acessar catálogo ou vendas de outra conta, CPF, telefone, IP ou reembolsar um pedido'),
     t('integrations.mcp.cannot.confirm', 'Confirmar sozinho no chat: alteração com risco precisa de apply_plan com o preview_id'),
 ];
@@ -65,6 +69,9 @@ const prompts = [
     t('integrations.mcp.prompt.create', 'Crie o produto Curso X a R$ 97, tipo área de membros, e me mostre o plano antes de gravar.'),
     t('integrations.mcp.prompt.coupon', 'Crie o cupom BEMVINDO de 10% só no produto Y, no máximo 100 usos.'),
     t('integrations.mcp.prompt.funnel', 'No produto X, proponha order bump + upsell com o produto Z e só aplique depois que eu confirmar.'),
+    t('integrations.mcp.prompt.members', 'No curso X, crie o módulo 2 com a aula Introdução (Vimeo) e solte daqui a 7 dias.'),
+    t('integrations.mcp.prompt.students', 'Adicione a aluna Maria Silva (maria@email.com) no curso X, turma da noite.'),
+    t('integrations.mcp.prompt.balance', 'Qual é o meu saldo disponível para saque?'),
 ];
 
 function close() {
@@ -100,7 +107,7 @@ async function activate() {
 }
 
 async function rotate() {
-    if (!window.confirm(t('integrations.mcp.rotate_confirm', 'Gerar um token novo? O token atual deixa de funcionar na hora.'))) {
+    if (!window.confirm(t('integrations.mcp.rotate_confirm', 'Gerar um token novo do Claude? O mcp_live_ atual para na hora. O ChatGPT continua com o token OAuth dele.'))) {
         return;
     }
     saving.value = true;
@@ -118,7 +125,7 @@ async function rotate() {
 }
 
 async function revoke() {
-    if (!window.confirm(t('integrations.mcp.revoke_confirm', 'Revogar o MCP desta conta? Clientes conectados param na hora.'))) {
+    if (!window.confirm(t('integrations.mcp.revoke_confirm', 'Revogar o MCP desta conta? Claude e ChatGPT param na hora.'))) {
         return;
     }
     saving.value = true;
@@ -164,7 +171,7 @@ async function revoke() {
 
                 <div class="flex flex-1 flex-col overflow-y-auto p-5">
                     <p class="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
-                        {{ t('integrations.mcp.description', 'Conecte Claude, ChatGPT ou outro cliente MCP. O token vale só para o catálogo desta conta.') }}
+                        {{ t('integrations.mcp.description', 'Conecte Claude, ChatGPT ou outro cliente MCP para montar produtos, funis, área de membros e alunos desta conta.') }}
                     </p>
 
                     <p v-if="errorMessage" class="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-200">
@@ -173,7 +180,7 @@ async function revoke() {
 
                     <div v-if="!connected" class="space-y-4">
                         <p class="text-sm text-zinc-600 dark:text-zinc-400">
-                            {{ t('integrations.mcp.inactive_hint', 'Ative para gerar um token e a URL do servidor. Cole no Claude Desktop ou no ChatGPT.') }}
+                            {{ t('integrations.mcp.inactive_hint', 'Ative para gerar o token do Claude e a URL do servidor. O ChatGPT usa a mesma URL e pede login, sem esse token.') }}
                         </p>
                         <Button variant="primary" :disabled="saving" @click="activate">
                             <KeyRound class="h-4 w-4" />
@@ -210,13 +217,13 @@ async function revoke() {
 
                         <div class="rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
                             <p class="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                                {{ t('integrations.mcp.token', 'Token') }}
+                                {{ t('integrations.mcp.token', 'Token do Claude') }}
                             </p>
                             <p class="mt-2 font-mono text-sm text-zinc-900 dark:text-zinc-100">
                                 {{ mcp?.masked_token || '—' }}
                             </p>
                             <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                                {{ t('integrations.mcp.token_once', 'O token completo aparece só na ativação ou na rotação. Guarde em local seguro.') }}
+                                {{ t('integrations.mcp.token_once', 'O token mcp_live_ aparece só na ativação ou na rotação. O ChatGPT não usa este token.') }}
                             </p>
                         </div>
 
@@ -270,7 +277,10 @@ async function revoke() {
                                 {{ t('integrations.mcp.connect_title', 'Como conectar') }}
                             </h3>
                             <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                                {{ t('integrations.mcp.connect_claude', 'No Claude Desktop, cole a URL e o token no mcpServers. No ChatGPT, cadastre um conector MCP remoto com a mesma URL e o Bearer token.') }}
+                                {{ t('integrations.mcp.connect_claude', 'No Claude Desktop, cole a URL e o token mcp_live_ no mcpServers. Esse token não muda quando você autoriza o ChatGPT.') }}
+                            </p>
+                            <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                                {{ t('integrations.mcp.connect_chatgpt', 'No ChatGPT, cadastre um conector MCP remoto só com a URL, sem colar o token. O ChatGPT abre o login desta conta e recebe um token próprio (mcp_at_).') }}
                             </p>
                             <pre class="mt-3 overflow-x-auto rounded-lg bg-zinc-950 p-3 text-xs text-zinc-100">{{ claudeConfig }}</pre>
                             <Button class="mt-2" variant="outline" size="sm" @click="copy(claudeConfig, 'config')">

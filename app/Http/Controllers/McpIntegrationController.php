@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\LogsSellerActivity;
 use App\Models\McpCredential;
 use App\Services\Mcp\McpCredentialService;
+use App\Services\Mcp\McpOauthService;
 use App\Services\SellerActivityLogService;
 use Illuminate\Http\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
@@ -15,6 +16,7 @@ class McpIntegrationController extends Controller
 
     public function __construct(
         private readonly McpCredentialService $credentials,
+        private readonly McpOauthService $oauth,
     ) {}
 
     public function store(): JsonResponse
@@ -69,6 +71,7 @@ class McpIntegrationController extends Controller
         $this->logSellerActivity(SellerActivityLogService::INTEGRATION_MCP_REVOKED, $credential, [
             'name' => 'MCP',
         ]);
+        $this->oauth->revokeTenantTokens($tenantId);
         $credential->delete();
 
         return response()->json([

@@ -54,7 +54,13 @@ class LoginController extends Controller
         }
 
         // Evita redirecionar para URL antiga (ex.: /produtos/.../edit) após login via Inertia.
-        $request->session()->forget('url.intended');
+        // Mantém /oauth/authorize para o ChatGPT voltar ao consentimento MCP.
+        $oauthIntended = $this->oauthAuthorizeIntendedPath($request);
+        if ($oauthIntended === null) {
+            $request->session()->forget('url.intended');
+        } else {
+            $request->session()->put('url.intended', $oauthIntended);
+        }
 
         return Inertia::render('Auth/Login', [
             'login_turnstile' => LoginTurnstileSettings::publicConfig(),
@@ -111,6 +117,7 @@ class LoginController extends Controller
                     'email' => 'Conta suspensa ou bloqueada. Contate o suporte.',
                 ])->onlyInput('email');
             }
+            $oauthIntended = $this->oauthAuthorizeIntendedPath($request);
             if ($user instanceof User && PlatformTotpService::requiresLoginChallenge($user)) {
                 return $this->redirectToLoginTotpChallenge(
                     $request,
@@ -118,7 +125,7 @@ class LoginController extends Controller
                     (bool) $request->boolean('remember'),
                     'seller',
                     'login.two-factor',
-                    $user->canAccessSellerPanel() ? '/dashboard' : '/painel-cliente',
+                    $user->canAccessSellerPanel() ? ($oauthIntended ?? '/dashboard') : '/painel-cliente',
                 );
             }
 
@@ -144,7 +151,7 @@ class LoginController extends Controller
             if ($user->canAccessSellerPanel()) {
                 $request->session()->put('panel_context', 'seller');
 
-                return $this->inertiaOrRedirectAfterLogin($request, '/dashboard');
+                return $this->inertiaOrRedirectAfterLogin($request, $oauthIntended ?? '/dashboard');
             }
 
             if ($user->canAccessCustomerPanel()) {
@@ -213,5 +220,35 @@ class LoginController extends Controller
 
         return (bool) preg_match('#^/m/[a-zA-Z0-9]{6,16}/login$#', $path)
             || $path === '/login';
+    }
+
+    /**
+     * Só devolve o intended do consentimento MCP. Qualquer outro path é ignorado.
+     */
+    private function oauthAuthorizeIntendedPath(Request $request): ?string
+    {
+        $intended = $request->session()->get('url.intended');
+        if (! is_string($intended) || $intended === '') {
+            return null;
+        }
+
+        $path = $intended;
+        if (str_starts_with($intended, 'http://') || str_starts_with($intended, 'https://')) {
+            $parts = parse_url($intended);
+            if (! is_array($parts)) {
+                return null;
+            }
+            $path = ($parts['path'] ?? '').(isset($parts['query']) ? '?'.$parts['query'] : '');
+        }
+
+        if ($path === '' || str_starts_with($path, '//') || str_contains($path, '..')) {
+            return null;
+        }
+
+        if (! str_starts_with($path, '/oauth/authorize')) {
+            return null;
+        }
+
+        return $path;
     }
 }

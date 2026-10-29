@@ -220,9 +220,33 @@ Route::middleware(['throttle:60,1', \App\Http\Middleware\LogInboundGatewayWebhoo
         ->name('webhooks.gateway');
 });
 
-Route::match(['post', 'options'], '/mcp', [\App\Http\Controllers\Mcp\McpServerController::class, 'handle'])
+Route::match(['get', 'post', 'options'], '/mcp', [\App\Http\Controllers\Mcp\McpServerController::class, 'handle'])
     ->middleware('throttle:mcp')
     ->name('mcp.handle');
+
+Route::match(['get', 'options'], '/.well-known/oauth-protected-resource/{path?}', [\App\Http\Controllers\Mcp\McpOauthController::class, 'protectedResource'])
+    ->where('path', '.*')
+    ->middleware('throttle:mcp-oauth')
+    ->name('mcp.oauth.resource');
+Route::match(['get', 'options'], '/.well-known/oauth-authorization-server/{path?}', [\App\Http\Controllers\Mcp\McpOauthController::class, 'authorizationServer'])
+    ->where('path', '.*')
+    ->middleware('throttle:mcp-oauth')
+    ->name('mcp.oauth.as');
+Route::match(['get', 'options'], '/.well-known/openid-configuration', [\App\Http\Controllers\Mcp\McpOauthController::class, 'authorizationServer'])
+    ->middleware('throttle:mcp-oauth')
+    ->name('mcp.oauth.oidc');
+Route::match(['post', 'options'], '/oauth/register', [\App\Http\Controllers\Mcp\McpOauthController::class, 'register'])
+    ->middleware('throttle:mcp-oauth')
+    ->name('mcp.oauth.register');
+Route::match(['post', 'options'], '/oauth/token', [\App\Http\Controllers\Mcp\McpOauthController::class, 'token'])
+    ->middleware('throttle:mcp-oauth')
+    ->name('mcp.oauth.token');
+Route::get('/oauth/authorize', [\App\Http\Controllers\Mcp\McpOauthController::class, 'showAuthorize'])
+    ->middleware('throttle:mcp-oauth')
+    ->name('mcp.oauth.authorize');
+Route::post('/oauth/authorize', [\App\Http\Controllers\Mcp\McpOauthController::class, 'approve'])
+    ->middleware(['auth', 'throttle:mcp-oauth'])
+    ->name('mcp.oauth.approve');
 
 // Assets de plugins (imagens, etc.): GET /plugins/{slug}/assets/{path} — arquivos em plugins/{slug}/assets/
 Route::get('/plugins/{slug}/assets/{path}', \App\Http\Controllers\PluginAssetController::class)
