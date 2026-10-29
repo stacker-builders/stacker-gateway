@@ -282,6 +282,12 @@ async function copyValue(value, key) {
                                 {{ t('customer.purchases.badge_extra', 'Extra') }}
                             </span>
                             <span
+                                v-if="row.is_bundle_item"
+                                class="rounded-full bg-indigo-700/90 px-2 py-0.5 text-[10px] font-semibold text-white"
+                            >
+                                {{ t('customer.purchases.badge_bundle', 'Incluso no combo') }}
+                            </span>
+                            <span
                                 v-if="row.is_manual_grant"
                                 class="rounded-full bg-emerald-600/90 px-2 py-0.5 text-[10px] font-semibold text-white"
                             >

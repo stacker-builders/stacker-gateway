@@ -7,6 +7,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class OrderItem extends Model
 {
+    public const SOURCE_PRODUCT = 'product';
+
+    public const SOURCE_ORDER_BUMP = 'order_bump';
+
+    public const SOURCE_BUNDLE = 'bundle';
+
     protected $fillable = [
         'order_id',
         'product_id',
@@ -14,6 +20,7 @@ class OrderItem extends Model
         'subscription_plan_id',
         'amount',
         'position',
+        'source',
     ];
 
     protected function casts(): array
@@ -41,5 +48,10 @@ class OrderItem extends Model
     public function subscriptionPlan(): BelongsTo
     {
         return $this->belongsTo(SubscriptionPlan::class);
+    }
+
+    public function isBundleItem(): bool
+    {
+        return $this->source === self::SOURCE_BUNDLE;
     }
 }

@@ -465,6 +465,7 @@ class ApiCheckoutController extends Controller
                 'amount' => $amount,
                 'position' => 0,
             ]);
+            app(\App\Services\ProductBundleService::class)->snapshotIncludedProducts($order);
         }
 
         $session->update(['order_id' => $order->id]);

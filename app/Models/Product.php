@@ -846,6 +846,21 @@ class Product extends Model
         return $this->hasMany(ProductOrderBump::class)->orderBy('position');
     }
 
+    public function bundleItems(): HasMany
+    {
+        return $this->hasMany(ProductBundleItem::class, 'parent_product_id')->orderBy('position');
+    }
+
+    public function bundledProducts(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            self::class,
+            'product_bundle_items',
+            'parent_product_id',
+            'included_product_id'
+        )->withPivot('position')->orderBy('product_bundle_items.position');
+    }
+
     public function coproducers(): HasMany
     {
         return $this->hasMany(ProductCoproducer::class);

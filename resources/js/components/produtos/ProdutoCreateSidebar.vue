@@ -33,6 +33,7 @@ const props = defineProps({
             platform_card_installments_max: 12,
         }),
     },
+    bundleCandidates: { type: Array, default: () => [] },
 });
 
 const emit = defineEmits(['close', 'success']);
@@ -72,6 +73,7 @@ const form = useForm({
         enabled: false,
         max: 2,
     },
+    bundle_product_ids: [],
 });
 
 const priceNum = computed(() => parseFloat(form.price) || 0);
@@ -158,6 +160,7 @@ function submit() {
     if (form.image instanceof File) {
         fd.append('image', form.image);
     }
+    (form.bundle_product_ids || []).forEach((id) => fd.append('bundle_product_ids[]', String(id)));
     if (showCardInstallments.value && form.card_installments) {
         const enabled = form.billing_type !== 'subscription' && form.card_installments.enabled;
         fd.append('card_installments[enabled]', enabled ? '1' : '0');
@@ -438,6 +441,30 @@ function safePluginSectionHtml(html) {
                                     </select>
                                 </div>
                             </div>
+                        </div>
+                        <div v-if="form.type !== 'produto_fisico' && bundleCandidates.length" class="space-y-2">
+                            <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                                {{ t('products.edit.bundle_title', 'Entregar também') }}
+                            </label>
+                            <p class="text-xs text-zinc-500 dark:text-zinc-400">
+                                {{ t('products.edit.bundle_hint', 'O cliente paga só o preço deste produto e recebe acesso aos marcados. Este produto pode ter área de membros própria.') }}
+                            </p>
+                            <label
+                                v-for="candidate in bundleCandidates"
+                                :key="candidate.id"
+                                class="flex cursor-pointer items-start gap-2 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-700"
+                            >
+                                <input
+                                    type="checkbox"
+                                    class="mt-0.5 h-4 w-4 rounded border-zinc-300"
+                                    :value="String(candidate.id)"
+                                    v-model="form.bundle_product_ids"
+                                />
+                                <span class="text-sm text-zinc-800 dark:text-zinc-200">{{ candidate.name }}</span>
+                            </label>
+                            <p v-if="form.errors.bundle_product_ids" class="text-sm text-red-600 dark:text-red-400">
+                                {{ form.errors.bundle_product_ids }}
+                            </p>
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">

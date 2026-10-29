@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\RefundRequest;
 use App\Models\User;
@@ -40,7 +41,7 @@ class CustomerPanelController extends Controller
         foreach ($orders as $order) {
             if ($order->orderItems->isNotEmpty()) {
                 foreach ($order->orderItems as $line) {
-                    $items[] = $this->purchaseRowFromOrder($order, $line->product, (float) $line->amount, (int) $line->position, $resolver, $user);
+                    $items[] = $this->purchaseRowFromOrder($order, $line->product, (float) $line->amount, (int) $line->position, $resolver, $user, $line);
                 }
             } else {
                 $items[] = $this->purchaseRowFromOrder($order, $order->product, (float) $order->amount, 0, $resolver, $user);
@@ -112,10 +113,13 @@ class CustomerPanelController extends Controller
         float $lineAmount,
         int $position,
         MemberAreaResolver $resolver,
-        User $user
+        User $user,
+        ?OrderItem $line = null,
     ): array {
         $productId = $product?->id ?? $order->product_id;
         $accessUrl = $this->productAccessUrl($product, $resolver, $user);
+        $isBundle = $line?->isBundleItem() ?? false;
+        $isBump = ! $isBundle && ($line?->source === OrderItem::SOURCE_ORDER_BUMP || $position > 0);
 
         return [
             'purchase_key' => $order->id.'-'.($productId ?? 'main').'-'.$position,
@@ -136,10 +140,11 @@ class CustomerPanelController extends Controller
             'seller_name' => $this->sellerName($product),
             'support_email' => $this->supportEmail($product),
             'shipping' => $this->shippingSummary($order, $product),
-            'refund_status' => $position === 0 ? $this->latestRefundStatus($order) : null,
-            'is_order_bump' => $position > 0,
+            'refund_status' => $position === 0 && ! $isBundle ? $this->latestRefundStatus($order) : null,
+            'is_order_bump' => $isBump,
+            'is_bundle_item' => $isBundle,
             'is_manual_grant' => false,
-            'can_request_refund' => $position === 0 && RefundEligibility::canCustomerRequestRefund($order),
+            'can_request_refund' => $position === 0 && ! $isBundle && RefundEligibility::canCustomerRequestRefund($order),
             'is_renewal' => (bool) $order->is_renewal,
             'billing_type' => $product?->billing_type,
             'sale_origin' => $order->sale_origin ?: (is_array($order->metadata) ? ($order->metadata['sale_origin'] ?? null) : null),
@@ -178,6 +183,7 @@ class CustomerPanelController extends Controller
             'shipping' => null,
             'refund_status' => null,
             'is_order_bump' => false,
+            'is_bundle_item' => false,
             'is_manual_grant' => true,
             'can_request_refund' => false,
             'is_renewal' => false,
@@ -199,7 +205,7 @@ class CustomerPanelController extends Controller
     {
         $collapsibleIds = [];
         foreach ($items as $item) {
-            if (! empty($item['is_order_bump']) || ! empty($item['is_manual_grant'])) {
+            if (! empty($item['is_order_bump']) || ! empty($item['is_bundle_item']) || ! empty($item['is_manual_grant'])) {
                 continue;
             }
             $productId = $item['product_id'] ?? null;
