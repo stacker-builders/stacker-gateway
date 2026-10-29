@@ -546,6 +546,7 @@ class UpsellController extends Controller
                 'amount' => $amount,
                 'position' => 0,
             ]);
+            app(\App\Services\ProductBundleService::class)->snapshotIncludedProducts($newOrder);
 
             if ($firstRedirectUrl !== null) {
                 continue;

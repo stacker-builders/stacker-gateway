@@ -195,6 +195,7 @@ const form = useForm({
         : 7,
     shipping_store_id: props.produto.shipping_store_id ?? null,
     physical_free_shipping: Boolean(props.produto.physical_config?.free_shipping),
+    bundle_product_ids: [...(props.produto.bundle_product_ids ?? [])].map(String),
 });
 
 watch(
@@ -415,6 +416,16 @@ function durationPresetLabel(p) {
 const priceNum = computed(() => parseFloat(form.price) || 0);
 const priceEur = computed(() => (priceNum.value * (props.exchange_rates.brl_eur ?? 0.16)).toFixed(2));
 const priceUsd = computed(() => (priceNum.value * (props.exchange_rates.brl_usd ?? 0.18)).toFixed(2));
+const bundleCandidates = computed(() => props.produto.bundle_candidates ?? []);
+function toggleBundleProduct(id) {
+    const key = String(id);
+    const current = form.bundle_product_ids || [];
+    if (current.includes(key)) {
+        form.bundle_product_ids = current.filter((item) => item !== key);
+        return;
+    }
+    form.bundle_product_ids = [...current, key];
+}
 const platformMinCharge = computed(() => Number(page.props.platform_minimum_charge_brl ?? 0));
 const platformMinChargeLabel = computed(() =>
     platformMinCharge.value > 0
@@ -1218,6 +1229,7 @@ function sendsEmailTemplateFields() {
 function syncFormFromProduto() {
     form.price = formatPriceForInput(props.produto.price_brl ?? props.produto.price);
     form.image = null;
+    form.bundle_product_ids = [...(props.produto.bundle_product_ids ?? [])].map(String);
 }
 
 const submitOptions = {
@@ -1248,6 +1260,12 @@ function appendCoreProductFields(fd) {
         fd.append('refund_policy_days', String(form.refund_policy_days ?? 7));
     } else {
         fd.append('refund_policy_days', '');
+    }
+    const bundleIds = form.bundle_product_ids || [];
+    if (bundleIds.length === 0) {
+        fd.append('bundle_product_ids', '');
+    } else {
+        bundleIds.forEach((id) => fd.append('bundle_product_ids[]', String(id)));
     }
 }
 
@@ -2018,6 +2036,41 @@ function submit() {
                         </div>
                         <p v-if="form.errors.payment_methods_enabled" class="text-sm text-red-600 dark:text-red-400">
                             {{ form.errors.payment_methods_enabled }}
+                        </p>
+                    </div>
+                </section>
+
+                <section
+                    v-if="form.type !== 'produto_fisico'"
+                    class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-700/80 dark:bg-zinc-800/95"
+                >
+                    <div class="border-b border-zinc-200/80 bg-zinc-50/80 px-6 py-4 dark:border-zinc-700/80 dark:bg-zinc-800/50">
+                        <h2 class="text-base font-semibold text-zinc-900 dark:text-white">
+                            {{ t('products.edit.bundle_title', 'Entregar também') }}
+                        </h2>
+                        <p class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
+                            {{ t('products.edit.bundle_hint', 'O cliente paga só o preço deste produto e recebe acesso aos marcados. Este produto pode ter área de membros própria.') }}
+                        </p>
+                    </div>
+                    <div class="p-6 space-y-3">
+                        <p v-if="!bundleCandidates.length" class="text-sm text-zinc-500 dark:text-zinc-400">
+                            {{ t('products.edit.bundle_empty', 'Crie outro produto digital (área de membros ou link) para incluí-lo aqui. Combos não entram dentro de combos.') }}
+                        </p>
+                        <label
+                            v-for="candidate in bundleCandidates"
+                            :key="candidate.id"
+                            class="flex cursor-pointer items-start gap-3 rounded-xl border border-zinc-200 px-3 py-2.5 dark:border-zinc-700"
+                        >
+                            <input
+                                type="checkbox"
+                                class="mt-1 h-4 w-4 rounded border-zinc-300"
+                                :checked="(form.bundle_product_ids || []).includes(String(candidate.id))"
+                                @change="toggleBundleProduct(candidate.id)"
+                            />
+                            <span class="text-sm text-zinc-800 dark:text-zinc-200">{{ candidate.name }}</span>
+                        </label>
+                        <p v-if="form.errors.bundle_product_ids" class="text-sm text-red-600 dark:text-red-400">
+                            {{ form.errors.bundle_product_ids }}
                         </p>
                     </div>
                 </section>

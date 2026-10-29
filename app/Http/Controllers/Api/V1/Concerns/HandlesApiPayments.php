@@ -222,6 +222,7 @@ trait HandlesApiPayments
                 'amount' => $orderAmount,
                 'position' => 0,
             ]);
+            app(\App\Services\ProductBundleService::class)->snapshotIncludedProducts($order);
         }
 
         $gatewayConfig = $app->payment_gateways ?? ApiApplication::defaultPaymentGateways();

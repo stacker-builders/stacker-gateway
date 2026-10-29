@@ -322,7 +322,11 @@ class Order extends Model
 
         $messages = [];
         foreach ($items as $item) {
-            $isBump = (int) ($item->position ?? 0) > 0;
+            if ($item->isBundleItem()) {
+                continue;
+            }
+            $isBump = $item->source === OrderItem::SOURCE_ORDER_BUMP
+                || ((int) ($item->position ?? 0) > 0 && $item->source !== OrderItem::SOURCE_BUNDLE);
             $eventKey = $isBump
                 ? 'sale_'.$this->id.'_bump_'.$item->id
                 : 'sale_'.$this->id;
@@ -608,11 +612,12 @@ class Order extends Model
     }
 
     /**
-     * Attach buyer to main product and order bump products (same rules as public checkout after payment).
+     * Attach buyer to main product, order bumps and included combo products (same rules as public checkout after payment).
+     * syncWithoutDetaching: se o cliente já tinha o incluso por outra compra, só ganha o que faltava.
      */
     public function grantPurchasedProductAccessToBuyer(): void
     {
-        $this->loadMissing('orderItems.product', 'product');
+        $this->load(['orderItems.product', 'product']);
         if ($this->product && $this->product->type !== Product::TYPE_PRODUTO_FISICO) {
             $this->product->users()->syncWithoutDetaching([$this->user_id]);
         }
@@ -639,14 +644,14 @@ class Order extends Model
             return;
         }
 
-        $this->loadMissing('orderItems.product', 'product');
+        $this->load(['orderItems.product', 'product']);
         $productIds = [];
         if ($this->product && $this->product->type !== Product::TYPE_PRODUTO_FISICO) {
-            $productIds[] = (int) $this->product->id;
+            $productIds[] = (string) $this->product->id;
         }
         foreach ($this->orderItems as $item) {
             if ($item->product && $item->product->type !== Product::TYPE_PRODUTO_FISICO) {
-                $productIds[] = (int) $item->product_id;
+                $productIds[] = (string) $item->product_id;
             }
         }
         $productIds = array_values(array_unique(array_filter($productIds)));
@@ -690,8 +695,10 @@ class Order extends Model
         }
     }
 
-    private function buyerStillHasActivePurchaseForProduct(int $productId): bool
+    private function buyerStillHasActivePurchaseForProduct(string|int $productId): bool
     {
+        $productId = (string) $productId;
+
         return self::query()
             ->where('user_id', $this->user_id)
             ->where('id', '!=', $this->id)

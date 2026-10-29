@@ -24,6 +24,7 @@ use App\Services\MemberAccessGrantService;
 use App\Services\MinimumChargeService;
 use App\Services\PaymentService;
 use App\Services\PhysicalProductAccess;
+use App\Services\ProductBundleService;
 use App\Services\PlatformCardInstallments;
 use App\Services\ProductApprovalService;
 use App\Services\SellerActivityLogService;
@@ -146,6 +147,7 @@ class ProdutosController extends Controller
             'plugin_card_actions' => [],
             'plugin_form_sections' => [],
             'checkout_gateway_ui' => $this->checkoutGatewayUiForTenant($tenantId),
+            'bundle_candidates' => app(ProductBundleService::class)->candidatesPayload((int) $tenantId),
         ]);
         event(new ProductIndexLoading($data));
         $payload = $data->getArrayCopy();
@@ -188,6 +190,8 @@ class ProdutosController extends Controller
 
     public function store(Request $request)
     {
+        $this->normalizeBundleProductIdsInput($request);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'notification_name' => ['nullable', 'string', 'max:80'],
@@ -205,6 +209,8 @@ class ProdutosController extends Controller
             'card_installments' => ['nullable', 'array'],
             'card_installments.enabled' => ['nullable', 'boolean'],
             'card_installments.max' => ['nullable', 'integer', 'min:1', 'max:12'],
+            'bundle_product_ids' => ['sometimes', 'array', 'max:'.ProductBundleService::MAX_INCLUDED],
+            'bundle_product_ids.*' => ['nullable', 'string', 'max:36'],
         ]);
 
         // Texto puro (evita XSS armazenado em nome/descrição)
@@ -261,10 +267,15 @@ class ProdutosController extends Controller
         unset($validated['deliverable_link']);
         $cardInstallmentsInput = $validated['card_installments'] ?? null;
         unset($validated['card_installments']);
+        $bundleIds = $request->exists('bundle_product_ids') ? array_values($validated['bundle_product_ids'] ?? []) : null;
+        unset($validated['bundle_product_ids']);
+        if (($validated['type'] ?? '') === Product::TYPE_PRODUTO_FISICO) {
+            $bundleIds = [];
+        }
 
         try {
-            $product = DB::transaction(function () use ($request, $validated, $deliverableLink, $cardInstallmentsInput) {
-                $product = Product::create($validated);
+            $product = DB::transaction(function () use ($request, $validated, $deliverableLink, $cardInstallmentsInput, $bundleIds) {
+                $product = $this->createProductRecord($validated);
 
                 if ($request->has('deliverable_link')) {
                     $config = $product->checkout_config ?? [];
@@ -279,8 +290,14 @@ class ProdutosController extends Controller
                     $product->update(['image' => $path]);
                 }
 
+                if ($bundleIds !== null) {
+                    app(ProductBundleService::class)->syncIncluded($product, $bundleIds);
+                }
+
                 return $product;
             });
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['bundle_product_ids' => $e->getMessage()])->with('error', $e->getMessage())->withInput();
         } catch (\RuntimeException $e) {
             return back()
                 ->withErrors(['image' => $e->getMessage()])
@@ -290,8 +307,8 @@ class ProdutosController extends Controller
             if ($this->isDuplicateProductSlugException($e)) {
                 $validated['slug'] = Product::uniqueSlugForTenant($tenantId, $baseSlug !== '' ? $baseSlug : 'produto');
                 try {
-                    $product = DB::transaction(function () use ($request, $validated, $deliverableLink, $cardInstallmentsInput) {
-                        $product = Product::create($validated);
+                    $product = DB::transaction(function () use ($request, $validated, $deliverableLink, $cardInstallmentsInput, $bundleIds) {
+                        $product = $this->createProductRecord($validated);
 
                         if ($request->has('deliverable_link')) {
                             $config = $product->checkout_config ?? [];
@@ -304,6 +321,10 @@ class ProdutosController extends Controller
                         if ($request->hasFile('image')) {
                             $path = app(StorageService::class)->putFile('products', $request->file('image'));
                             $product->update(['image' => $path]);
+                        }
+
+                        if ($bundleIds !== null) {
+                            app(ProductBundleService::class)->syncIncluded($product, $bundleIds);
                         }
 
                         return $product;
@@ -463,6 +484,10 @@ class ProdutosController extends Controller
             ])
             ->values()->all();
         $produtoArray['products_for_upsell'] = $productsForUpsell;
+
+        $bundle = app(ProductBundleService::class);
+        $produtoArray['bundle_product_ids'] = $bundle->includedProductIds($produto);
+        $produtoArray['bundle_candidates'] = $bundle->candidatesPayload((int) $tenantId, (string) $produto->id);
 
         $checkoutGatewayUi = $this->checkoutGatewayUiForTenant($tenantId);
         $paymentService = app(PaymentService::class);
@@ -657,6 +682,7 @@ class ProdutosController extends Controller
             $decoded = json_decode($request->conversion_pixels, true);
             $request->merge(['conversion_pixels' => is_array($decoded) ? $decoded : null]);
         }
+        $this->normalizeBundleProductIdsInput($request);
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -732,6 +758,8 @@ class ProdutosController extends Controller
             'refund_policy_days' => ['nullable', 'integer', 'in:7,14,30'],
             'shipping_store_id' => ['nullable', 'integer', 'exists:shipping_stores,id'],
             'physical_free_shipping' => ['nullable', 'boolean'],
+            'bundle_product_ids' => ['sometimes', 'array', 'max:'.ProductBundleService::MAX_INCLUDED],
+            'bundle_product_ids.*' => ['nullable', 'string', 'max:36'],
         ]);
 
         $this->assertPhysicalProductRules($validated['type'] ?? '', $validated['billing_type'] ?? '');
@@ -817,6 +845,11 @@ class ProdutosController extends Controller
         $physicalFreeShipping = $request->boolean('physical_free_shipping');
         $shippingStoreId = $validated['shipping_store_id'] ?? null;
         unset($validated['physical_free_shipping'], $validated['shipping_store_id']);
+        $bundleIds = $request->exists('bundle_product_ids') ? array_values($validated['bundle_product_ids'] ?? []) : null;
+        unset($validated['bundle_product_ids']);
+        if (($validated['type'] ?? $produto->type) === Product::TYPE_PRODUTO_FISICO) {
+            $bundleIds = [];
+        }
 
         // Slug é gerado na criação e permanece estável (identificador interno).
         unset($validated['slug']);
@@ -861,7 +894,8 @@ class ProdutosController extends Controller
                 $deliverableLink,
                 $emailTemplate,
                 $paymentMethodsPm,
-                $oldImage
+                $oldImage,
+                $bundleIds
             ) {
                 $produto->update($validated);
 
@@ -950,7 +984,13 @@ class ProdutosController extends Controller
                     $path = $storage->putFile('products', $request->file('image'));
                     $produto->update(['image' => $path]);
                 }
+
+                if ($bundleIds !== null) {
+                    app(ProductBundleService::class)->syncIncluded($produto, $bundleIds);
+                }
             });
+        } catch (InvalidArgumentException $e) {
+            return back()->withErrors(['bundle_product_ids' => $e->getMessage()])->with('error', $e->getMessage())->withInput();
         } catch (\RuntimeException $e) {
             return back()
                 ->withErrors(['image' => $e->getMessage()])
@@ -1686,6 +1726,60 @@ class ProdutosController extends Controller
         ]);
 
         return redirect()->to(route('produtos.edit', $produto).'?tab=checkout')->with('success', 'Checkout exclusivo do plano removido; ele passará a usar o checkout principal.');
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function createProductRecord(array $validated): Product
+    {
+        $product = Product::create($validated);
+        if ($product->getKey() !== null && $product->getKey() !== '') {
+            return $product;
+        }
+
+        try {
+            $insertedId = $product->getConnection()->getPdo()->lastInsertId();
+            if ($insertedId !== false && $insertedId !== null && (string) $insertedId !== '') {
+                $product->setAttribute($product->getKeyName(), (string) $insertedId);
+                $product->exists = true;
+
+                return $product;
+            }
+        } catch (\Throwable) {
+            // fallback abaixo
+        }
+
+        return Product::query()
+            ->where('tenant_id', $product->tenant_id)
+            ->where('slug', $product->slug)
+            ->orderByDesc('id')
+            ->first() ?? $product;
+    }
+
+    private function normalizeBundleProductIdsInput(Request $request): void
+    {
+        if (! $request->exists('bundle_product_ids')) {
+            return;
+        }
+
+        $raw = $request->input('bundle_product_ids');
+        if (! is_array($raw)) {
+            $raw = $raw === null || $raw === '' ? [] : [$raw];
+        }
+
+        $ids = [];
+        foreach ($raw as $id) {
+            if (! is_scalar($id)) {
+                continue;
+            }
+            $id = trim((string) $id);
+            if ($id !== '') {
+                $ids[] = $id;
+            }
+        }
+
+        $request->merge(['bundle_product_ids' => array_values(array_unique($ids))]);
     }
 
     /**
