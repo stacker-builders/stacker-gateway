@@ -67,6 +67,9 @@ class DemoMode
             'demo.login.admin',
             'demo.login.seller',
             'mcp.handle',
+            'mcp.oauth.register',
+            'mcp.oauth.token',
+            'mcp.oauth.approve',
         ];
     }
 

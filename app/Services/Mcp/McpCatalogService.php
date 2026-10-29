@@ -312,7 +312,7 @@ class McpCatalogService
         return [
             'ok' => true,
             'tenant_id' => $tenantId,
-            'message' => 'MCP autenticado. Catálogo e leitura de vendas (sales.summary / sales.list_orders) estão disponíveis. Escritas com risco exigem catalog.preview_plan e catalog.apply_plan. Reembolso e saque não existem neste servidor.',
+            'message' => 'MCP autenticado. Catálogo, área de membros, alunos, leitura de vendas e saldo disponível estão neste servidor. Escritas de catálogo com risco exigem catalog.preview_plan e catalog.apply_plan. Exclusão, revogação e e-mail de acesso exigem members.apply_plan. Reembolso, cobrança e saque não existem neste servidor.',
         ];
     }
 

@@ -3,9 +3,13 @@
 namespace App\Http\Controllers\Mcp;
 
 use App\Http\Controllers\Controller;
+use App\Models\McpCredential;
 use App\Services\Mcp\McpCatalogException;
 use App\Services\Mcp\McpCatalogService;
 use App\Services\Mcp\McpCredentialService;
+use App\Services\Mcp\McpFinanceService;
+use App\Services\Mcp\McpMembersService;
+use App\Services\Mcp\McpOauthService;
 use App\Services\Mcp\McpSalesService;
 use App\Services\SellerIntegrationVisibility;
 use Illuminate\Http\JsonResponse;
@@ -27,8 +31,11 @@ class McpServerController extends Controller
 
     public function __construct(
         private readonly McpCredentialService $credentials,
+        private readonly McpOauthService $oauth,
         private readonly McpCatalogService $catalog,
         private readonly McpSalesService $sales,
+        private readonly McpMembersService $members,
+        private readonly McpFinanceService $finance,
     ) {}
 
     public function handle(Request $request): JsonResponse|Response
@@ -37,34 +44,28 @@ class McpServerController extends Controller
             return $this->withCors(response('', HttpResponse::HTTP_NO_CONTENT));
         }
 
+        $plain = $this->extractToken($request);
+        if ($plain === null) {
+            return $this->unauthorized('Token MCP ausente.');
+        }
+
         if (! $request->isMethod('POST')) {
             return $this->withCors(response()->json([
                 'error' => 'Use POST com JSON-RPC neste endpoint MCP.',
             ], HttpResponse::HTTP_METHOD_NOT_ALLOWED));
         }
 
-        $plain = $this->extractToken($request);
-        if ($plain === null) {
-            return $this->withCors(response()->json([
-                'error' => 'Token MCP ausente.',
-            ], HttpResponse::HTTP_UNAUTHORIZED));
+        $tenantId = $this->resolveTenantId($plain);
+        if ($tenantId === null) {
+            return $this->unauthorized('Token MCP inválido ou revogado.');
         }
 
-        $credential = $this->credentials->findActiveByPlainToken($plain);
-        if ($credential === null) {
-            return $this->withCors(response()->json([
-                'error' => 'Token MCP inválido ou revogado.',
-            ], HttpResponse::HTTP_UNAUTHORIZED));
-        }
-
-        $tenantId = (int) $credential->tenant_id;
         if (! SellerIntegrationVisibility::effectiveForTenant(SellerIntegrationVisibility::MCP, $tenantId)) {
             return $this->withCors(response()->json([
                 'error' => 'MCP não está habilitado para esta conta.',
             ], HttpResponse::HTTP_FORBIDDEN));
         }
 
-        $credential->touchLastUsed();
         $this->tenantId = $tenantId;
 
         $payload = $request->json()->all();
@@ -149,9 +150,9 @@ class McpServerController extends Controller
             ],
             'serverInfo' => [
                 'name' => 'getfy-catalog',
-                'version' => '0.3.0',
+                'version' => '0.4.0',
             ],
-            'instructions' => 'Servidor MCP deste tenant. Catálogo: catalog.list_products e catalog.get_product; escritas passam por catalog.preview_plan + catalog.apply_plan. Relatórios: sales.summary, sales.list_orders e sales.get_order (somente leitura, sem CPF/telefone/e-mail/IP). Não há tools de reembolso, cobrança, saque, pixel ou checkout_config bruto.',
+            'instructions' => 'Servidor MCP deste tenant. Catálogo: catalog.list_products e catalog.get_product; escritas de catálogo passam por catalog.preview_plan + catalog.apply_plan. Área de membros: members.get_structure, CRUD de seções/módulos/aulas, turmas, comentários e config (sem domínio/senha/VAPID); exclusões e revogação usam members.apply_plan. Alunos: students.list, students.grant, students.revoke, students.get_progress. Vendas: sales.summary, sales.list_orders e sales.get_order (somente leitura, sem CPF/telefone/e-mail/IP). Saldo: finance.get_balance (somente leitura). Não há tools de reembolso, cobrança, saque, pixel, importação em massa, push ou checkout_config bruto.',
         ];
     }
 
@@ -160,7 +161,12 @@ class McpServerController extends Controller
      */
     private function tools(): array
     {
-        return array_merge($this->catalog->toolDefinitions(), $this->sales->toolDefinitions());
+        return array_merge(
+            $this->catalog->toolDefinitions(),
+            $this->sales->toolDefinitions(),
+            $this->members->toolDefinitions(),
+            $this->finance->toolDefinitions(),
+        );
     }
 
     /**
@@ -181,9 +187,12 @@ class McpServerController extends Controller
         }
 
         try {
-            $payload = str_starts_with($name, 'sales.')
-                ? $this->sales->call($name, $arguments, $tenantId)
-                : $this->catalog->call($name, $arguments, $tenantId);
+            $payload = match (true) {
+                str_starts_with($name, 'sales.') => $this->sales->call($name, $arguments, $tenantId),
+                str_starts_with($name, 'members.') || str_starts_with($name, 'students.') => $this->members->call($name, $arguments, $tenantId),
+                str_starts_with($name, 'finance.') => $this->finance->call($name, $arguments, $tenantId),
+                default => $this->catalog->call($name, $arguments, $tenantId),
+            };
         } catch (McpCatalogException $e) {
             return $this->toolResult($id, $e->toPayload(), isError: true);
         } catch (\Throwable $e) {
@@ -192,7 +201,7 @@ class McpServerController extends Controller
             return $this->toolResult($id, [
                 'error' => true,
                 'code' => 'internal',
-                'message' => 'Falha ao executar a ferramenta de catálogo.',
+                'message' => 'Falha ao executar a ferramenta MCP.',
             ], isError: true);
         }
 
@@ -230,6 +239,35 @@ class McpServerController extends Controller
         $header = trim((string) $request->header('X-MCP-Token', ''));
 
         return $header !== '' ? $header : null;
+    }
+
+    private function resolveTenantId(string $plain): ?int
+    {
+        if (str_starts_with($plain, McpCredential::TOKEN_PREFIX)) {
+            $credential = $this->credentials->findActiveByPlainToken($plain);
+            if ($credential === null) {
+                return null;
+            }
+            $credential->touchLastUsed();
+
+            return (int) $credential->tenant_id;
+        }
+
+        $oauthToken = $this->oauth->findActiveAccessToken($plain);
+        if ($oauthToken === null) {
+            return null;
+        }
+        $oauthToken->touchLastUsed();
+
+        return (int) $oauthToken->tenant_id;
+    }
+
+    private function unauthorized(string $message): JsonResponse
+    {
+        return $this->withCors(
+            response()->json(['error' => $message], HttpResponse::HTTP_UNAUTHORIZED)
+                ->header('WWW-Authenticate', $this->oauth->wwwAuthenticate())
+        );
     }
 
     /**
@@ -278,7 +316,8 @@ class McpServerController extends Controller
         return $response
             ->header('Access-Control-Allow-Origin', '*')
             ->header('Access-Control-Allow-Headers', 'Authorization, Content-Type, MCP-Protocol-Version, X-MCP-Token')
-            ->header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+            ->header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+            ->header('Access-Control-Expose-Headers', 'WWW-Authenticate')
             ->header('Access-Control-Max-Age', '86400');
     }
 }

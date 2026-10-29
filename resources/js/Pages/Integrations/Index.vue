@@ -56,7 +56,7 @@ const APPS_BASE = [
     {
         id: 'mcp',
         name: 'MCP',
-        description: t('integrations.mcp.description', 'Conecte Claude, ChatGPT ou outro cliente MCP para montar produtos, cupons e funis.'),
+        description: t('integrations.mcp.description', 'Conecte Claude, ChatGPT ou outro cliente MCP para montar produtos, funis, área de membros e alunos desta conta.'),
         image: 'images/integrations/mcp.svg',
     },
 ];
