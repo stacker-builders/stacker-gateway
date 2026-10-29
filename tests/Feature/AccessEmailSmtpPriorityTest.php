@@ -239,6 +239,7 @@ class AccessEmailSmtpPriorityTest extends TestCase
             'email_provider', 'mail_from_address', 'mail_from_name',
             'hostinger_smtp_username', 'hostinger_mail_from_address',
             'sendgrid_api_key', 'sendgrid_mail_from_address',
+            'resend_api_key', 'resend_mail_from_address',
         ] as $key) {
             Setting::set($key, '', null);
         }

@@ -231,6 +231,9 @@ const form = useForm({
     sendgrid_api_key: '', // never pre-fill API key
     sendgrid_mail_from_address: props.settings.sendgrid_mail_from_address ?? '',
     sendgrid_mail_from_name: props.settings.sendgrid_mail_from_name ?? '',
+    resend_api_key: '', // never pre-fill API key
+    resend_mail_from_address: props.settings.resend_mail_from_address ?? '',
+    resend_mail_from_name: props.settings.resend_mail_from_name ?? '',
     kyc_notification_emails: props.settings.kyc_notification_emails ?? '',
     checkout_translations: defaultTranslations(),
     currencies: defaultCurrencies(),
@@ -681,6 +684,12 @@ const providers = [
         logo: '/images/integrations/twillio-sendgrid.jpg',
         description: 'Envio via API Key SendGrid',
     },
+    {
+        id: 'resend',
+        title: 'Resend',
+        logo: '/images/integrations/resend.svg',
+        description: 'Envio via API Key Resend',
+    },
 ];
 
 const page = usePage();
@@ -691,7 +700,7 @@ const selectedProvider = ref(null);
 const activeEmailProvider = computed({
     get: () => {
         const v = form.email_provider;
-        return v === 'hostinger' || v === 'sendgrid' || v === 'smtp' ? v : 'smtp';
+        return v === 'hostinger' || v === 'sendgrid' || v === 'resend' || v === 'smtp' ? v : 'smtp';
     },
     set: (id) => {
         form.email_provider = id;
@@ -704,7 +713,7 @@ function applyEmailPublicFieldsFromSettings(s) {
     }
     const provider = s.email_provider;
     form.email_provider =
-        provider === 'hostinger' || provider === 'sendgrid' || provider === 'smtp' ? provider : 'smtp';
+        provider === 'hostinger' || provider === 'sendgrid' || provider === 'resend' || provider === 'smtp' ? provider : 'smtp';
     form.smtp_host = s.smtp_host ?? '';
     form.smtp_port = s.smtp_port ?? '587';
     form.smtp_username = s.smtp_username ?? '';
@@ -718,6 +727,8 @@ function applyEmailPublicFieldsFromSettings(s) {
     form.hostinger_reply_to = s.hostinger_reply_to ?? '';
     form.sendgrid_mail_from_address = s.sendgrid_mail_from_address ?? '';
     form.sendgrid_mail_from_name = s.sendgrid_mail_from_name ?? '';
+    form.resend_mail_from_address = s.resend_mail_from_address ?? '';
+    form.resend_mail_from_name = s.resend_mail_from_name ?? '';
     form.kyc_notification_emails = s.kyc_notification_emails ?? '';
 }
 
@@ -908,6 +919,10 @@ function buildEmailSettingsPayload() {
         payload.sendgrid_api_key = form.sendgrid_api_key ?? '';
         payload.sendgrid_mail_from_address = form.sendgrid_mail_from_address ?? '';
         payload.sendgrid_mail_from_name = form.sendgrid_mail_from_name ?? '';
+    } else if (provider === 'resend') {
+        payload.resend_api_key = form.resend_api_key ?? '';
+        payload.resend_mail_from_address = form.resend_mail_from_address ?? '';
+        payload.resend_mail_from_name = form.resend_mail_from_name ?? '';
     } else {
         payload.smtp_host = form.smtp_host ?? '';
         payload.smtp_port = form.smtp_port ?? '587';
@@ -930,6 +945,7 @@ function payloadTouchesEmailSettings(payload) {
         'hostinger_smtp_password', 'hostinger_smtp_username', 'hostinger_mail_from_address',
         'hostinger_mail_from_name', 'hostinger_reply_to',
         'sendgrid_api_key', 'sendgrid_mail_from_address', 'sendgrid_mail_from_name',
+        'resend_api_key', 'resend_mail_from_address', 'resend_mail_from_name',
         'kyc_notification_emails',
     ];
     return keys.some((k) => Object.prototype.hasOwnProperty.call(payload, k));
@@ -1037,6 +1053,9 @@ function isProviderConfigured(providerId) {
     }
     if (providerId === 'sendgrid') {
         return !!form.sendgrid_mail_from_address;
+    }
+    if (providerId === 'resend') {
+        return !!form.resend_mail_from_address;
     }
     return false;
 }
@@ -1155,7 +1174,7 @@ const selectClass =
                         <p class="mb-5 text-sm text-zinc-600 dark:text-zinc-400">
                             Escolha o provedor de e-mail para envio de acessos, notificações e recuperação de senha.
                         </p>
-                        <div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                             <IntegrationCard
                                 v-for="prov in providers"
                                 :key="prov.id"

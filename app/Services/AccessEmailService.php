@@ -433,7 +433,7 @@ class AccessEmailService
 
         $fromAddress = $smtpFromAddress;
         if ($fromAddress === '' || ! filter_var($fromAddress, FILTER_VALIDATE_EMAIL)) {
-            foreach (['sendgrid_mail_from_address', 'mail_from_address', 'hostinger_mail_from_address'] as $key) {
+            foreach (['sendgrid_mail_from_address', 'resend_mail_from_address', 'mail_from_address', 'hostinger_mail_from_address'] as $key) {
                 $v = trim((string) Setting::get($key, '', $tenantSmtpScope));
                 if ($v !== '' && filter_var($v, FILTER_VALIDATE_EMAIL)) {
                     $fromAddress = $v;

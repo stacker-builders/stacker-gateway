@@ -69,6 +69,53 @@ class EmailSettingsTest extends TestCase
         $this->assertSame('old@meudominio.com', Setting::get('hostinger_smtp_username', '', null));
     }
 
+    public function test_platform_settings_persist_resend_email_provider(): void
+    {
+        $user = User::factory()->create(['role' => User::ROLE_ADMIN]);
+
+        Setting::set('email_provider', 'smtp', null);
+
+        $response = $this->actingAs($user)->put('/plataforma/configuracoes', [
+            'email_provider' => 'resend',
+            'resend_api_key' => 're_test_key',
+            'resend_mail_from_address' => 'ola@meudominio.com',
+            'resend_mail_from_name' => 'Minha Loja',
+            'kyc_notification_emails' => '',
+        ]);
+
+        $response->assertRedirect();
+        $this->assertSame('resend', Setting::get('email_provider', 'smtp', null));
+        $this->assertSame('ola@meudominio.com', Setting::get('resend_mail_from_address', '', null));
+        $this->assertSame('Minha Loja', Setting::get('resend_mail_from_name', '', null));
+        $this->assertSame('re_test_key', decrypt(Setting::get('resend_api_key', '', null)));
+
+        $page = $this->actingAs($user)->get('/plataforma/configuracoes?tab=email');
+        $page->assertOk();
+        $page->assertInertia(fn ($assert) => $assert
+            ->component('Settings/Index')
+            ->where('settings.email_provider', 'resend')
+            ->where('settings.resend_mail_from_address', 'ola@meudominio.com')
+            ->missing('settings.resend_api_key'));
+    }
+
+    public function test_resend_provider_applies_smtp_resend_host(): void
+    {
+        Setting::set('email_provider', 'resend', null);
+        Setting::set('resend_api_key', encrypt('re_test_key'), null);
+        Setting::set('resend_mail_from_address', 'hello@meudominio.com', null);
+        Setting::set('resend_mail_from_name', 'Loja', null);
+
+        app(\App\Services\TenantMailConfigService::class)->applyPlatformGlobalMailerConfig();
+
+        $this->assertSame('smtp.resend.com', config('mail.mailers.smtp.host'));
+        $this->assertSame(587, (int) config('mail.mailers.smtp.port'));
+        $this->assertSame('tls', config('mail.mailers.smtp.encryption'));
+        $this->assertSame('resend', config('mail.mailers.smtp.username'));
+        $this->assertSame('re_test_key', config('mail.mailers.smtp.password'));
+        $this->assertSame('hello@meudominio.com', config('mail.from.address'));
+        $this->assertSame('Loja', config('mail.from.name'));
+    }
+
     public function test_platform_email_settings_require_totp_when_enabled(): void
     {
         $user = User::factory()->create(['role' => User::ROLE_ADMIN]);
