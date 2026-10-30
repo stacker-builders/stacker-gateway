@@ -27,5 +27,9 @@ class SecurityHeadersMemberVideoEmbedTest extends TestCase
 
         $this->assertStringContainsString('https://www.loom.com', $csp);
         $this->assertStringContainsString('https://*.loom.com', $csp);
+
+        $this->assertStringContainsString('https://player.mediadelivery.net', $csp);
+        $this->assertStringContainsString('https://iframe.mediadelivery.net', $csp);
+        $this->assertStringContainsString('https://*.mediadelivery.net', $csp);
     }
 }

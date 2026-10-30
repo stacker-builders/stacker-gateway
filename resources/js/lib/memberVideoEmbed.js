@@ -1,5 +1,5 @@
 /**
- * Conversão de URLs da área de membros (YouTube, Vimeo, Wistia, Loom e arquivo nativo).
+ * Conversão de URLs da área de membros (YouTube, Vimeo, Wistia, Loom, Bunny Stream e arquivo nativo).
  * A detecção do YouTube permanece igual à original para não alterar o player legado.
  */
 
@@ -87,8 +87,47 @@ export function parseLoomId(url) {
 }
 
 /**
+ * Bunny Stream: player.mediadelivery.net e iframe.mediadelivery.net (player legado).
  * @param {string} url
- * @returns {'youtube'|'vimeo'|'wistia'|'loom'|'native'}
+ * @returns {{ host: string, libraryId: string, videoId: string, search: string }|null}
+ */
+export function parseBunnyStream(url) {
+    const u = trimUrl(url);
+    if (!u) return null;
+
+    let parsed;
+    try {
+        parsed = new URL(u.includes('://') ? u : `https://${u}`);
+    } catch (_) {
+        return null;
+    }
+
+    const host = parsed.hostname.replace(/^www\./i, '').toLowerCase();
+    if (host !== 'player.mediadelivery.net' && host !== 'iframe.mediadelivery.net') {
+        return null;
+    }
+
+    const path = parsed.pathname.replace(/\/+$/, '');
+    const match = path.match(/^\/(embed|play)\/(\d+)\/([a-zA-Z0-9-]+)$/i);
+    if (!match) return null;
+
+    return {
+        host,
+        libraryId: match[2],
+        videoId: match[3],
+        search: parsed.search || '',
+    };
+}
+
+export function bunnyEmbedUrl(url) {
+    const parsed = parseBunnyStream(url);
+    if (!parsed) return null;
+    return `https://${parsed.host}/embed/${parsed.libraryId}/${parsed.videoId}${parsed.search}`;
+}
+
+/**
+ * @param {string} url
+ * @returns {'youtube'|'vimeo'|'wistia'|'loom'|'bunny'|'native'}
  */
 export function getVideoProviderType(url) {
     const u = trimUrl(url);
@@ -97,6 +136,7 @@ export function getVideoProviderType(url) {
     if (parseVimeoVideo(u)) return 'vimeo';
     if (parseWistiaId(u)) return 'wistia';
     if (parseLoomId(u)) return 'loom';
+    if (parseBunnyStream(u)) return 'bunny';
     return 'native';
 }
 
@@ -112,7 +152,7 @@ export function vimeoVidstackSrc(url) {
 }
 
 /**
- * URL de iframe para Wistia/Loom. YouTube e Vimeo não passam por aqui.
+ * URL de iframe para Wistia/Loom/Bunny Stream. YouTube e Vimeo não passam por aqui.
  * @param {string} url
  * @returns {string|null}
  */
@@ -125,7 +165,7 @@ export function iframeVideoEmbedUrl(url) {
     if (loomId) {
         return `https://www.loom.com/embed/${loomId}`;
     }
-    return null;
+    return bunnyEmbedUrl(url);
 }
 
 /**

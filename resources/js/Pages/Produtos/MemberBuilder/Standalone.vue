@@ -3959,7 +3959,7 @@ const inputClass = 'block w-full rounded-lg border border-zinc-300 bg-white px-3
                                 <label class="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">URL do conteúdo</label>
                                 <input v-model="modulosLessonForm.content_url" type="url" :class="inputClass" class="w-full" placeholder="https://..." />
                                 <p v-if="modulosLessonForm.type === 'video'" class="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-                                    Aceita links do YouTube, Vimeo, Wistia, Loom e outras plataformas de vídeo compatíveis.
+                                    Aceita links do YouTube, Vimeo, Wistia, Loom, Bunny Stream e outras plataformas de vídeo compatíveis.
                                 </p>
                             </div>
                         </div>
