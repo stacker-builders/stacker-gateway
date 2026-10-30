@@ -719,7 +719,10 @@ function isTrustedLessonEmbedOrigin(origin) {
             host === 'wistia.net' ||
             host.endsWith('.wistia.net') ||
             host === 'loom.com' ||
-            host.endsWith('.loom.com')
+            host.endsWith('.loom.com') ||
+            host === 'player.mediadelivery.net' ||
+            host === 'iframe.mediadelivery.net' ||
+            host.endsWith('.mediadelivery.net')
         );
     } catch (_) {
         return false;
