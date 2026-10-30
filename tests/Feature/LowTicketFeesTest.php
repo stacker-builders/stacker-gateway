@@ -64,6 +64,51 @@ class LowTicketFeesTest extends TestCase
         $this->assertSame(1.5, $defaults['low_ticket']['pix']['percent']);
         $this->assertSame(0.2, $defaults['low_ticket']['pix']['fixed']);
         $this->assertSame(2.0, $defaults['low_ticket']['card']['percent']);
+        $this->assertTrue($defaults['low_ticket']['max_order_amount_enabled']);
+        $this->assertTrue($defaults['low_ticket']['pix']['enabled']);
+        $this->assertTrue($defaults['low_ticket']['card']['enabled']);
+    }
+
+    public function test_platform_admin_can_save_order_cap_and_method_toggles(): void
+    {
+        $admin = User::factory()->create([
+            'role' => User::ROLE_PLATFORM_ADMIN,
+            'tenant_id' => null,
+        ]);
+
+        $this->actingAs($admin)->put(route('plataforma.financeiro.taxas.update'), [
+            'merchant_fee_rules' => [
+                'pix' => ['percent' => 5.0, 'fixed' => 1.0],
+                'api_pix' => ['percent' => 5.0, 'fixed' => 1.0],
+                'pixgo' => ['percent' => 5.0, 'fixed' => 1.0],
+                'open_finance' => ['percent' => 5.0, 'fixed' => 1.0],
+                'card' => ['percent' => 6.0, 'fixed' => 1.0],
+                'apple_pay' => ['percent' => 6.0, 'fixed' => 1.0],
+                'google_pay' => ['percent' => 6.0, 'fixed' => 1.0],
+                'boleto' => ['percent' => 5.0, 'fixed' => 1.0],
+                'withdrawal' => ['percent' => 1.0, 'fixed' => 0.0],
+            ],
+            'low_ticket_enabled' => true,
+            'low_ticket_max_amount' => 20,
+            'low_ticket_max_order_amount' => 50,
+            'low_ticket_max_order_amount_enabled' => false,
+            'low_ticket_fee_rules' => [
+                'pix' => ['percent' => 1.5, 'fixed' => 0.2, 'enabled' => true],
+                'api_pix' => ['percent' => 1.5, 'fixed' => 0.2, 'enabled' => true],
+                'card' => ['percent' => 2.0, 'fixed' => 0.3, 'enabled' => false],
+                'boleto' => ['percent' => 1.0, 'fixed' => 0.1, 'enabled' => false],
+            ],
+            'api_pix_enabled' => true,
+        ])->assertRedirect();
+
+        $defaults = EffectiveMerchantFees::platformDefaults();
+        $this->assertTrue($defaults['low_ticket']['enabled']);
+        $this->assertSame(50.0, $defaults['low_ticket']['max_order_amount']);
+        $this->assertFalse($defaults['low_ticket']['max_order_amount_enabled']);
+        $this->assertTrue($defaults['low_ticket']['pix']['enabled']);
+        $this->assertFalse($defaults['low_ticket']['card']['enabled']);
+        $this->assertFalse($defaults['low_ticket']['boleto']['enabled']);
+        $this->assertTrue($defaults['low_ticket']['apple_pay']['enabled']);
     }
 
     public function test_low_ticket_uses_product_amount_not_order_total(): void
@@ -237,8 +282,65 @@ class LowTicketFeesTest extends TestCase
         $this->assertSame(0.2, $calc['fixed']);
     }
 
-    private function seedLowTicketRules(float $maxOrderAmount = 0.0): void
+    public function test_order_cap_ignored_when_toggle_is_off(): void
     {
+        $this->seedLowTicketRules(50.0, false);
+        $seller = $this->infoprodutor();
+
+        $calc = EffectiveMerchantFees::calculateSaleFee((int) $seller->id, 'pix', 80.0, 'checkout', null, 15.0, 80.0);
+        $this->assertSame(1.5, $calc['percent']);
+        $this->assertSame(0.2, $calc['fixed']);
+        $this->assertEqualsWithDelta(1.40, $calc['fee'], 0.01);
+    }
+
+    public function test_disabled_payment_method_keeps_normal_fee(): void
+    {
+        $this->seedLowTicketRules(0.0, null, [
+            'pix' => ['percent' => 1.5, 'fixed' => 0.2, 'enabled' => true],
+            'card' => ['percent' => 2.0, 'fixed' => 0.3, 'enabled' => false],
+        ]);
+        $seller = $this->infoprodutor();
+
+        $pix = EffectiveMerchantFees::calculateSaleFee((int) $seller->id, 'pix', 15.0, 'checkout', null, 15.0, 15.0);
+        $this->assertSame(1.5, $pix['percent']);
+        $this->assertSame(0.2, $pix['fixed']);
+
+        $card = EffectiveMerchantFees::calculateSaleFee((int) $seller->id, 'card', 15.0, 'checkout', null, 15.0, 15.0);
+        $this->assertSame(6.0, $card['percent']);
+        $this->assertSame(1.0, $card['fixed']);
+    }
+
+    public function test_legacy_low_ticket_config_keeps_methods_and_order_cap_on(): void
+    {
+        $this->seedLowTicketRules(50.0);
+        $defaults = EffectiveMerchantFees::platformDefaults();
+
+        $this->assertTrue($defaults['low_ticket']['max_order_amount_enabled']);
+        $this->assertTrue($defaults['low_ticket']['pix']['enabled']);
+        $this->assertTrue($defaults['low_ticket']['card']['enabled']);
+        $this->assertTrue($defaults['low_ticket']['boleto']['enabled']);
+    }
+
+    /**
+     * @param  array<string, array{percent?: float, fixed?: float, enabled?: bool}>  $methodOverrides
+     */
+    private function seedLowTicketRules(float $maxOrderAmount = 0.0, ?bool $maxOrderAmountEnabled = null, array $methodOverrides = []): void
+    {
+        $lowTicket = [
+            'enabled' => true,
+            'max_amount' => 20.0,
+            'max_order_amount' => $maxOrderAmount,
+            'pix' => ['percent' => 1.5, 'fixed' => 0.2],
+            'api_pix' => ['percent' => 1.5, 'fixed' => 0.2],
+            'card' => ['percent' => 2.0, 'fixed' => 0.3],
+        ];
+        if ($maxOrderAmountEnabled !== null) {
+            $lowTicket['max_order_amount_enabled'] = $maxOrderAmountEnabled;
+        }
+        foreach ($methodOverrides as $key => $block) {
+            $lowTicket[$key] = array_merge($lowTicket[$key] ?? [], $block);
+        }
+
         Setting::set('merchant_fee_rules', [
             'pix' => ['percent' => 5.0, 'fixed' => 1.0],
             'api_pix' => ['percent' => 5.0, 'fixed' => 1.0],
@@ -249,14 +351,7 @@ class LowTicketFeesTest extends TestCase
             'google_pay' => ['percent' => 6.0, 'fixed' => 1.0],
             'boleto' => ['percent' => 5.0, 'fixed' => 1.0],
             'withdrawal' => ['percent' => 1.0, 'fixed' => 0.0],
-            'low_ticket' => [
-                'enabled' => true,
-                'max_amount' => 20.0,
-                'max_order_amount' => $maxOrderAmount,
-                'pix' => ['percent' => 1.5, 'fixed' => 0.2],
-                'api_pix' => ['percent' => 1.5, 'fixed' => 0.2],
-                'card' => ['percent' => 2.0, 'fixed' => 0.3],
-            ],
+            'low_ticket' => $lowTicket,
         ], null);
     }
 
