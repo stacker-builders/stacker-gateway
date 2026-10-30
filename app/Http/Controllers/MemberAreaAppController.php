@@ -75,18 +75,22 @@ class MemberAreaAppController extends Controller
             ])->values()->all(),
             'progress_percent' => $progressPercent,
             'continue_watching' => $continueWatching,
-            'internal_products' => $internalProducts->map(fn (MemberInternalProduct $ip) => [
-                'id' => $ip->related_product_id,
-                'name' => $ip->relatedProduct?->name,
-                'type' => $ip->relatedProduct?->type,
-                'image_url' => $ip->relatedProduct?->image ? (new StorageService($product->tenant_id))->url($ip->relatedProduct->image) : null,
-                'checkout_slug' => $ip->relatedProduct?->checkout_slug,
-                'checkout_url' => $ip->relatedProduct?->checkout_slug ? url('/c/'.$ip->relatedProduct->checkout_slug) : null,
-                'access_url' => $ip->relatedProduct
-                    ? $this->relatedProductAccessUrl($ip->relatedProduct, $user, isset($userProductIds[(string) $ip->related_product_id]))
-                    : null,
-                'has_access' => isset($userProductIds[(string) $ip->related_product_id]),
-            ])->values()->all(),
+            'internal_products' => $internalProducts->map(function (MemberInternalProduct $ip) use ($user, $userProductIds, $product) {
+                $hasAccess = $this->userCanAccessRelatedProduct($ip->relatedProduct, $user, $userProductIds);
+
+                return [
+                    'id' => $ip->related_product_id,
+                    'name' => $ip->relatedProduct?->name,
+                    'type' => $ip->relatedProduct?->type,
+                    'image_url' => $ip->relatedProduct?->image ? (new StorageService($product->tenant_id))->url($ip->relatedProduct->image) : null,
+                    'checkout_slug' => $ip->relatedProduct?->checkout_slug,
+                    'checkout_url' => $ip->relatedProduct?->checkout_slug ? url('/c/'.$ip->relatedProduct->checkout_slug) : null,
+                    'access_url' => $ip->relatedProduct
+                        ? $this->relatedProductAccessUrl($ip->relatedProduct, $user, $hasAccess)
+                        : null,
+                    'has_access' => $hasAccess,
+                ];
+            })->values()->all(),
             'community_enabled' => (bool) ($config['community_enabled'] ?? false),
             'base_url' => $baseUrl,
             'slug' => $slug,
@@ -745,20 +749,24 @@ class MemberAreaAppController extends Controller
         $internalProducts = $product->memberInternalProducts()->with('relatedProduct')->orderBy('position')->get();
         $userProductIds = $this->userOwnedProductIdMap($user);
 
-        $items = $internalProducts->map(fn (MemberInternalProduct $ip) => [
-            'id' => $ip->related_product_id,
-            'name' => $ip->relatedProduct?->name,
-            'type' => $ip->relatedProduct?->type,
-            'description' => $ip->relatedProduct?->description,
-            'image_url' => $ip->relatedProduct?->image ? (new StorageService($product->tenant_id))->url($ip->relatedProduct->image) : null,
-            'checkout_slug' => $ip->relatedProduct?->checkout_slug,
-            'checkout_url' => $ip->relatedProduct?->checkout_slug ? url('/c/'.$ip->relatedProduct->checkout_slug) : null,
-            'access_url' => $ip->relatedProduct
-                ? $this->relatedProductAccessUrl($ip->relatedProduct, $user, isset($userProductIds[(string) $ip->related_product_id]))
-                : null,
-            'price' => $ip->relatedProduct?->price,
-            'has_access' => isset($userProductIds[(string) $ip->related_product_id]),
-        ])->values()->all();
+        $items = $internalProducts->map(function (MemberInternalProduct $ip) use ($user, $userProductIds, $product) {
+            $hasAccess = $this->userCanAccessRelatedProduct($ip->relatedProduct, $user, $userProductIds);
+
+            return [
+                'id' => $ip->related_product_id,
+                'name' => $ip->relatedProduct?->name,
+                'type' => $ip->relatedProduct?->type,
+                'description' => $ip->relatedProduct?->description,
+                'image_url' => $ip->relatedProduct?->image ? (new StorageService($product->tenant_id))->url($ip->relatedProduct->image) : null,
+                'checkout_slug' => $ip->relatedProduct?->checkout_slug,
+                'checkout_url' => $ip->relatedProduct?->checkout_slug ? url('/c/'.$ip->relatedProduct->checkout_slug) : null,
+                'access_url' => $ip->relatedProduct
+                    ? $this->relatedProductAccessUrl($ip->relatedProduct, $user, $hasAccess)
+                    : null,
+                'price' => $ip->relatedProduct?->price,
+                'has_access' => $hasAccess,
+            ];
+        })->values()->all();
 
         return Inertia::render('MemberAreaApp/Loja', [
             'product' => $this->productToArray($product),
@@ -824,8 +832,9 @@ class MemberAreaAppController extends Controller
         $storage = new StorageService($product->tenant_id);
         $postsQuery = $page->posts()->with(['user:id,name,email,avatar', 'likes', 'comments.user:id,name,avatar'])->latest();
         $posts = $postsQuery->paginate(20);
-        $canDeleteAny = $this->isCommunityInstructor($user, $product);
-        $canPost = $page->is_public_posting || $canDeleteAny;
+        $isAdminPreview = MemberAreaAdminPreview::isActive($request, $product);
+        $canDeleteAny = ! $isAdminPreview && $this->isCommunityInstructor($user, $product);
+        $canPost = ! $isAdminPreview && ($page->is_public_posting || $this->isCommunityInstructor($user, $product));
         $usersCanDeleteOwn = (bool) ($config['community_users_can_delete_own_posts'] ?? true);
         $posts->getCollection()->transform(function (MemberCommunityPost $post) use ($user, $storage) {
             $comments = $post->comments->map(fn (MemberCommunityPostComment $c) => [
@@ -1213,6 +1222,22 @@ class MemberAreaAppController extends Controller
     }
 
     /**
+     * @param  array<string, int>  $userProductIds
+     */
+    private function userCanAccessRelatedProduct(?Product $related, User $user, array $userProductIds): bool
+    {
+        if (! $related) {
+            return false;
+        }
+
+        if (isset($userProductIds[(string) $related->id])) {
+            return true;
+        }
+
+        return $this->moduleAccess->isPreviewInspector($user, $related);
+    }
+
+    /**
      * URL de acesso ao produto relacionado no card (área de membros, link rastreado, etc.).
      * Nunca força /m/{checkout_slug} para produtos que não são área de membros.
      */
@@ -1227,9 +1252,17 @@ class MemberAreaAppController extends Controller
         }
 
         if (in_array($related->type, DeliverableAccessLinkService::trackedProductTypes(), true)) {
-            $tracked = app(DeliverableAccessLinkService::class)->trackedUrl($user, $related);
-            if (is_string($tracked) && $tracked !== '') {
-                return $tracked;
+            // Admin/seller inspecionando: destino real, sem criar matrícula em product_user.
+            if ($this->moduleAccess->isPreviewInspector($user, $related)) {
+                $destination = app(DeliverableAccessLinkService::class)->destinationUrl($related);
+                if (is_string($destination) && $destination !== '') {
+                    return $destination;
+                }
+            } else {
+                $tracked = app(DeliverableAccessLinkService::class)->trackedUrl($user, $related);
+                if (is_string($tracked) && $tracked !== '') {
+                    return $tracked;
+                }
             }
         }
 
@@ -1365,9 +1398,7 @@ class MemberAreaAppController extends Controller
 
         if ($sectionType === 'products') {
             $related = $m->relatedProduct;
-            $hasAccess = $m->related_product_id
-                ? isset($userProductIds[(string) $m->related_product_id])
-                : false;
+            $hasAccess = $this->userCanAccessRelatedProduct($related, $user, $userProductIds);
             // access_type free: liberado sem compra
             if (($m->access_type ?? '') === 'free') {
                 $hasAccess = true;

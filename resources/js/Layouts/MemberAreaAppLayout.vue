@@ -784,7 +784,7 @@ watch(
         >
             <div class="mx-auto flex max-w-6xl flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div class="min-w-0 text-sm leading-snug">
-                    <p class="font-semibold">Modo administrador — somente leitura</p>
+                    <p class="font-semibold">Modo administrador — verificação de conteúdo</p>
                     <p class="mt-0.5 opacity-90">
                         {{ adminPreview.message }}
                         <span v-if="adminPreview.seller_name" class="block sm:inline sm:before:content-['·_']">
