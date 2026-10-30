@@ -7,6 +7,7 @@ import MemberAreaVideoPlayer from '@/components/MemberAreaVideoPlayer.vue';
 import { renderLessonDescription } from '@/lib/lessonDescription';
 import { completeMemberLesson, useMemberAreaHref } from '@/composables/useMemberAreaHref';
 import { downloadMemberMaterial, isProtectedPdf } from '@/composables/downloadMemberMaterial';
+import { useMemberAreaAdminPreview } from '@/composables/useMemberAreaAdminPreview';
 import MemberLessonRatingStars from '@/components/member-area/MemberLessonRatingStars.vue';
 
 defineOptions({ layout: MemberAreaAppLayout });
@@ -55,6 +56,7 @@ async function downloadProtectedPdf(file, index) {
 }
 
 const { href } = useMemberAreaHref(props.slug, props.base_url);
+const { isAdminPreview } = useMemberAreaAdminPreview();
 
 const completed = ref(props.lesson.is_completed ?? false);
 const lessonRating = ref(props.lesson.rating ?? null);
@@ -63,7 +65,7 @@ const commentSubmitting = ref(false);
 let autoCompleteTimer = null;
 
 async function markComplete() {
-    if (completed.value) return;
+    if (isAdminPreview.value || completed.value) return;
     completed.value = true;
     try {
         await completeMemberLesson(href(`/aula/${props.lesson.id}/complete`));
@@ -88,6 +90,7 @@ function shouldAutoCompleteNonVideo() {
 }
 
 onMounted(() => {
+    if (isAdminPreview.value) return;
     if (props.lesson?.is_completed) completed.value = true;
     else if (props.lesson?.type === 'video') scheduleAutoComplete();
     else if (shouldAutoCompleteNonVideo()) setTimeout(() => markComplete(), 500);
@@ -191,13 +194,14 @@ function formatCommentDate(iso) {
         </div>
 
         <MemberLessonRatingStars
+            v-if="!isAdminPreview"
             v-model="lessonRating"
             :url="href(`/aula/${lesson.id}/rating`)"
         />
 
         <div class="flex items-center justify-between">
             <Link :href="href('/modulos')" class="text-sm text-zinc-400 hover:text-[var(--ma-primary)]">← Voltar aos módulos</Link>
-            <Button @click="markComplete" :disabled="completed">
+            <Button v-if="!isAdminPreview" @click="markComplete" :disabled="completed">
                 {{ completed ? 'Concluído' : 'Marcar como concluído' }}
             </Button>
         </div>
@@ -219,7 +223,7 @@ function formatCommentDate(iso) {
                 </li>
             </ul>
             <p v-if="!lesson_comments?.length" class="text-sm text-zinc-500">Nenhum comentário ainda.</p>
-            <form @submit.prevent="submitComment" class="space-y-2">
+            <form v-if="!isAdminPreview" @submit.prevent="submitComment" class="space-y-2">
                 <textarea
                     v-model="commentContent"
                     rows="3"
@@ -231,7 +235,7 @@ function formatCommentDate(iso) {
                     {{ commentSubmitting ? 'Enviando…' : 'Enviar comentário' }}
                 </Button>
             </form>
-            <p v-if="comments_require_approval" class="text-xs text-zinc-500">Seus comentários serão publicados após aprovação do instrutor.</p>
+            <p v-if="!isAdminPreview && comments_require_approval" class="text-xs text-zinc-500">Seus comentários serão publicados após aprovação do instrutor.</p>
         </section>
     </div>
 </template>

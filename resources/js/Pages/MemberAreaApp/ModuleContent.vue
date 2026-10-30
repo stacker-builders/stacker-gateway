@@ -10,6 +10,7 @@ import MemberLessonOffer from '@/components/member-area/MemberLessonOffer.vue';
 import { renderLessonDescription } from '@/lib/lessonDescription';
 import { completeMemberLesson, useMemberAreaHref } from '@/composables/useMemberAreaHref';
 import { downloadMemberMaterial, isProtectedPdf } from '@/composables/downloadMemberMaterial';
+import { useMemberAreaAdminPreview } from '@/composables/useMemberAreaAdminPreview';
 import { Link as LinkIcon, CheckCircle, ChevronLeft, ChevronRight } from 'lucide-vue-next';
 
 defineOptions({ layout: MemberAreaAppLayout });
@@ -31,6 +32,7 @@ const props = defineProps({
 });
 
 const { href } = useMemberAreaHref(props.slug, props.base_url);
+const { isAdminPreview } = useMemberAreaAdminPreview();
 
 function normalizePdfFiles(lesson) {
     const list = Array.isArray(lesson?.content_files) ? lesson.content_files : [];
@@ -138,7 +140,7 @@ function onLessonNavKeydown(event) {
 }
 
 async function markComplete() {
-    if (!props.current_lesson || completed.value) return;
+    if (isAdminPreview.value || !props.current_lesson || completed.value) return;
     completed.value = true;
     try {
         await completeMemberLesson(href(`/aula/${props.current_lesson.id}/complete`));
@@ -169,7 +171,7 @@ function syncCurrentLessonProgress() {
         autoCompleteTimer = null;
     }
     completed.value = Boolean(props.current_lesson?.is_completed);
-    if (!props.current_lesson || completed.value) return;
+    if (isAdminPreview.value || !props.current_lesson || completed.value) return;
     if (props.current_lesson.type === 'video') scheduleAutoComplete();
     else if (shouldAutoCompleteNonVideo()) setTimeout(() => markComplete(), 500);
 }
@@ -316,6 +318,7 @@ function scrollCarousel(sectionId, direction) {
                 </div>
 
                 <MemberLessonRatingStars
+                    v-if="!isAdminPreview"
                     :key="current_lesson.id"
                     v-model="lessonRating"
                     :url="href(`/aula/${current_lesson.id}/rating`)"
@@ -390,7 +393,7 @@ function scrollCarousel(sectionId, direction) {
                                 Ir para o próximo módulo
                             </Link>
                         </Button>
-                        <Button @click="markComplete" :disabled="completed">
+                        <Button v-if="!isAdminPreview" @click="markComplete" :disabled="completed">
                             {{ completed ? 'Concluído' : 'Marcar como concluído' }}
                         </Button>
                     </div>
@@ -413,7 +416,7 @@ function scrollCarousel(sectionId, direction) {
                         </li>
                     </ul>
                     <p v-if="!lesson_comments?.length" class="text-sm text-zinc-500">Nenhum comentário ainda.</p>
-                    <form @submit.prevent="submitComment" class="space-y-2">
+                    <form v-if="!isAdminPreview" @submit.prevent="submitComment" class="space-y-2">
                         <textarea
                             v-model="commentContent"
                             rows="3"
@@ -425,7 +428,7 @@ function scrollCarousel(sectionId, direction) {
                             {{ commentSubmitting ? 'Enviando…' : 'Enviar comentário' }}
                         </Button>
                     </form>
-                    <p v-if="comments_require_approval" class="text-xs text-zinc-500">Seus comentários serão publicados após aprovação do instrutor.</p>
+                    <p v-if="!isAdminPreview && comments_require_approval" class="text-xs text-zinc-500">Seus comentários serão publicados após aprovação do instrutor.</p>
                 </section>
             </template>
             <template v-else>

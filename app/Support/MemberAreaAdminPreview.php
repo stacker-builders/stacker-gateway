@@ -78,7 +78,7 @@ final class MemberAreaAdminPreview
         return [
             'active' => true,
             'read_only' => true,
-            'message' => 'Você está visualizando esta Área de Membros como administrador para fins de moderação e conformidade. Nenhuma compra ou matrícula foi criada.',
+            'message' => 'Você pode abrir aulas, assistir vídeos e baixar materiais para verificar o conteúdo. Nenhuma compra ou matrícula foi criada, e ações de aluno (concluir, comentar, avaliar) estão desativadas.',
             'product_name' => $product->name,
             'seller_name' => $owner?->name,
             'seller_email' => $owner?->email,

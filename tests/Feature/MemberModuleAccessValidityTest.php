@@ -157,6 +157,31 @@ class MemberModuleAccessValidityTest extends TestCase
         $this->assertFalse($lock['is_locked']);
     }
 
+    public function test_platform_admin_unlocks_future_drip_and_expired_modules(): void
+    {
+        $owner = $this->seller();
+        $product = $this->memberProduct($owner);
+        [, $module, $lesson] = $this->courseModule($product, [
+            'release_at_date' => now()->addMonth()->toDateString(),
+        ]);
+        $admin = User::factory()->create([
+            'role' => User::ROLE_PLATFORM_ADMIN,
+            'tenant_id' => null,
+        ]);
+        $student = User::factory()->create(['role' => User::ROLE_CLIENTE]);
+        $this->enroll($product, $student, now()->subDays(10));
+
+        $service = app(MemberModuleAccessService::class);
+        $adminModule = $service->moduleLockPayload($module, $product, $admin, now());
+        $adminLesson = $service->lessonLockPayload($lesson, $module, $product, $admin, now());
+        $studentModule = $service->moduleLockPayload($module, $product, $student, now());
+
+        $this->assertFalse($adminModule['is_locked']);
+        $this->assertFalse($adminLesson['is_locked']);
+        $this->assertTrue($studentModule['is_locked']);
+        $this->assertSame('drip', $studentModule['lock_reason']);
+    }
+
     public function test_seller_can_inspect_expired_module(): void
     {
         $owner = $this->seller();
@@ -236,6 +261,7 @@ class MemberModuleAccessValidityTest extends TestCase
         ]);
         event(new OrderCompleted($order));
 
+        $service = app(MemberModuleAccessService::class);
         $lockA = $service->moduleLockPayload($moduleA->fresh(), $product, $student, now());
         $lockB = $service->moduleLockPayload($moduleB->fresh(), $product, $student, now());
         $this->assertFalse($lockA['is_locked']);

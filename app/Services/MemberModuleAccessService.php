@@ -68,6 +68,10 @@ class MemberModuleAccessService
      */
     public function moduleLockPayload(MemberModule $module, Product $product, User $user, CarbonInterface $now): array
     {
+        if ($this->isPreviewInspector($user, $product)) {
+            return $this->unlockedLockPayload($module);
+        }
+
         $enrollmentStartAt = $this->enrollmentStartAt($product, $user);
         $drip = $this->scheduleMeta($module->release_after_days, $module->release_at_date, $enrollmentStartAt);
         $dripLock = $this->dripLockPayload($drip['available_at'], $now, $drip['mode']);
@@ -111,6 +115,10 @@ class MemberModuleAccessService
      */
     public function lessonLockPayload(MemberLesson $lesson, ?MemberModule $module, Product $product, User $user, CarbonInterface $now): array
     {
+        if ($this->isPreviewInspector($user, $product)) {
+            return $this->unlockedLockPayload($module);
+        }
+
         $moduleLock = $module ? $this->moduleLockPayload($module, $product, $user, $now) : null;
         if ($moduleLock && ($moduleLock['is_locked'] ?? false) === true) {
             return $moduleLock;
@@ -334,6 +342,33 @@ class MemberModuleAccessService
     {
         return ($user->canAccessPanel() && $user->tenant_id === $product->tenant_id)
             || $user->canAccessPlatformPanel();
+    }
+
+    /**
+     * Admin da plataforma e infoprodutor do tenant abrem aulas/módulos para verificar o conteúdo
+     * (drip por data, validade e renovação não se aplicam).
+     *
+     * @return array{
+     *     is_locked: bool,
+     *     available_at: ?string,
+     *     expires_at: ?string,
+     *     lock_message: ?string,
+     *     lock_reason: ?string,
+     *     can_renew: bool,
+     *     renewal_amount: ?float
+     * }
+     */
+    private function unlockedLockPayload(?MemberModule $module): array
+    {
+        return [
+            'is_locked' => false,
+            'available_at' => null,
+            'expires_at' => null,
+            'lock_message' => null,
+            'lock_reason' => null,
+            'can_renew' => false,
+            'renewal_amount' => $module ? $this->renewalAmount($module) : null,
+        ];
     }
 
     private function ignoresExpiration(User $user, Product $product): bool

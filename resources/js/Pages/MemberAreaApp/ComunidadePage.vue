@@ -7,6 +7,7 @@ import Button from '@/components/ui/Button.vue';
 import { MessageSquare, ImagePlus, X, Heart, MessageCircle, Trash2 } from 'lucide-vue-next';
 import { getCommunityPageIconComponent } from '@/utils/communityPageIcons';
 import { resolveMemberAreaHref } from '@/utils/memberAreaHref';
+import { useMemberAreaAdminPreview } from '@/composables/useMemberAreaAdminPreview';
 
 defineOptions({ layout: MemberAreaAppLayout });
 
@@ -23,6 +24,8 @@ const props = defineProps({
     slug: { type: String, required: true },
     base_url: { type: String, default: '' },
 });
+
+const { isAdminPreview } = useMemberAreaAdminPreview();
 
 const postsList = ref(props.posts?.data ? [...props.posts.data] : []);
 watch(() => props.posts?.data, (data) => {
@@ -65,6 +68,7 @@ function getInitials(name) {
     return name.split(/\s+/).map((n) => n[0]).slice(0, 2).join('').toUpperCase() || 'A';
 }
 function canDeletePost(post) {
+    if (isAdminPreview.value) return false;
     if (props.can_delete_any_post) return true;
     if (post.user_id === props.auth_user_id && props.community_users_can_delete_own_posts) return true;
     return false;
@@ -234,7 +238,7 @@ async function submitComment(post) {
                 <p v-if="postForm.errors.content" class="mt-2 text-sm text-red-400">{{ postForm.errors.content }}</p>
                 <p v-if="postForm.errors.image" class="mt-1 text-sm text-red-400">{{ postForm.errors.image }}</p>
             </form>
-            <p v-else class="rounded-xl border border-zinc-700 bg-zinc-800/30 px-4 py-3 text-sm text-zinc-500">Apenas o instrutor pode publicar nesta página.</p>
+            <p v-else class="rounded-xl border border-zinc-700 bg-zinc-800/30 px-4 py-3 text-sm text-zinc-500">{{ isAdminPreview ? 'Modo administrador: a comunidade está em visualização.' : 'Apenas o instrutor pode publicar nesta página.' }}</p>
 
             <div class="space-y-4">
                 <article
@@ -270,7 +274,7 @@ async function submitComment(post) {
                         <button
                             type="button"
                             :class="['flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm transition', post.user_has_liked ? 'text-red-400' : 'text-zinc-400 hover:text-zinc-300']"
-                            :disabled="likeLoadingId === post.id"
+                            :disabled="isAdminPreview || likeLoadingId === post.id"
                             @click="toggleLike(post)"
                         >
                             <Heart :class="['h-4 w-4', post.user_has_liked ? 'fill-current' : '']" />
@@ -292,7 +296,7 @@ async function submitComment(post) {
                                 <p class="text-sm text-zinc-300">{{ c.content }}</p>
                             </div>
                         </div>
-                        <div class="flex gap-2 pt-1">
+                        <div v-if="!isAdminPreview" class="flex gap-2 pt-1">
                             <input
                                 :value="getCommentContent(post.id)"
                                 type="text"
