@@ -61,6 +61,9 @@ export function normalizeMerchantFeeRulesForSubmit(rules) {
         } else {
             row.fixed = 0;
         }
+        if (Object.prototype.hasOwnProperty.call(block, 'enabled')) {
+            row.enabled = !!block.enabled;
+        }
         out[key] = row;
     }
     return out;

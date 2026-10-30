@@ -23,6 +23,7 @@ import Button from '@/components/ui/Button.vue';
 import PlatformStepUpModal from '@/components/platform/PlatformStepUpModal.vue';
 import FeeFixedInput from '@/components/ui/FeeFixedInput.vue';
 import FeePercentInput from '@/components/ui/FeePercentInput.vue';
+import Toggle from '@/components/ui/Toggle.vue';
 import {
     formatPercentForInput,
     normalizeMerchantFeeRulesForSubmit,
@@ -62,7 +63,7 @@ const props = defineProps({
     },
     low_ticket_fees: {
         type: Object,
-        default: () => ({ enabled: false, max_amount: 0, max_order_amount: 0 }),
+        default: () => ({ enabled: false, max_amount: 0, max_order_amount: 0, max_order_amount_enabled: false }),
     },
     card_installment_rules: {
         type: Object,
@@ -785,7 +786,16 @@ function lowTicketFeeBlock(key) {
     return {
         percent: formatPercentForInput(percentRaw) || '0',
         fixed: r.fixed ?? 0,
+        enabled: r.enabled !== false,
     };
+}
+
+function lowTicketOrderCapEnabledFromProps() {
+    const fees = props.low_ticket_fees || {};
+    if (Object.prototype.hasOwnProperty.call(fees, 'max_order_amount_enabled')) {
+        return !!fees.max_order_amount_enabled;
+    }
+    return Number(fees.max_order_amount ?? 0) > 0;
 }
 
 function buildFeeRulesFromProps() {
@@ -926,6 +936,7 @@ const feeForm = useForm({
     low_ticket_enabled: !!props.low_ticket_fees?.enabled,
     low_ticket_max_amount: Number(props.low_ticket_fees?.max_amount ?? 0) || 0,
     low_ticket_max_order_amount: Number(props.low_ticket_fees?.max_order_amount ?? 0) || 0,
+    low_ticket_max_order_amount_enabled: lowTicketOrderCapEnabledFromProps(),
     low_ticket_fee_rules: buildLowTicketFeeRulesFromProps(),
     api_pix_enabled: props.api_pix_enabled,
 });
@@ -946,6 +957,7 @@ function submitFees() {
             low_ticket_enabled: !!data.low_ticket_enabled,
             low_ticket_max_amount: Number(data.low_ticket_max_amount) || 0,
             low_ticket_max_order_amount: Number(data.low_ticket_max_order_amount) || 0,
+            low_ticket_max_order_amount_enabled: !!data.low_ticket_max_order_amount_enabled,
             low_ticket_fee_rules: normalizeMerchantFeeRulesForSubmit(data.low_ticket_fee_rules),
             api_pix_enabled: data.api_pix_enabled,
         }))
@@ -959,6 +971,7 @@ function submitFees() {
                     low_ticket_enabled: !!props.low_ticket_fees?.enabled,
                     low_ticket_max_amount: Number(props.low_ticket_fees?.max_amount ?? 0) || 0,
                     low_ticket_max_order_amount: Number(props.low_ticket_fees?.max_order_amount ?? 0) || 0,
+                    low_ticket_max_order_amount_enabled: lowTicketOrderCapEnabledFromProps(),
                     low_ticket_fee_rules: buildLowTicketFeeRulesFromProps(),
                     api_pix_enabled: props.api_pix_enabled,
                 });
@@ -1630,7 +1643,8 @@ function submitSettlement() {
                                     Ativar taxa diferente para low tickets
                                 </span>
                                 <span class="mt-1 block text-xs text-zinc-500 dark:text-zinc-400">
-                                    Usa as colunas low ticket quando o produto principal estiver até o teto e a soma com order bumps não chegar ao pedido máximo.
+                                    Usa as colunas low ticket quando o produto principal estiver até o teto e o canal estiver ligado neste bloco.
+                                    Se o teto de order bumps estiver ativo, a soma com bumps não pode chegar ao pedido máximo.
                                     Pedidos já creditados na carteira não mudam.
                                 </span>
                             </span>
@@ -1649,26 +1663,32 @@ function submitSettlement() {
                                 </p>
                             </div>
                             <div class="max-w-sm rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900/60">
-                                <label class="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                                <Toggle
+                                    v-model="feeForm.low_ticket_max_order_amount_enabled"
+                                    label="Ativar teto de order bumps"
+                                />
+                                <label class="mt-3 block text-sm font-medium text-zinc-800 dark:text-zinc-200">
                                     Teto da soma com order bumps (R$)
                                 </label>
                                 <FeeFixedInput
                                     :model-value="feeForm.low_ticket_max_order_amount"
+                                    :disabled="!feeForm.low_ticket_max_order_amount_enabled"
                                     @update:model-value="(v) => { feeForm.low_ticket_max_order_amount = v; }"
                                 />
                                 <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                                    Você define o valor. Se produto + order bumps chegar a este teto, usa a taxa normal.
-                                    Deixe 0,00 para não limitar a soma.
+                                    Ligado: se produto + order bumps chegar a este valor, usa a taxa normal.
+                                    Desligado: ignora o teto e a oferta low ticket continua valendo mesmo com bumps.
                                 </p>
                             </div>
                         </div>
                         <div class="overflow-x-auto">
-                            <table class="w-full min-w-[760px] text-left text-sm">
+                            <table class="w-full min-w-[900px] text-left text-sm">
                                 <thead class="border-b border-zinc-200 text-xs uppercase text-zinc-500 dark:border-zinc-600">
                                     <tr>
                                         <th class="pb-2 pr-4">Canal</th>
                                         <th class="pb-2 pr-4">Percentual (%)</th>
                                         <th class="pb-2 pr-4">Valor fixo</th>
+                                        <th class="pb-2 pr-4">Ativar low ticket</th>
                                         <th class="pb-2 pr-4">Low ticket (%)</th>
                                         <th class="pb-2">Low ticket fixo</th>
                                     </tr>
@@ -1691,11 +1711,20 @@ function submitSettlement() {
                                             />
                                         </td>
                                         <td class="py-3 pr-4">
+                                            <Toggle
+                                                v-if="row.key !== 'withdrawal'"
+                                                :model-value="!!feeForm.low_ticket_fee_rules[row.key].enabled"
+                                                :disabled="!feeForm.low_ticket_enabled"
+                                                @update:model-value="(v) => updateLowTicketFeeField(row.key, 'enabled', v)"
+                                            />
+                                            <span v-else class="text-xs text-zinc-400">—</span>
+                                        </td>
+                                        <td class="py-3 pr-4">
                                             <FeePercentInput
                                                 v-if="row.key !== 'withdrawal'"
                                                 :ref="(el) => setFeePercentRef('lt-' + row.key, el)"
                                                 :model-value="feeForm.low_ticket_fee_rules[row.key].percent"
-                                                :disabled="!feeForm.low_ticket_enabled"
+                                                :disabled="!feeForm.low_ticket_enabled || !feeForm.low_ticket_fee_rules[row.key].enabled"
                                                 @update:model-value="(v) => updateLowTicketFeeField(row.key, 'percent', v)"
                                             />
                                             <span v-else class="text-xs text-zinc-400">—</span>
@@ -1705,7 +1734,7 @@ function submitSettlement() {
                                                 v-if="row.key !== 'withdrawal'"
                                                 :ref="(el) => setFeeFixedRef('lt-' + row.key, el)"
                                                 :model-value="feeForm.low_ticket_fee_rules[row.key].fixed"
-                                                :disabled="!feeForm.low_ticket_enabled"
+                                                :disabled="!feeForm.low_ticket_enabled || !feeForm.low_ticket_fee_rules[row.key].enabled"
                                                 @update:model-value="(v) => updateLowTicketFeeField(row.key, 'fixed', v)"
                                             />
                                             <span v-else class="text-xs text-zinc-400">—</span>
@@ -1714,6 +1743,9 @@ function submitSettlement() {
                                 </tbody>
                             </table>
                         </div>
+                        <p v-if="feeForm.low_ticket_enabled" class="text-xs text-zinc-500 dark:text-zinc-400">
+                            Desmarque o canal em Ativar low ticket para ele não entrar nesta oferta e continuar na taxa normal.
+                        </p>
 
                         <p v-if="feeForm.errors.merchant_fee_rules" class="text-sm text-red-600">
                             {{ feeForm.errors.merchant_fee_rules }}
