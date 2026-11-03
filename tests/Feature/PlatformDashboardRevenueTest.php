@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\User;
 use App\Models\WalletTransaction;
 use App\Models\Withdrawal;
+use App\Services\MerchantWithdrawalService;
 use App\Services\Platform\PlatformRevenueKpis;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Schema;
@@ -383,7 +384,7 @@ class PlatformDashboardRevenueTest extends TestCase
             'fee_amount' => 0,
             'net_amount' => 100.00,
             'bucket' => 'pix',
-            'status' => 'completed',
+            'status' => MerchantWithdrawalService::STATUS_PAID,
             'currency' => 'BRL',
             'payout_provider' => 'cajupay',
             'payout_meta' => ['cajupay_account_id' => $secondary->id],
