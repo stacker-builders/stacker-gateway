@@ -5,6 +5,7 @@ namespace App\Services\Platform;
 use App\Models\Order;
 use App\Models\WalletTransaction;
 use App\Models\Withdrawal;
+use App\Services\MerchantWithdrawalService;
 use App\Services\Payout\GatewayPayoutEconomics;
 use App\Services\Payout\PlatformPayoutGateway;
 use Illuminate\Database\Eloquent\Builder;
@@ -55,7 +56,7 @@ class PlatformRevenueKpis
 
         $custoSaques = 0.0;
         if (Schema::hasTable('withdrawals')) {
-            $wdQ = Withdrawal::query()->where('status', 'completed');
+            $wdQ = Withdrawal::query()->where('status', MerchantWithdrawalService::STATUS_PAID);
             if ($start && $end) {
                 $wdQ->whereBetween('created_at', [$start, $end]);
             } elseif ($start) {
