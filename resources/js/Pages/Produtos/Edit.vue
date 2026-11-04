@@ -216,9 +216,6 @@ const marketplaceToggleLabel = computed(() => {
 const showCardInstallments = computed(
     () => !isSubscriptionBilling.value && Boolean(props.checkout_gateway_ui?.card_show_installments)
 );
-const cardInstallmentsGatewayName = computed(
-    () => String(props.checkout_gateway_ui?.card_installments_gateway_name || '').trim()
-);
 
 watch(
     () => form.billing_type,
@@ -1706,7 +1703,7 @@ function submit() {
                                 <div class="min-w-0">
                                     <p class="text-sm font-medium text-zinc-700 dark:text-zinc-300">Permitir pagamento parcelado neste produto</p>
                                     <p class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                                        Produto vendido à vista se estiver desmarcado<span v-if="cardInstallmentsGatewayName"> · {{ cardInstallmentsGatewayName }}</span>
+                                        Produto vendido à vista se estiver desmarcado
                                     </p>
                                 </div>
                                 <Toggle
