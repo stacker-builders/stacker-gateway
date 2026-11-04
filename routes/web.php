@@ -704,6 +704,12 @@ Route::prefix('plataforma')->name('plataforma.')->group(function () {
         Route::post('/clientes/{user}/acessar', [\App\Http\Controllers\Platform\CustomerImpersonationController::class, 'start'])
             ->name('clientes.impersonate')
             ->middleware('throttle:20,1');
+        Route::post('/clientes/{user}/email', [\App\Http\Controllers\Platform\CustomersController::class, 'updateEmail'])
+            ->name('clientes.email.update')
+            ->middleware('throttle:10,1');
+        Route::post('/clientes/{user}/senha', [\App\Http\Controllers\Platform\CustomersController::class, 'resetPassword'])
+            ->name('clientes.password.reset')
+            ->middleware('throttle:10,1');
         Route::get('/clientes/{user}/produtos/{produto}/dossie', [\App\Http\Controllers\Platform\CustomersController::class, 'dossier'])
             ->name('clientes.acessos.dossie');
         Route::get('/clientes/{user}/produtos/{produto}/dossie/exportar', [\App\Http\Controllers\Platform\CustomersController::class, 'exportDossier'])
