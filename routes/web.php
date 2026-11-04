@@ -101,6 +101,10 @@ Route::get('/firebase-messaging-sw.js', function () {
     ]);
 })->name('panel.pwa.firebase-sw');
 
+Route::get('/marketplace', [\App\Http\Controllers\PublicMarketplaceController::class, 'index'])
+    ->middleware('throttle:60,1')
+    ->name('marketplace.public');
+
 Route::get('/politica-privacidade', [\App\Http\Controllers\LegalPagesController::class, 'privacy'])->name('legal.privacy');
 Route::get('/termos-de-uso', [\App\Http\Controllers\LegalPagesController::class, 'terms'])->name('legal.terms');
 
@@ -640,6 +644,9 @@ Route::prefix('plataforma')->name('plataforma.')->group(function () {
         Route::get('/marketplace', [\App\Http\Controllers\Platform\PlatformMarketplaceController::class, 'index'])->name('marketplace.index');
         Route::post('/marketplace/aceitacao-automatica', [\App\Http\Controllers\Platform\PlatformMarketplaceController::class, 'updateAutoAccept'])
             ->name('marketplace.auto-accept')
+            ->middleware('throttle:30,1');
+        Route::post('/marketplace/link-publico', [\App\Http\Controllers\Platform\PlatformMarketplaceController::class, 'updatePublic'])
+            ->name('marketplace.public.update')
             ->middleware('throttle:30,1');
         Route::post('/marketplace/{product}/autorizar', [\App\Http\Controllers\Platform\PlatformMarketplaceController::class, 'authorizeProduct'])
             ->name('marketplace.authorize')
