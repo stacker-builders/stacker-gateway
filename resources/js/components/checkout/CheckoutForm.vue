@@ -1166,7 +1166,8 @@ const cieloExpirationDate = computed(() => {
 const MIN_PARCELA_BRL = 5;
 const effectiveCardMaxInstallments = computed(() => {
     if (!props.cardInstallmentsEnabled) return 1;
-    const configured = Math.min(12, Math.max(1, Number(props.cardMaxInstallments) || 1));
+    const hardCap = isCardGatewayMercadopago.value ? 18 : 12;
+    const configured = Math.min(hardCap, Math.max(1, Number(props.cardMaxInstallments) || 1));
     const total = Number(props.checkoutTotalBrl) || 0;
     if (total < MIN_PARCELA_BRL) return 1;
     return Math.min(configured, Math.max(1, Math.floor(total / MIN_PARCELA_BRL)));

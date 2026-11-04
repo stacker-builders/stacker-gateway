@@ -29,6 +29,27 @@ class CardInstallmentEconomicsTest extends TestCase
         $this->assertSame(14, $rows[6]['days_to_available']);
     }
 
+    public function test_normalize_rules_can_fill_eighteen_rows_for_mercado_pago(): void
+    {
+        $rows = CardInstallmentEconomics::normalizeRules(null, ['percent' => 4.99, 'fixed' => 0.39], 14, 18);
+
+        $this->assertCount(18, $rows);
+        $this->assertSame(4.99, $rows[13]['percent']);
+        $this->assertSame(0.39, $rows[18]['fixed']);
+        $this->assertSame(14, $rows[18]['days_to_available']);
+    }
+
+    public function test_rule_for_uses_nearest_saved_row_above_twelve(): void
+    {
+        $rules = CardInstallmentEconomics::normalizeRules(null, ['percent' => 3.5, 'fixed' => 0.1], 7, 12);
+
+        $row = CardInstallmentEconomics::ruleFor($rules, 18);
+
+        $this->assertSame(3.5, $row['percent']);
+        $this->assertSame(0.1, $row['fixed']);
+        $this->assertSame(7, $row['days_to_available']);
+    }
+
     public function test_should_split_only_when_multiple_installments_and_days_positive(): void
     {
         $this->assertFalse(CardInstallmentEconomics::shouldSplit(1, 14));

@@ -83,6 +83,7 @@ class FinancialController extends Controller
             'card_installment_rules' => $cardInstallmentRules,
             'platform_card_installments_enabled' => PlatformCardInstallments::globalEnabled(),
             'platform_card_installments_max' => PlatformCardInstallments::maxAllowed(),
+            'platform_card_installments_ceiling' => PlatformCardInstallments::selectableCeiling(),
             'merchant_settlement_rules' => EffectiveSettlementRules::platformDefaults(),
             'api_pix_enabled' => ApiPixAccess::globalEnabled(),
             'api_pix_minimum_charge_brl' => app(MinimumChargeService::class)->apiPixMinimumBrl(),
@@ -389,7 +390,8 @@ class FinancialController extends Controller
             $out['card_installments'] = CardInstallmentEconomics::normalizeRules(
                 $existingInstallments,
                 ['percent' => 0, 'fixed' => 0],
-                0
+                0,
+                CardInstallmentEconomics::preserveMax($existingInstallments)
             );
         }
 
@@ -409,7 +411,7 @@ class FinancialController extends Controller
     {
         $validated = $request->validate([
             'platform_card_installments_enabled' => ['nullable', 'boolean'],
-            'platform_card_installments_max' => ['nullable', 'integer', 'min:2', 'max:12'],
+            'platform_card_installments_max' => ['nullable', 'integer', 'min:2', 'max:'.PlatformCardInstallments::selectableCeiling()],
             'card_installment_rules' => ['nullable', 'array'],
             'card_installment_rules.*' => ['nullable', 'array'],
             'card_installment_rules.*.percent' => ['nullable', 'numeric', 'min:0', 'max:100'],

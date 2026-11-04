@@ -2,13 +2,15 @@
 
 namespace App\Services;
 
+use App\Models\GatewayCredential;
 use App\Models\Setting;
 use App\Support\CardInstallments;
 
 /**
  * Política global de parcelamento no cartão (admin → Financeiro → Parcelamento).
  * O teto e o interruptor da plataforma limitam o que o infoprodutor e o checkout podem oferecer;
- * as taxas 1x–12x continuam em merchant_fee_rules.card_installments.
+ * as taxas por parcela continuam em merchant_fee_rules.card_installments.
+ * Com Mercado Pago conectado, o teto e a tabela vão até 18x. Nos demais, até 12x.
  */
 class PlatformCardInstallments
 {
@@ -33,6 +35,24 @@ class PlatformCardInstallments
         return filter_var($raw, FILTER_VALIDATE_BOOLEAN);
     }
 
+    /**
+     * Mercado Pago global conectado e habilitado para cobrança.
+     */
+    public static function mercadoPagoActive(): bool
+    {
+        return GatewayCredential::resolveForPayment(null, 'mercadopago') !== null;
+    }
+
+    /**
+     * Maior parcela que o admin pode gravar: 18 com Mercado Pago ativo, 12 nos demais.
+     */
+    public static function selectableCeiling(): int
+    {
+        return self::mercadoPagoActive()
+            ? CardInstallments::MAX_MERCADOPAGO
+            : CardInstallments::MAX_ALLOWED;
+    }
+
     public static function maxAllowed(): int
     {
         $raw = Setting::get(self::SETTING_MAX, self::DEFAULT_MAX, null);
@@ -42,7 +62,7 @@ class PlatformCardInstallments
 
     public static function normalizePlatformMax(int $max): int
     {
-        return max(self::MIN_SELECTABLE, min(CardInstallments::MAX_ALLOWED, $max));
+        return max(self::MIN_SELECTABLE, min(self::selectableCeiling(), $max));
     }
 
     public static function setEnabled(bool $enabled): void
@@ -82,7 +102,8 @@ class PlatformCardInstallments
             return ['enabled' => false, 'max' => 1];
         }
 
-        $productMax = CardInstallments::normalizeMax((int) ($cardInstallments['max'] ?? 1));
+        $ceiling = self::selectableCeiling();
+        $productMax = CardInstallments::normalizeMax((int) ($cardInstallments['max'] ?? 1), $ceiling);
         $max = min($productMax, self::maxAllowed());
         if ($max < self::MIN_SELECTABLE) {
             return ['enabled' => false, 'max' => 1];
@@ -116,7 +137,7 @@ class PlatformCardInstallments
         }
 
         $max = min(
-            CardInstallments::normalizeMax((int) ($input['max'] ?? self::MIN_SELECTABLE)),
+            CardInstallments::normalizeMax((int) ($input['max'] ?? self::MIN_SELECTABLE), self::selectableCeiling()),
             self::maxAllowed()
         );
         $max = max(self::MIN_SELECTABLE, $max);
