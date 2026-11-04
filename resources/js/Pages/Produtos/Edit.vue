@@ -493,10 +493,9 @@ const paymentMethodMeta = {
 /** Somente métodos com gateway ativo na plataforma (configuração admin + credencial conectada). */
 const paymentMethodCardsList = computed(() => {
     const avail = props.global_payment_methods_available ?? {};
-    const order = ['pix', 'open_finance', 'card', 'apple_pay', 'google_pay', 'paypal', 'boleto'];
-    if (form.billing_type === 'subscription') {
-        order.push('pix_auto');
-    }
+    const order = form.billing_type === 'subscription'
+        ? ['pix', 'card', 'apple_pay', 'google_pay', 'paypal', 'boleto', 'pix_auto']
+        : ['pix', 'open_finance', 'card', 'apple_pay', 'google_pay', 'paypal', 'boleto'];
     const walletHint = props.wallet_acquirer_label
         ? `Wallet via ${props.wallet_acquirer_label}`
         : 'Wallet via CajuPay ou Stripe';
@@ -506,6 +505,12 @@ const paymentMethodCardsList = computed(() => {
             const meta = { ...paymentMethodMeta[key] };
             if (key === 'apple_pay' || key === 'google_pay') {
                 meta.hint = walletHint;
+            }
+            if (form.billing_type === 'subscription' && key === 'pix') {
+                meta.hint = 'Cobra o período. O cliente recebe aviso para renovar';
+            }
+            if (form.billing_type === 'subscription' && key === 'card') {
+                meta.hint = 'Assinatura no cartão de crédito';
             }
             return { key, ...meta };
         });
