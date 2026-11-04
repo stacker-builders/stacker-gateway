@@ -135,13 +135,32 @@ export function bunnyEmbedUrl(url) {
     return embed;
 }
 
+const PANDA_UUID_RE = /^[a-zA-Z0-9-]{8,}$/;
+/** Controles nativos do Panda (docs) — mantidos como fallback visível no mobile. */
+const PANDA_EMBED_CONTROLS =
+    'play-large,play,progress,current-time,volume,captions,settings,fullscreen,rewind,fast-forward';
+
 /**
- * Panda Video: player-vz-*.tv.pandavideo.com.br / *.pandavideo.com.br com ?v=UUID.
+ * Extrai URL útil se o seller colar o iframe HTML completo do Panda.
+ * @param {string} raw
+ * @returns {string}
+ */
+function normalizePandaInput(raw) {
+    const u = trimUrl(raw);
+    if (!u) return '';
+    const iframeSrc = u.match(/src\s*=\s*["']([^"']*pandavideo[^"']*)["']/i);
+    if (iframeSrc?.[1]) return iframeSrc[1].trim();
+    return u;
+}
+
+/**
+ * Panda Video: player-vz-*.tv.pandavideo.com.br / player.pandavideo.com.br / *.pandavideo.com.br.
+ * Aceita ?v=UUID, path /embed/?v=, ou UUID no path.
  * @param {string} url
  * @returns {{ host: string, videoId: string, pathname: string, searchParams: URLSearchParams }|null}
  */
 export function parsePandaVideo(url) {
-    const u = trimUrl(url);
+    const u = normalizePandaInput(url);
     if (!u) return null;
 
     let parsed;
@@ -155,9 +174,19 @@ export function parsePandaVideo(url) {
     if (host !== 'pandavideo.com.br' && !host.endsWith('.pandavideo.com.br')) {
         return null;
     }
+    // HLS (playlist.m3u8) deve ir para o Vidstack nativo, não iframe.
+    if (/\.m3u8(\?|$)/i.test(parsed.pathname + parsed.search)) {
+        return null;
+    }
 
-    const videoId = parsed.searchParams.get('v');
-    if (!videoId || !/^[a-zA-Z0-9-]+$/.test(videoId)) {
+    let videoId = parsed.searchParams.get('v');
+    if (!videoId) {
+        const pathMatch = parsed.pathname.match(
+            /\/(?:embed\/)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i,
+        );
+        if (pathMatch?.[1]) videoId = pathMatch[1];
+    }
+    if (!videoId || !PANDA_UUID_RE.test(videoId)) {
         return null;
     }
 
@@ -173,14 +202,16 @@ export function pandaEmbedUrl(url) {
     const parsed = parsePandaVideo(url);
     if (!parsed) return null;
 
-    const path = /\/embed\/?$/i.test(parsed.pathname) ? parsed.pathname : '/embed/';
-    const embed = new URL(`https://${parsed.host}${path.endsWith('/') ? path : `${path}/`}`);
+    // Sempre usa o host original (player-vz-… ou player.pandavideo.com.br).
+    const embed = new URL(`https://${parsed.host}/embed/`);
     parsed.searchParams.forEach((value, key) => {
+        if (key.toLowerCase() === 'controls') return;
         embed.searchParams.set(key, value);
     });
     embed.searchParams.set('v', parsed.videoId);
-    // Esvazia a lista de controles nativos; a barra Stacker assume play/pause/seek.
-    embed.searchParams.set('controls', '');
+    // Garante chrome nativo do Panda (play/pause/seek) além da barra Stacker.
+    embed.searchParams.set('controls', PANDA_EMBED_CONTROLS);
+    embed.searchParams.set('hideControlsOnStart', 'false');
     return embed.toString();
 }
 
