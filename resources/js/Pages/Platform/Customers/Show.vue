@@ -1,9 +1,10 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue';
-import { Link, router } from '@inertiajs/vue3';
+import { Link, router, useForm, usePage } from '@inertiajs/vue3';
 import LayoutPlatform from '@/Layouts/LayoutPlatform.vue';
 import Button from '@/components/ui/Button.vue';
 import CustomerAccessDossierSidebar from '@/components/platform/CustomerAccessDossierSidebar.vue';
+import PlatformStepUpModal from '@/components/platform/PlatformStepUpModal.vue';
 import { ArrowLeft, ClipboardList, Package } from 'lucide-vue-next';
 import { htmlToText } from '@/lib/sanitizeHtml';
 
@@ -19,7 +20,47 @@ const props = defineProps({
     filters: { type: Object, default: () => ({}) },
     filter_options: { type: Object, default: () => ({ products: [], sellers: [], payment_methods: [] }) },
     status_labels: { type: Object, default: () => ({}) },
+    security: {
+        type: Object,
+        default: () => ({ totp_enabled: false, has_operation_pin: false, can_authorize: false }),
+    },
+    issued_password: { type: String, default: '' },
 });
+
+const page = usePage();
+const flashSuccess = computed(() => page.props.flash?.success || '');
+const flashError = computed(() => page.props.flash?.error || '');
+const totpEnabled = computed(() => Boolean(props.security?.totp_enabled));
+const canAuthorize = computed(() => Boolean(props.security?.can_authorize));
+const stepUpOpen = ref(false);
+const pendingAction = ref('');
+const passwordCopied = ref(false);
+
+const emailForm = useForm({
+    email: props.customer?.email || '',
+    totp_code: '',
+    manual_approval_pin: '',
+});
+const passwordForm = useForm({
+    totp_code: '',
+    manual_approval_pin: '',
+});
+
+watch(
+    () => props.customer?.email,
+    (email) => {
+        emailForm.email = email || '';
+    }
+);
+
+const stepUpTitle = computed(() =>
+    pendingAction.value === 'password' ? 'Gerar nova senha' : 'Alterar e-mail'
+);
+const stepUpDescription = computed(() =>
+    pendingAction.value === 'password'
+        ? 'A senha atual deixa de valer. A nova aparece uma vez nesta ficha para você passar ao cliente.'
+        : 'O cliente passa a entrar com este e-mail na área de membros e no painel.'
+);
 
 const NOT_INFORMED = 'Não informado';
 const accessSidebarOpen = ref(false);
@@ -141,6 +182,70 @@ const summaryCards = computed(() => [
     { label: 'Última compra', value: formatDate(props.summary?.last_purchase_at) },
 ]);
 
+function requestEmailChange() {
+    emailForm.clearErrors();
+    const next = String(emailForm.email || '').trim().toLowerCase();
+    const current = String(props.customer?.email || '').trim().toLowerCase();
+    if (!next || next === current) {
+        emailForm.setError('email', 'Informe um e-mail diferente do atual.');
+        return;
+    }
+    if (!canAuthorize.value) return;
+    pendingAction.value = 'email';
+    stepUpOpen.value = true;
+}
+
+function requestPasswordReset() {
+    if (!canAuthorize.value || passwordForm.processing) return;
+    pendingAction.value = 'password';
+    stepUpOpen.value = true;
+}
+
+function closeStepUp() {
+    if (emailForm.processing || passwordForm.processing) return;
+    stepUpOpen.value = false;
+    pendingAction.value = '';
+}
+
+function onStepUpConfirm(payload) {
+    const totp = payload?.totp_code || '';
+    const pin = payload?.manual_approval_pin || '';
+    const options = {
+        preserveScroll: true,
+        onError: (errors) => {
+            const msg = errors?.totp_code || errors?.email || errors?.manual_approval_pin || 'Não foi possível concluir.';
+            window.alert(Array.isArray(msg) ? msg[0] : msg);
+        },
+        onSuccess: () => {
+            stepUpOpen.value = false;
+            pendingAction.value = '';
+        },
+    };
+    if (pendingAction.value === 'password') {
+        passwordForm.totp_code = totp;
+        passwordForm.manual_approval_pin = pin;
+        passwordForm.post(`/plataforma/clientes/${props.customer.id}/senha`, options);
+        return;
+    }
+    emailForm.totp_code = totp;
+    emailForm.manual_approval_pin = pin;
+    emailForm.post(`/plataforma/clientes/${props.customer.id}/email`, options);
+}
+
+async function copyIssuedPassword() {
+    const value = props.issued_password;
+    if (!value) return;
+    try {
+        await navigator.clipboard.writeText(value);
+        passwordCopied.value = true;
+        setTimeout(() => {
+            passwordCopied.value = false;
+        }, 2000);
+    } catch {
+        window.prompt('Copiar senha:', value);
+    }
+}
+
 function openAccessDossier(productId = null) {
     accessProductId.value = productId || null;
     accessSidebarOpen.value = true;
@@ -167,6 +272,33 @@ function formatEnrolledAt(iso) {
 
 <template>
     <div class="space-y-6">
+        <p
+            v-if="flashSuccess"
+            class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"
+        >
+            {{ flashSuccess }}
+        </p>
+        <p
+            v-if="flashError"
+            class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100"
+        >
+            {{ flashError }}
+        </p>
+        <div
+            v-if="issued_password"
+            class="rounded-2xl border border-amber-300 bg-amber-50 p-5 dark:border-amber-800 dark:bg-amber-950/40"
+        >
+            <p class="text-sm font-medium text-amber-950 dark:text-amber-100">Nova senha de acesso</p>
+            <p class="mt-1 text-sm text-amber-900 dark:text-amber-200">
+                Copie agora. Esta senha não fica salva em texto e some ao sair desta tela.
+            </p>
+            <div class="mt-3 flex flex-wrap items-center gap-3">
+                <code class="rounded-lg bg-white px-3 py-2 font-mono text-base text-zinc-900 dark:bg-zinc-900 dark:text-white">{{ issued_password }}</code>
+                <Button type="button" size="sm" variant="secondary" @click="copyIssuedPassword">
+                    {{ passwordCopied ? 'Copiada' : 'Copiar' }}
+                </Button>
+            </div>
+        </div>
         <div class="flex flex-wrap items-center gap-3">
             <Link
                 href="/plataforma/clientes"
@@ -238,6 +370,62 @@ function formatEnrolledAt(iso) {
                 </div>
             </dl>
         </section>
+
+        <section class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+            <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-500">Acesso da conta</h2>
+            <p class="mt-2 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+                O e-mail e a senha abaixo são os do login na área de membros e no painel do cliente.
+                Os pedidos continuam com o e-mail digitado na compra.
+            </p>
+            <p
+                v-if="customer.is_infoprodutor"
+                class="mt-2 text-sm text-amber-800 dark:text-amber-200"
+            >
+                Esta conta também é de infoprodutor. Trocar o e-mail ou a senha vale para o painel do seller.
+            </p>
+            <p v-if="!canAuthorize" class="mt-3 text-sm text-red-700 dark:text-red-300">
+                Cadastre o 2FA em Meu perfil ou o PIN de operação em Financeiro → Saques para alterar o acesso.
+            </p>
+            <form class="mt-4 max-w-xl space-y-3" @submit.prevent="requestEmailChange">
+                <label class="block text-sm font-medium text-zinc-800 dark:text-zinc-100" for="customer-login-email">
+                    E-mail de login
+                </label>
+                <input
+                    id="customer-login-email"
+                    v-model="emailForm.email"
+                    type="email"
+                    autocomplete="off"
+                    class="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                />
+                <p v-if="emailForm.errors.email" class="text-sm text-red-600">{{ emailForm.errors.email }}</p>
+                <div class="flex flex-wrap gap-2">
+                    <Button type="submit" size="sm" :disabled="!canAuthorize || emailForm.processing">
+                        Salvar e-mail
+                    </Button>
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        :disabled="!canAuthorize || passwordForm.processing"
+                        @click="requestPasswordReset"
+                    >
+                        Gerar nova senha
+                    </Button>
+                </div>
+            </form>
+        </section>
+
+        <PlatformStepUpModal
+            :open="stepUpOpen"
+            :title="stepUpTitle"
+            :description="stepUpDescription"
+            :require-totp="totpEnabled"
+            :require-pin="!totpEnabled"
+            :loading="emailForm.processing || passwordForm.processing"
+            confirm-label="Confirmar"
+            @close="closeStepUp"
+            @confirm="onStepUpConfirm"
+        />
 
         <section class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60">
             <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-500">Endereço</h2>

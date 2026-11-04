@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Platform;
 
+use App\Http\Controllers\Concerns\RequiresPlatformStepUp;
 use App\Http\Controllers\Controller;
 use App\Models\MemberStudentActivityLog;
 use App\Models\Order;
@@ -9,8 +10,10 @@ use App\Models\Product;
 use App\Models\User;
 use App\Services\ChargebackDefensePdfService;
 use App\Services\MemberStudentActivityLogService;
+use App\Services\Platform\PlatformTotpService;
 use App\Services\PlatformAdminDeletionService;
 use App\Services\PlatformAuditService;
+use App\Services\Withdrawal\WithdrawalPolicyService;
 use App\Support\Csv;
 use App\Support\PlatformCustomerDirectory;
 use Illuminate\Http\JsonResponse;
@@ -19,6 +22,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use InvalidArgumentException;
@@ -26,6 +30,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class CustomersController extends Controller
 {
+    use RequiresPlatformStepUp;
     public function index(Request $request): Response
     {
         $search = PlatformCustomerDirectory::searchFromRequest($request);
@@ -116,7 +121,103 @@ class CustomersController extends Controller
             'status_labels' => collect(PlatformCustomerDirectory::ORDER_STATUSES)
                 ->mapWithKeys(fn (string $s) => [$s => PlatformCustomerDirectory::orderStatusLabel($s)])
                 ->all(),
+            'security' => [
+                'totp_enabled' => PlatformTotpService::isEnabledFor($request->user()),
+                'has_operation_pin' => WithdrawalPolicyService::hasManualApprovalPin(),
+                'can_authorize' => WithdrawalPolicyService::hasPayoutSecurityBarrier($request->user()),
+            ],
+            'issued_password' => $request->session()->get('customer_access_password'),
         ]);
+    }
+
+    public function updateEmail(Request $request, User $user): RedirectResponse
+    {
+        $this->assertViewableCustomer($user);
+
+        $validated = $request->validate([
+            'email' => ['required', 'string', 'email', 'max:255'],
+            'totp_code' => ['nullable', 'string', 'max:12'],
+            'manual_approval_pin' => ['nullable', 'string', 'max:12'],
+        ]);
+
+        $email = mb_strtolower(trim($validated['email']));
+        if (mb_strtolower((string) $user->email) === $email) {
+            throw ValidationException::withMessages([
+                'email' => 'Informe um e-mail diferente do atual.',
+            ]);
+        }
+
+        $this->validateRequiredSecurityStepUp(
+            $request,
+            'Cadastre o 2FA em Meu perfil ou o PIN de operação em Financeiro > Saques para alterar o acesso deste cliente.'
+        );
+
+        $taken = User::query()
+            ->whereRaw('LOWER(email) = ?', [$email])
+            ->where('id', '!=', $user->id)
+            ->exists();
+        if ($taken) {
+            throw ValidationException::withMessages([
+                'email' => 'Este e-mail já está em outra conta.',
+            ]);
+        }
+
+        $previous = (string) $user->email;
+        $user->email = $email;
+        $user->email_verified_at = null;
+        $user->save();
+
+        PlatformAuditService::log('platform.customer.email_updated', [
+            'user_id' => $user->id,
+            'previous_email' => $previous,
+            'email' => $email,
+        ], $request);
+
+        return redirect()
+            ->route('plataforma.clientes.show', $user)
+            ->with('success', 'E-mail de login atualizado.');
+    }
+
+    public function resetPassword(Request $request, User $user): RedirectResponse
+    {
+        $this->assertViewableCustomer($user);
+
+        $request->validate([
+            'totp_code' => ['nullable', 'string', 'max:12'],
+            'manual_approval_pin' => ['nullable', 'string', 'max:12'],
+        ]);
+
+        $this->validateRequiredSecurityStepUp(
+            $request,
+            'Cadastre o 2FA em Meu perfil ou o PIN de operação em Financeiro > Saques para alterar o acesso deste cliente.'
+        );
+
+        $plain = $this->issueAccessPassword();
+        $user->forceFill([
+            'password' => $plain,
+            'remember_token' => Str::random(60),
+        ])->save();
+
+        PlatformAuditService::log('platform.customer.password_reset', [
+            'user_id' => $user->id,
+        ], $request);
+
+        return redirect()
+            ->route('plataforma.clientes.show', $user)
+            ->with('success', 'Nova senha gerada. Copie abaixo; ela não aparece de novo.')
+            ->with('customer_access_password', $plain);
+    }
+
+    private function assertViewableCustomer(User $user): void
+    {
+        if (! PlatformCustomerDirectory::isViewableCustomer($user)) {
+            abort(404);
+        }
+    }
+
+    private function issueAccessPassword(): string
+    {
+        return Str::lower(Str::random(4)).'-'.random_int(1000, 9999).'-'.Str::lower(Str::random(4));
     }
 
     public function export(Request $request): StreamedResponse
