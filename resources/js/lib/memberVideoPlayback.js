@@ -223,10 +223,6 @@ export function createPandaController(iframe, options) {
         } catch (_) {}
     }
 
-    function hideNativeControls() {
-        post('toggleControls', false);
-    }
-
     function onMessage(e) {
         if (destroyed) return;
         if (!isPandaEmbedOrigin(e.origin)) return;
@@ -238,7 +234,8 @@ export function createPandaController(iframe, options) {
 
         if (message === 'panda_ready' || message === 'ready') {
             ready = true;
-            hideNativeControls();
+            // Não esconde controles nativos: no mobile a barra Stacker + play-large do Panda
+            // precisam coexistir se o postMessage falhar no 1º gesto.
             onEvent?.('ready', data);
             return;
         }
@@ -275,13 +272,6 @@ export function createPandaController(iframe, options) {
 
     window.addEventListener('message', onMessage);
 
-    const onLoad = () => {
-        if (destroyed) return;
-        // Pedido best-effort: se o ready já passou, ainda tenta esconder controles.
-        hideNativeControls();
-    };
-    iframe.addEventListener('load', onLoad);
-
     return {
         get ready() {
             return ready;
@@ -307,7 +297,6 @@ export function createPandaController(iframe, options) {
         destroy() {
             destroyed = true;
             window.removeEventListener('message', onMessage);
-            iframe.removeEventListener('load', onLoad);
         },
     };
 }
@@ -445,7 +434,14 @@ export function providerUsesUnifiedEmbedControls(provider) {
     return provider === 'bunny' || provider === 'panda' || provider === 'loom' || provider === 'wistia';
 }
 
-/** Wistia no iOS: play() via iframe API é assíncrono e costuma falhar — não bloquear o iframe com veil. */
+/**
+ * Não cobrir o iframe com veil: Wistia (play async no iOS) e Panda (precisa do play-large nativo).
+ */
 export function providerNeedsOpenEmbedClick(provider) {
-    return provider === 'wistia';
+    return provider === 'wistia' || provider === 'panda';
+}
+
+/** Barra Stacker sempre visível (Panda: sem auto-hide para não “sumir” no mobile). */
+export function providerPinsUnifiedControls(provider) {
+    return provider === 'panda';
 }

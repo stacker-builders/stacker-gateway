@@ -135,13 +135,78 @@ export function bunnyEmbedUrl(url) {
     return embed;
 }
 
+const PANDA_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Controles nativos do Panda (docs) — mantidos como fallback visível no mobile. */
+const PANDA_EMBED_CONTROLS =
+    'play-large,play,progress,current-time,volume,captions,settings,fullscreen,rewind,fast-forward';
+
 /**
- * Panda Video: player-vz-*.tv.pandavideo.com.br / *.pandavideo.com.br com ?v=UUID.
+ * Extrai URL útil se o seller colar o iframe HTML completo do Panda.
+ * @param {string} raw
+ * @returns {string}
+ */
+function normalizePandaInput(raw) {
+    const u = trimUrl(raw);
+    if (!u) return '';
+    const iframeSrc = u.match(/src\s*=\s*["']([^"']*(?:pandavideo|b-cdn\.net)[^"']*)["']/i);
+    if (iframeSrc?.[1]) return iframeSrc[1].trim();
+    return u;
+}
+
+/**
+ * Converte hosts HLS (b-vz-…) / player genérico no host de embed player-vz-….
+ * Ex.: b-vz-e6c99c70-e86.tv.pandavideo.com.br → player-vz-e6c99c70-e86.tv.pandavideo.com.br
+ * @param {string} hostname
+ * @returns {string|null}
+ */
+function pandaEmbedHostFromHostname(hostname) {
+    const host = String(hostname || '')
+        .replace(/^www\./i, '')
+        .toLowerCase();
+
+    if (host === 'player.pandavideo.com.br' || host === 'pandavideo.com.br') {
+        return 'player.pandavideo.com.br';
+    }
+
+    const bVzTv = host.match(/^b-vz-([a-z0-9-]+)\.tv\.pandavideo\.com\.br$/i);
+    if (bVzTv) return `player-vz-${bVzTv[1]}.tv.pandavideo.com.br`;
+
+    const bVzCdn = host.match(/^b-vz-([a-z0-9-]+)\.b-cdn\.net$/i);
+    if (bVzCdn) return `player-vz-${bVzCdn[1]}.tv.pandavideo.com.br`;
+
+    const playerVz = host.match(/^player-vz-([a-z0-9-]+)\.tv\.pandavideo\.com\.br$/i);
+    if (playerVz) return host;
+
+    if (host.endsWith('.pandavideo.com.br')) return host;
+    return null;
+}
+
+function extractPandaVideoId(parsed) {
+    const fromQuery = parsed.searchParams.get('v');
+    if (fromQuery && PANDA_UUID_RE.test(fromQuery)) return fromQuery;
+
+    const path = parsed.pathname || '';
+    const hls = path.match(
+        /\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/playlist\.m3u8$/i,
+    );
+    if (hls?.[1]) return hls[1];
+
+    const embedPath = path.match(
+        /\/(?:embed\/)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i,
+    );
+    if (embedPath?.[1]) return embedPath[1];
+
+    return null;
+}
+
+/**
+ * Panda Video: embed, player.pandavideo.com.br e HLS
+ * (b-vz-….tv.pandavideo.com.br/{uuid}/playlist.m3u8 ou *.b-cdn.net).
  * @param {string} url
- * @returns {{ host: string, videoId: string, pathname: string, searchParams: URLSearchParams }|null}
+ * @returns {{ host: string, videoId: string, searchParams: URLSearchParams }|null}
  */
 export function parsePandaVideo(url) {
-    const u = trimUrl(url);
+    const u = normalizePandaInput(url);
     if (!u) return null;
 
     let parsed;
@@ -151,20 +216,15 @@ export function parsePandaVideo(url) {
         return null;
     }
 
-    const host = parsed.hostname.replace(/^www\./i, '').toLowerCase();
-    if (host !== 'pandavideo.com.br' && !host.endsWith('.pandavideo.com.br')) {
-        return null;
-    }
+    const embedHost = pandaEmbedHostFromHostname(parsed.hostname);
+    if (!embedHost) return null;
 
-    const videoId = parsed.searchParams.get('v');
-    if (!videoId || !/^[a-zA-Z0-9-]+$/.test(videoId)) {
-        return null;
-    }
+    const videoId = extractPandaVideoId(parsed);
+    if (!videoId) return null;
 
     return {
-        host: parsed.hostname,
+        host: embedHost,
         videoId,
-        pathname: parsed.pathname || '/embed/',
         searchParams: parsed.searchParams,
     };
 }
@@ -173,14 +233,16 @@ export function pandaEmbedUrl(url) {
     const parsed = parsePandaVideo(url);
     if (!parsed) return null;
 
-    const path = /\/embed\/?$/i.test(parsed.pathname) ? parsed.pathname : '/embed/';
-    const embed = new URL(`https://${parsed.host}${path.endsWith('/') ? path : `${path}/`}`);
+    const embed = new URL(`https://${parsed.host}/embed/`);
     parsed.searchParams.forEach((value, key) => {
+        const k = key.toLowerCase();
+        if (k === 'controls' || k === 'v') return;
         embed.searchParams.set(key, value);
     });
     embed.searchParams.set('v', parsed.videoId);
-    // Esvazia a lista de controles nativos; a barra Stacker assume play/pause/seek.
-    embed.searchParams.set('controls', '');
+    // Garante chrome nativo do Panda (play/pause/seek) além da barra Stacker.
+    embed.searchParams.set('controls', PANDA_EMBED_CONTROLS);
+    embed.searchParams.set('hideControlsOnStart', 'false');
     return embed.toString();
 }
 

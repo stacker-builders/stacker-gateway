@@ -10,6 +10,7 @@ import {
 import {
     createEmbedPlaybackController,
     providerNeedsOpenEmbedClick,
+    providerPinsUnifiedControls,
     providerUsesUnifiedEmbedControls,
 } from '@/lib/memberVideoPlayback';
 import { ensureVidstackLoaded } from '@/lib/vidstackLoader';
@@ -46,10 +47,11 @@ const useLegacyYoutube = computed(() => isYoutube.value && !useVidstackFallback.
 const useUnifiedEmbedControls = computed(
     () => providerUsesUnifiedEmbedControls(providerType.value) && !!iframeSrc.value,
 );
-/** Wistia no iOS: veil impede o 1º play nativo — manter iframe clicável. */
+/** Wistia/Panda: veil impede o 1º play nativo — manter iframe clicável. */
 const showEmbedVeil = computed(
     () => useUnifiedEmbedControls.value && !providerNeedsOpenEmbedClick(providerType.value),
 );
+const pinEmbedControls = computed(() => providerPinsUnifiedControls(providerType.value));
 const showVidstackPlayer = computed(
     () => !!props.src?.trim() && !isIframeProvider.value && (!isYoutube.value || useVidstackFallback.value),
 );
@@ -606,7 +608,8 @@ function destroyEmbedPlayback() {
 
 function scheduleHideEmbedControls() {
     if (embedControlsHideTimer) clearTimeout(embedControlsHideTimer);
-    if (!embedIsPlaying.value) {
+    // Panda: barra sempre visível — era o caso em que o aluno “não via controles”.
+    if (pinEmbedControls.value || !embedIsPlaying.value) {
         embedControlsVisible.value = true;
         return;
     }
@@ -1276,7 +1279,7 @@ function onContextMenu(e) {
                 allowfullscreen
                 referrerpolicy="strict-origin-when-cross-origin"
             />
-            <!-- Camada transparente: toque/clique no vídeo = play/pause (exceto Wistia no mobile). -->
+            <!-- Camada transparente: toque/clique no vídeo = play/pause (exceto Wistia/Panda). -->
             <button
                 v-if="showEmbedVeil"
                 type="button"
@@ -1285,9 +1288,19 @@ function onContextMenu(e) {
                 @click.stop.prevent="toggleEmbedPlay"
             />
 
+            <button
+                v-if="!embedIsPlaying"
+                type="button"
+                class="embed-center-play"
+                aria-label="Reproduzir vídeo"
+                @click.stop.prevent="toggleEmbedPlay"
+            >
+                <Play class="h-8 w-8" aria-hidden="true" />
+            </button>
+
             <div
                 class="yt-progress-overlay"
-                :class="{ hidden: !embedControlsVisible && !embedScrubbing }"
+                :class="{ hidden: !pinEmbedControls && !embedControlsVisible && !embedScrubbing }"
                 @pointerdown.stop="onEmbedScrubStart"
                 @pointerup.stop="onEmbedScrubEnd"
                 @pointercancel.stop="onEmbedScrubEnd"
@@ -1306,7 +1319,11 @@ function onContextMenu(e) {
                 />
             </div>
 
-            <div class="yt-legacy-controls" :class="{ hidden: !embedControlsVisible }" @pointerdown.stop>
+            <div
+                class="yt-legacy-controls"
+                :class="{ hidden: !pinEmbedControls && !embedControlsVisible }"
+                @pointerdown.stop
+            >
                 <div class="yt-controlbar">
                     <button type="button" class="yt-icon-btn" aria-label="Voltar 10 segundos" @click="seekEmbedBy(-UNIFIED_SEEK_STEP_SEC)">
                         <RotateCcw class="h-4 w-4" aria-hidden="true" />
@@ -1412,6 +1429,30 @@ function onContextMenu(e) {
     position: relative;
     width: 100%;
     height: 100%;
+}
+.embed-center-play {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 4;
+    transform: translate(-50%, -50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 64px;
+    width: 64px;
+    border-radius: 9999px;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    background: rgba(0, 0, 0, 0.62);
+    color: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(6px);
+}
+.embed-center-play:active {
+    transform: translate(-50%, -50%) scale(0.96);
+}
+.embed-center-play:focus-visible {
+    outline: 2px solid rgba(78, 156, 246, 0.9);
+    outline-offset: 2px;
 }
 .member-embed-iframe {
     width: 100%;
