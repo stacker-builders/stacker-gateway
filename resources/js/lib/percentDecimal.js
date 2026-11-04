@@ -72,9 +72,10 @@ export function normalizeMerchantFeeRulesForSubmit(rules) {
 /**
  * @param {Record<string|number, { percent?: unknown, fixed?: unknown, days_to_available?: unknown }>} rules
  */
-export function normalizeCardInstallmentRulesForSubmit(rules) {
+export function normalizeCardInstallmentRulesForSubmit(rules, maxCount = 12) {
+    const limit = Math.min(18, Math.max(1, Number(maxCount) || 12));
     const out = {};
-    for (let n = 1; n <= 12; n++) {
+    for (let n = 1; n <= limit; n++) {
         const block = rules && typeof rules === 'object' ? (rules[n] ?? rules[String(n)] ?? {}) : {};
         const f = parseFloat(String(block.fixed ?? 0).replace(',', '.'));
         const d = parseInt(String(block.days_to_available ?? 0), 10);

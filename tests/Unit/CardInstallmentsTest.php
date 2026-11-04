@@ -26,6 +26,8 @@ class CardInstallmentsTest extends TestCase
         $this->assertSame(4, CardInstallments::maxAllowedForAmount(20, 12));
         $this->assertSame(3, CardInstallments::maxAllowedForAmount(120, 3));
         $this->assertSame(12, CardInstallments::maxAllowedForAmount(1000, 12));
+        $this->assertSame(12, CardInstallments::maxAllowedForAmount(1000, 18));
+        $this->assertSame(18, CardInstallments::maxAllowedForAmount(1000, 18, CardInstallments::MAX_MERCADOPAGO));
     }
 
     public function test_clamp_forces_one_when_disabled_or_subscription(): void
@@ -34,6 +36,9 @@ class CardInstallmentsTest extends TestCase
         $this->assertSame(1, CardInstallments::clamp(6, true, 12, 120, true));
         $this->assertSame(3, CardInstallments::clamp(3, true, 12, 120));
         $this->assertSame(4, CardInstallments::clamp(12, true, 12, 20));
+        $this->assertSame(18, CardInstallments::clamp(18, true, 18, 1000, false, 'mercadopago'));
+        $this->assertSame(12, CardInstallments::clamp(18, true, 18, 1000, false, 'pagarme'));
+        $this->assertSame(12, CardInstallments::clamp(18, true, 18, 1000));
     }
 
     public function test_apply_to_card_payload_rewrites_token_json(): void

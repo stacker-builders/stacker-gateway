@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Models\GatewayCredential;
 use App\Models\Setting;
 use App\Services\PlatformCardInstallments;
 use Tests\TestCase;
@@ -68,5 +69,37 @@ class PlatformCardInstallmentsTest extends TestCase
 
         $sub = PlatformCardInstallments::normalizeSellerInput(['enabled' => true, 'max' => 12], 'subscription');
         $this->assertSame(['enabled' => false, 'max' => 1], $sub);
+    }
+
+    public function test_eighteen_installments_require_connected_mercado_pago(): void
+    {
+        PlatformCardInstallments::setEnabled(true);
+        PlatformCardInstallments::setMaxAllowed(18);
+
+        $this->assertFalse(PlatformCardInstallments::mercadoPagoActive());
+        $this->assertSame(12, PlatformCardInstallments::selectableCeiling());
+        $this->assertSame(12, PlatformCardInstallments::maxAllowed());
+
+        $cred = GatewayCredential::query()->firstOrNew([
+            'tenant_id' => null,
+            'gateway_slug' => 'mercadopago',
+        ]);
+        $cred->is_connected = true;
+        $cred->is_enabled = true;
+        $cred->setEncryptedCredentials([
+            'public_key' => 'TEST-public-key',
+            'access_token' => 'TEST-access-token',
+        ]);
+        $cred->save();
+
+        PlatformCardInstallments::setMaxAllowed(18);
+
+        $this->assertTrue(PlatformCardInstallments::mercadoPagoActive());
+        $this->assertSame(18, PlatformCardInstallments::selectableCeiling());
+        $this->assertSame(18, PlatformCardInstallments::maxAllowed());
+
+        $resolved = PlatformCardInstallments::forProductConfig(['enabled' => true, 'max' => 18]);
+        $this->assertTrue($resolved['enabled']);
+        $this->assertSame(18, $resolved['max']);
     }
 }

@@ -71,6 +71,7 @@ const props = defineProps({
     },
     platform_card_installments_enabled: { type: Boolean, default: true },
     platform_card_installments_max: { type: Number, default: 12 },
+    platform_card_installments_ceiling: { type: Number, default: 12 },
     merchant_settlement_rules: {
         type: Object,
         default: () => ({}),
@@ -814,7 +815,17 @@ function buildLowTicketFeeRulesFromProps() {
     return out;
 }
 
-const INSTALLMENT_COUNTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+const installmentCeiling = computed(() => {
+    const raw = Number(props.platform_card_installments_ceiling);
+    const ceiling = Number.isFinite(raw) && raw >= 12 ? raw : 12;
+    return Math.min(18, Math.max(12, ceiling));
+});
+const installmentCounts = computed(() => {
+    const out = [];
+    for (let n = 1; n <= installmentCeiling.value; n += 1) out.push(n);
+    return out;
+});
+const platformInstallmentMaxOptions = computed(() => installmentCounts.value.filter((n) => n >= 2));
 
 function installmentRowFromProps(n) {
     const r = props.card_installment_rules?.[n] || props.card_installment_rules?.[String(n)] || {};
@@ -829,7 +840,7 @@ function installmentRowFromProps(n) {
 
 function buildInstallmentRulesFromProps() {
     const out = {};
-    for (const n of INSTALLMENT_COUNTS) {
+    for (const n of installmentCounts.value) {
         out[n] = installmentRowFromProps(n);
     }
     return out;
@@ -863,7 +874,7 @@ function flushFeeInputs() {
         feePercentRefs[`lt-${row.key}`]?.commit?.();
         feeFixedRefs[`lt-${row.key}`]?.commit?.();
     }
-    for (const n of INSTALLMENT_COUNTS) {
+    for (const n of installmentCounts.value) {
         feePercentRefs[`inst-${n}`]?.commit?.();
         feeFixedRefs[`inst-${n}`]?.commit?.();
     }
@@ -904,7 +915,7 @@ function copyCardFeeToAllInstallments() {
     const card = feeForm.merchant_fee_rules.card || props.merchant_fee_rules?.card || {};
     const days = Number(props.merchant_settlement_rules?.card?.days_to_available ?? 0);
     const next = {};
-    for (const n of INSTALLMENT_COUNTS) {
+    for (const n of installmentCounts.value) {
         next[n] = {
             percent: card.percent ?? 0,
             fixed: card.fixed ?? 0,
@@ -915,10 +926,14 @@ function copyCardFeeToAllInstallments() {
 }
 
 function flushInstallmentInputs() {
-    for (const n of INSTALLMENT_COUNTS) {
+    for (const n of installmentCounts.value) {
         feePercentRefs[`inst-${n}`]?.commit?.();
         feeFixedRefs[`inst-${n}`]?.commit?.();
     }
+}
+
+function clampPlatformInstallmentMax(value) {
+    return Math.min(installmentCeiling.value, Math.max(2, Number(value) || 12));
 }
 
 const feeForm = useForm({
@@ -941,11 +956,9 @@ const feeForm = useForm({
     api_pix_enabled: props.api_pix_enabled,
 });
 
-const PLATFORM_INSTALLMENT_MAX_OPTIONS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-
 const installmentForm = useForm({
     platform_card_installments_enabled: props.platform_card_installments_enabled !== false,
-    platform_card_installments_max: Math.min(12, Math.max(2, Number(props.platform_card_installments_max) || 12)),
+    platform_card_installments_max: clampPlatformInstallmentMax(props.platform_card_installments_max),
     card_installment_rules: buildInstallmentRulesFromProps(),
 });
 
@@ -985,8 +998,8 @@ function submitInstallments() {
     installmentForm
         .transform((data) => ({
             platform_card_installments_enabled: data.platform_card_installments_enabled,
-            platform_card_installments_max: Math.min(12, Math.max(2, Number(data.platform_card_installments_max) || 12)),
-            card_installment_rules: normalizeCardInstallmentRulesForSubmit(data.card_installment_rules),
+            platform_card_installments_max: clampPlatformInstallmentMax(data.platform_card_installments_max),
+            card_installment_rules: normalizeCardInstallmentRulesForSubmit(data.card_installment_rules, installmentCeiling.value),
         }))
         .put('/plataforma/financeiro/parcelamento', {
             preserveScroll: true,
@@ -995,7 +1008,7 @@ function submitInstallments() {
                 await nextTick();
                 installmentForm.defaults({
                     platform_card_installments_enabled: props.platform_card_installments_enabled !== false,
-                    platform_card_installments_max: Math.min(12, Math.max(2, Number(props.platform_card_installments_max) || 12)),
+                    platform_card_installments_max: clampPlatformInstallmentMax(props.platform_card_installments_max),
                     card_installment_rules: buildInstallmentRulesFromProps(),
                 });
                 installmentForm.reset();
@@ -1780,7 +1793,10 @@ function submitSettlement() {
                     </h2>
                     <p class="mb-6 text-sm text-zinc-600 dark:text-zinc-400">
                         Controla se os infoprodutores podem oferecer cartão parcelado e o teto de parcelas da plataforma.
-                        As taxas 1x a 12x abaixo continuam valendo para o cálculo de líquido e liquidação — não alteram o checkout à vista.
+                        As taxas 1x a {{ installmentCeiling }}x abaixo valem para o cálculo de líquido e liquidação — não alteram o checkout à vista.
+                        <template v-if="installmentCeiling > 12">
+                            De 13x a 18x, o checkout só oferece essas parcelas quando o cartão é cobrado no Mercado Pago. Nos demais adquirentes o teto continua 12x.
+                        </template>
                     </p>
                     <form class="space-y-6" @submit.prevent="submitInstallments">
                         <label class="flex items-start gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900/60">
@@ -1808,7 +1824,7 @@ function submitSettlement() {
                                 :disabled="!installmentForm.platform_card_installments_enabled"
                                 class="mt-1 w-full max-w-xs rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
                             >
-                                <option v-for="n in PLATFORM_INSTALLMENT_MAX_OPTIONS" :key="'plat-max-' + n" :value="n">
+                                <option v-for="n in platformInstallmentMaxOptions" :key="'plat-max-' + n" :value="n">
                                     {{ n }} parcelas
                                 </option>
                             </select>
@@ -1824,11 +1840,11 @@ function submitSettlement() {
                             <div class="mb-3 flex flex-wrap items-start justify-between gap-3">
                                 <div>
                                     <h3 class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                                        Cartão por parcelamento (1x a 12x)
+                                        Cartão por parcelamento (1x a {{ installmentCeiling }}x)
                                     </h3>
                                     <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                                         Percentual e valor fixo de cada linha incidem sobre o <strong class="font-medium">bruto total</strong> da venda naquela quantidade de parcelas.
-                                        A disponibilidade é o intervalo entre as fatias: numa 12x, o líquido sai em 12 partes; a 1ª libera em D+X, a 2ª em D+2X, e assim por diante.
+                                        A disponibilidade é o intervalo entre as fatias: numa venda parcelada, o líquido sai em N partes; a 1ª libera em D+X, a 2ª em D+2X, e assim por diante.
                                         Com 0 dias, o crédito segue a aba Liquidação (sem calendário por parcela). Apple Pay e Google Pay continuam nas linhas próprias da aba Taxas.
                                     </p>
                                 </div>
@@ -1847,7 +1863,7 @@ function submitSettlement() {
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-zinc-100 dark:divide-zinc-700">
-                                        <tr v-for="n in INSTALLMENT_COUNTS" :key="'inst-fee-' + n">
+                                        <tr v-for="n in installmentCounts" :key="'inst-fee-' + n">
                                             <td class="py-3 font-medium text-zinc-900 dark:text-white">
                                                 {{ n === 1 ? '1x (à vista)' : n + 'x' }}
                                             </td>

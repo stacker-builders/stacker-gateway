@@ -208,7 +208,7 @@ class ProdutosController extends Controller
             'deliverable_link' => ['nullable', 'string', 'url', 'max:500'],
             'card_installments' => ['nullable', 'array'],
             'card_installments.enabled' => ['nullable', 'boolean'],
-            'card_installments.max' => ['nullable', 'integer', 'min:1', 'max:12'],
+            'card_installments.max' => ['nullable', 'integer', 'min:1', 'max:'.\App\Services\PlatformCardInstallments::selectableCeiling()],
             'bundle_product_ids' => ['sometimes', 'array', 'max:'.ProductBundleService::MAX_INCLUDED],
             'bundle_product_ids.*' => ['nullable', 'string', 'max:36'],
         ]);
@@ -738,7 +738,7 @@ class ProdutosController extends Controller
             'conversion_pixels.custom_script.*.script' => ['nullable', 'string', 'max:65535'],
             'card_installments' => ['nullable', 'array'],
             'card_installments.enabled' => ['nullable', 'boolean'],
-            'card_installments.max' => ['nullable', 'integer', 'min:1', 'max:12'],
+            'card_installments.max' => ['nullable', 'integer', 'min:1', 'max:'.\App\Services\PlatformCardInstallments::selectableCeiling()],
             'payment_methods_enabled' => ['nullable', 'array'],
             'payment_methods_enabled.pix' => ['nullable', 'boolean'],
             'payment_methods_enabled.card' => ['nullable', 'boolean'],
@@ -1805,7 +1805,7 @@ class ProdutosController extends Controller
                 'card_installments_gateway_name' => '',
                 'digital_wallets_at_checkout' => false,
                 'platform_card_installments_enabled' => $platformEnabled,
-                'platform_card_installments_max' => $platformMax,
+                'platform_card_installments_max' => min($platformMax, CardInstallments::MAX_ALLOWED),
             ];
         }
 
@@ -1834,7 +1834,7 @@ class ProdutosController extends Controller
                 : '',
             'digital_wallets_at_checkout' => $primaryConnectedCardSlug === 'cajupay',
             'platform_card_installments_enabled' => $platformEnabled,
-            'platform_card_installments_max' => $platformMax,
+            'platform_card_installments_max' => min($platformMax, CardInstallments::ceilingForGateway($primaryConnectedCardSlug)),
         ];
     }
 

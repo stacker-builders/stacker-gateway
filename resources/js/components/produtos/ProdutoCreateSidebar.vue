@@ -87,13 +87,13 @@ const platformInstallmentMax = computed(() => {
     const fromUi = Number(props.checkoutGatewayUi?.platform_card_installments_max);
     const fromShared = Number(page.props.platform_card_installments?.max);
     const raw = Number.isFinite(fromUi) && fromUi > 0 ? fromUi : fromShared;
-    return Math.min(12, Math.max(2, raw || 12));
+    return Math.min(18, Math.max(2, raw || 12));
 });
 const maxAllowedInstallments = computed(() => {
     if (form.billing_type === 'subscription') return 1;
     const p = priceNum.value;
     if (!p || p < MIN_PARCELA_BRL) return 1;
-    const byAmount = Math.min(12, Math.max(1, Math.floor(p / MIN_PARCELA_BRL)));
+    const byAmount = Math.min(18, Math.max(1, Math.floor(p / MIN_PARCELA_BRL)));
     return Math.min(byAmount, platformInstallmentMax.value);
 });
 const installmentMaxOptions = computed(() => {

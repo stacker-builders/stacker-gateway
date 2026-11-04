@@ -364,9 +364,16 @@ class CheckoutController extends Controller
             $isSubscriptionCheckout
         );
         $installmentsEnabled = $resolvedInstallments['enabled'];
+        $cardGatewaySlug = null;
+        foreach ($payload['available_payment_methods'] as $methodRow) {
+            if (($methodRow['id'] ?? '') === 'card') {
+                $cardGatewaySlug = is_string($methodRow['gateway_slug'] ?? null) ? $methodRow['gateway_slug'] : null;
+                break;
+            }
+        }
         $payload['card_installments_enabled'] = $installmentsEnabled;
         $payload['card_max_installments'] = $installmentsEnabled
-            ? $resolvedInstallments['max']
+            ? min($resolvedInstallments['max'], CardInstallments::ceilingForGateway($cardGatewaySlug))
             : 1;
 
         $orderBumps = $product->orderBumps()->with(['targetProduct', 'targetProductOffer'])->get()
@@ -732,7 +739,8 @@ class CheckoutController extends Controller
             } else {
                 $rules['payment_token'] = ['required', 'string', 'max:10000'];
             }
-            $rules['installments'] = ['nullable', 'integer', 'min:1', 'max:12'];
+            $installmentCeiling = CardInstallments::ceilingForGateway(is_string($firstCardGateway) ? $firstCardGateway : null);
+            $rules['installments'] = ['nullable', 'integer', 'min:1', 'max:'.$installmentCeiling];
         }
         if ($request->input('payment_method') === 'boleto') {
             $rules['address_zipcode'] = ['required', 'string', 'max:9'];
@@ -1789,7 +1797,8 @@ class CheckoutController extends Controller
                 $installmentsEnabled,
                 $maxInstallments,
                 (float) $order->amount,
-                $plan !== null
+                $plan !== null,
+                is_string($firstCardGwForSdk) ? $firstCardGwForSdk : null
             );
             $card = CardInstallments::applyToCardPayload($card, $installments);
             $order->update([
