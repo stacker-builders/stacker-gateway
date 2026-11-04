@@ -613,6 +613,9 @@ class PaymentService
             if ($methodKey === 'paypal' && $subscription !== null) {
                 continue;
             }
+            if ($methodKey === 'open_finance' && $plan !== null) {
+                continue;
+            }
             if ($methodKey === 'pix_auto') {
                 if ($subscription !== null) {
                     $idRec = $subscription->gateway_subscription_id;
@@ -645,20 +648,10 @@ class PaymentService
                 }
                 if ($methodKey === 'card') {
                     if ($includeCardRow) {
-                        $methods[] = [
-                            'id' => $meta['id'],
-                            'label' => $meta['label'],
-                            'gateway_slug' => $slug,
-                            'gateway_name' => $gateway['name'] ?? $slug,
-                        ];
+                        $methods[] = $this->checkoutMethodRow($meta['id'], $meta['label'], $slug, (string) ($gateway['name'] ?? $slug), $plan);
                     }
                 } else {
-                    $methods[] = [
-                        'id' => $meta['id'],
-                        'label' => $meta['label'],
-                        'gateway_slug' => $slug,
-                        'gateway_name' => $gateway['name'] ?? $slug,
-                    ];
+                    $methods[] = $this->checkoutMethodRow($meta['id'], $meta['label'], $slug, (string) ($gateway['name'] ?? $slug), $plan);
                 }
                 break;
             }
@@ -691,6 +684,39 @@ class PaymentService
     }
 
     /**
+     * @return array{id: string, label: string, gateway_slug: string, gateway_name: string, hint?: string}
+     */
+    private function checkoutMethodRow(string $id, string $label, string $slug, string $gatewayName, ?SubscriptionPlan $plan): array
+    {
+        $row = [
+            'id' => $id,
+            'label' => $label,
+            'gateway_slug' => $slug,
+            'gateway_name' => $gatewayName,
+        ];
+        $hint = $this->subscriptionMethodHint($id, $plan);
+        if ($hint !== null) {
+            $row['hint'] = $hint;
+        }
+
+        return $row;
+    }
+
+    private function subscriptionMethodHint(string $methodKey, ?SubscriptionPlan $plan): ?string
+    {
+        if ($plan === null || $plan->isLifetime()) {
+            return null;
+        }
+
+        return match ($methodKey) {
+            'pix' => 'Avisamos para renovar no vencimento',
+            'card' => 'Assinatura no cartão',
+            'pix_auto' => 'Débito automático no vencimento',
+            default => null,
+        };
+    }
+
+    /**
      * Quais métodos têm pelo menos um gateway global conectado (sem filtro do produto).
      *
      * @return array<string, bool>
@@ -701,9 +727,6 @@ class PaymentService
         $credentialBySlug = GatewayCredential::connectedMapForPayment($tenantId);
         $out = ['pix' => false, 'card' => false, 'boleto' => false, 'pix_auto' => false, 'apple_pay' => false, 'google_pay' => false, 'open_finance' => false, 'paypal' => false];
         foreach (['pix', 'card', 'boleto', 'pix_auto', 'open_finance', 'paypal'] as $methodKey) {
-            if ($methodKey === 'pix_auto' && $plan === null) {
-                continue;
-            }
             $slugsToCheck = $this->getGatewayOrderForMethod($tenantId, $methodKey, $product);
             foreach ($slugsToCheck as $slug) {
                 if ($slug === 'cajupay') {

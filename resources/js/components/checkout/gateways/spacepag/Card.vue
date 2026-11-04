@@ -20,5 +20,6 @@ defineProps({
     </span>
     <div class="min-w-0 flex-1">
         <span class="block font-medium text-gray-900">{{ method.label }}</span>
+        <span v-if="method.hint" class="mt-0.5 block text-xs leading-snug text-gray-500">{{ method.hint }}</span>
     </div>
 </template>
