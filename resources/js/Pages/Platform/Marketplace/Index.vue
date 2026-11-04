@@ -17,6 +17,8 @@ const props = defineProps({
     },
     categories: { type: Array, default: () => [] },
     auto_accept: { type: Boolean, default: true },
+    public_enabled: { type: Boolean, default: false },
+    public_url: { type: String, default: '' },
     counts: { type: Object, default: () => ({ all: 0, pending: 0, authorized: 0 }) },
 });
 
@@ -25,6 +27,7 @@ const sellerQ = ref(props.filters?.seller ?? '');
 const selectedCategory = ref(props.filters?.category ?? '');
 const activeStatus = ref(props.filters?.status ?? 'all');
 const autoAccept = ref(Boolean(props.auto_accept));
+const publicEnabled = ref(Boolean(props.public_enabled));
 
 watch(
     () => props.filters,
@@ -40,6 +43,13 @@ watch(
     () => props.auto_accept,
     (value) => {
         autoAccept.value = Boolean(value);
+    }
+);
+
+watch(
+    () => props.public_enabled,
+    (value) => {
+        publicEnabled.value = Boolean(value);
     }
 );
 
@@ -77,6 +87,20 @@ function setAutoAccept(enabled) {
             preserveScroll: true,
             onError: () => {
                 autoAccept.value = Boolean(props.auto_accept);
+            },
+        }
+    );
+}
+
+function setPublicEnabled(enabled) {
+    publicEnabled.value = enabled;
+    router.post(
+        '/plataforma/marketplace/link-publico',
+        { public_enabled: enabled },
+        {
+            preserveScroll: true,
+            onError: () => {
+                publicEnabled.value = Boolean(props.public_enabled);
             },
         }
     );
@@ -150,6 +174,39 @@ function formatMoney(value, currency) {
                     @update:model-value="setAutoAccept"
                 />
             </div>
+        </section>
+
+        <section class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">Link público</h2>
+                    <p class="mt-1 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+                        Ligado: qualquer pessoa abre o marketplace sem login.
+                        Desligado: o link não abre.
+                    </p>
+                </div>
+                <span
+                    class="inline-flex w-fit shrink-0 rounded-full px-2.5 py-1 text-xs font-medium"
+                    :class="
+                        publicEnabled
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200'
+                            : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
+                    "
+                >
+                    {{ publicEnabled ? 'No ar' : 'Fechado' }}
+                </span>
+            </div>
+            <div class="mt-4">
+                <Toggle
+                    :model-value="publicEnabled"
+                    label="Exibir marketplace em link público"
+                    @update:model-value="setPublicEnabled"
+                />
+            </div>
+            <p v-if="publicEnabled && public_url" class="mt-4 break-all text-sm text-zinc-700 dark:text-zinc-300">
+                <span class="font-medium">Link:</span>
+                <a :href="public_url" class="ml-1 text-[var(--color-primary)] underline" target="_blank" rel="noopener">{{ public_url }}</a>
+            </p>
         </section>
 
         <form class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center" @submit.prevent="applyFilters">

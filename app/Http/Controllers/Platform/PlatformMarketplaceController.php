@@ -94,8 +94,33 @@ class PlatformMarketplaceController extends Controller
             ],
             'categories' => Product::categoriesForSelect(),
             'auto_accept' => MarketplaceSettings::autoAcceptEnabled(),
+            'public_enabled' => MarketplaceSettings::publicEnabled(),
+            'public_url' => url('/marketplace'),
             'counts' => $counts,
         ]);
+    }
+
+    public function updatePublic(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'public_enabled' => ['required'],
+        ]);
+
+        $enabled = $request->boolean('public_enabled');
+        $was = MarketplaceSettings::publicEnabled();
+        MarketplaceSettings::setPublicEnabled($enabled);
+
+        PlatformAuditService::log('marketplace.public_updated', [
+            'public_enabled' => $enabled,
+            'previous' => $was,
+        ], $request);
+
+        return redirect()->back()->with(
+            'success',
+            $enabled
+                ? 'Marketplace público ligado. O link '.url('/marketplace').' está no ar.'
+                : 'Marketplace público desligado. O link não abre.'
+        );
     }
 
     public function updateAutoAccept(Request $request): RedirectResponse
