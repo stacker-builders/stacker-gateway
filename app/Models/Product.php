@@ -52,6 +52,8 @@ class Product extends Model
         'name',
         'notification_name',
         'support_email',
+        'support_whatsapp',
+        'support_whatsapp_enabled',
         'slug',
         'checkout_slug',
         'checkout_config',
@@ -92,6 +94,7 @@ class Product extends Model
         return [
             'price' => 'decimal:2',
             'is_active' => 'boolean',
+            'support_whatsapp_enabled' => 'boolean',
             'show_in_marketplace' => 'boolean',
             'marketplace_approved' => 'boolean',
             'admin_blocked' => 'boolean',

@@ -13,6 +13,7 @@ use App\Services\PlatformI18nService;
 use App\Services\RefundRequestService;
 use App\Services\StorageService;
 use App\Support\RefundEligibility;
+use App\Support\WhatsappPhoneNormalizer;
 use App\Support\SaleOrigin;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -138,7 +139,7 @@ class CustomerPanelController extends Controller
             'purchased_at_label' => $this->dateLabel($order->created_at),
             'payment_method_label' => $this->paymentMethodLabel($order),
             'seller_name' => $this->sellerName($product),
-            'support_email' => $this->supportEmail($product),
+            ...$this->supportContacts($product),
             'shipping' => $this->shippingSummary($order, $product),
             'refund_status' => $position === 0 && ! $isBundle ? $this->latestRefundStatus($order) : null,
             'is_order_bump' => $isBump,
@@ -179,7 +180,7 @@ class CustomerPanelController extends Controller
             'purchased_at_label' => $this->dateLabel($grantedAt),
             'payment_method_label' => null,
             'seller_name' => $this->sellerName($product),
-            'support_email' => $this->supportEmail($product),
+            ...$this->supportContacts($product),
             'shipping' => null,
             'refund_status' => null,
             'is_order_bump' => false,
@@ -361,11 +362,33 @@ class CustomerPanelController extends Controller
         return $name !== '' ? $name : null;
     }
 
-    private function supportEmail(?Product $product): ?string
+    /**
+     * E-mail do produto, com fallback no cadastro do dono.
+     * WhatsApp só entra se o vendedor ativar o canal e informar o número no produto.
+     *
+     * @return array{support_email: ?string, support_whatsapp: ?string}
+     */
+    private function supportContacts(?Product $product): array
     {
-        $email = trim((string) ($product?->support_email ?? ''));
+        $owner = $product?->tenantOwner;
 
-        return $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : null;
+        $email = trim((string) ($product?->support_email ?? ''));
+        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $email = trim((string) ($owner?->email ?? ''));
+        }
+        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $email = null;
+        }
+
+        $whatsapp = null;
+        if ($product !== null && $product->support_whatsapp_enabled) {
+            $whatsapp = WhatsappPhoneNormalizer::normalize($product->support_whatsapp);
+        }
+
+        return [
+            'support_email' => $email,
+            'support_whatsapp' => $whatsapp,
+        ];
     }
 
     /**

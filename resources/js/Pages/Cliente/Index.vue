@@ -4,6 +4,7 @@ import { useForm, usePage } from '@inertiajs/vue3';
 import LayoutInfoprodutor from '@/Layouts/LayoutInfoprodutor.vue';
 import Button from '@/components/ui/Button.vue';
 import { copyTextToClipboard } from '@/lib/copyText';
+import { buildWhatsAppUrl } from '@/lib/whatsappUrl';
 import { useI18n } from '@/composables/useI18n';
 import {
     Calendar,
@@ -11,6 +12,7 @@ import {
     Copy,
     ExternalLink,
     Mail,
+    MessageCircle,
     Package,
     Search,
     Truck,
@@ -71,6 +73,8 @@ const searchQuery = ref('');
 const filter = ref('all');
 const detailsOpen = ref(false);
 const detailsRow = ref(null);
+const contactOpen = ref(false);
+const contactRow = ref(null);
 const copiedKey = ref('');
 const refundOpen = ref(false);
 /** Código público do pedido (exibido no texto; o envio usa order_id interno). */
@@ -151,6 +155,32 @@ function openDetails(row) {
 function closeDetails() {
     detailsOpen.value = false;
     detailsRow.value = null;
+    copiedKey.value = '';
+}
+
+function hasSellerContact(row) {
+    return Boolean(row?.support_email || row?.support_whatsapp);
+}
+
+function whatsappHref(row) {
+    return buildWhatsAppUrl(row?.support_whatsapp);
+}
+
+function formatWhatsapp(value) {
+    const digits = String(value || '').replace(/\D/g, '');
+    return digits ? `+${digits}` : '';
+}
+
+function openSellerContact(row) {
+    if (!hasSellerContact(row)) return;
+    contactRow.value = row;
+    copiedKey.value = '';
+    contactOpen.value = true;
+}
+
+function closeSellerContact() {
+    contactOpen.value = false;
+    contactRow.value = null;
     copiedKey.value = '';
 }
 
@@ -347,6 +377,15 @@ async function copyValue(value, key) {
                                 {{ accessCta(row) }}
                                 <ExternalLink class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                             </a>
+                            <button
+                                v-if="hasSellerContact(row)"
+                                type="button"
+                                class="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-zinc-200 px-3 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                                @click="openSellerContact(row)"
+                            >
+                                <MessageCircle class="h-4 w-4 shrink-0" aria-hidden="true" />
+                                {{ t('customer.purchases.contact_seller', 'Falar com o vendedor') }}
+                            </button>
                             <div class="flex gap-2">
                                 <button
                                     type="button"
@@ -492,14 +531,15 @@ async function copyValue(value, key) {
                             {{ accessCta(detailsRow) }}
                             <ExternalLink class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                         </a>
-                        <a
-                            v-if="detailsRow.support_email"
-                            :href="`mailto:${detailsRow.support_email}`"
+                        <button
+                            v-if="hasSellerContact(detailsRow)"
+                            type="button"
                             class="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-zinc-200 px-3 py-2.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                            @click="openSellerContact(detailsRow)"
                         >
-                            <Mail class="h-4 w-4" aria-hidden="true" />
+                            <MessageCircle class="h-4 w-4" aria-hidden="true" />
                             {{ t('customer.purchases.contact_seller', 'Falar com o vendedor') }}
-                        </a>
+                        </button>
                         <Button
                             v-if="detailsRow.can_request_refund && !impersonating"
                             type="button"
@@ -509,6 +549,83 @@ async function copyValue(value, key) {
                         >
                             {{ t('customer.purchases.request_refund', 'Solicitar reembolso') }}
                         </Button>
+                    </div>
+                </div>
+            </div>
+        </Teleport>
+
+        <Teleport to="body">
+            <div
+                v-if="contactOpen && contactRow"
+                class="fixed inset-0 z-[200010] flex items-end justify-center bg-black/50 p-4 sm:items-center"
+                role="dialog"
+                aria-modal="true"
+                @click.self="closeSellerContact"
+            >
+                <div
+                    class="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
+                    @click.stop
+                >
+                    <div class="flex items-start justify-between gap-4">
+                        <div class="min-w-0">
+                            <h2 class="text-lg font-semibold text-zinc-900 dark:text-white">
+                                {{ t('customer.purchases.contact_seller', 'Falar com o vendedor') }}
+                            </h2>
+                            <p class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
+                                {{ contactRow.product_name }}
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            class="rounded-lg p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                            :aria-label="t('customer.purchases.close', 'Fechar')"
+                            @click="closeSellerContact"
+                        >
+                            <X class="h-5 w-5" />
+                        </button>
+                    </div>
+                    <p class="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
+                        {{ t('customer.purchases.contact_help', 'Escolha como falar com o vendedor deste produto.') }}
+                    </p>
+                    <div v-if="contactRow.support_email" class="mt-5 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+                        <p class="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-900 dark:text-white">
+                            <Mail class="h-4 w-4" aria-hidden="true" />
+                            {{ t('customer.purchases.contact_email', 'E-mail') }}
+                        </p>
+                        <p class="mt-1 break-all text-sm text-zinc-600 dark:text-zinc-300">{{ contactRow.support_email }}</p>
+                        <div class="mt-3 flex flex-col gap-2 sm:flex-row">
+                            <button
+                                type="button"
+                                class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-zinc-200 px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                                @click="copyValue(contactRow.support_email, 'seller-email')"
+                            >
+                                <Check v-if="copiedKey === 'seller-email'" class="h-4 w-4" aria-hidden="true" />
+                                <Copy v-else class="h-4 w-4" aria-hidden="true" />
+                                {{ copiedKey === 'seller-email' ? t('customer.purchases.email_copied', 'E-mail copiado') : t('customer.purchases.copy_email', 'Copiar e-mail') }}
+                            </button>
+                            <a
+                                :href="`mailto:${contactRow.support_email}`"
+                                class="inline-flex flex-1 items-center justify-center rounded-xl bg-zinc-900 px-3 py-2 text-sm font-medium text-white transition hover:opacity-90 dark:bg-white dark:text-zinc-900"
+                            >
+                                {{ t('customer.purchases.send_email', 'Enviar e-mail') }}
+                            </a>
+                        </div>
+                    </div>
+                    <div v-if="whatsappHref(contactRow)" class="mt-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+                        <p class="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-900 dark:text-white">
+                            <MessageCircle class="h-4 w-4" aria-hidden="true" />
+                            {{ t('customer.purchases.contact_whatsapp', 'WhatsApp') }}
+                        </p>
+                        <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{{ formatWhatsapp(contactRow.support_whatsapp) }}</p>
+                        <a
+                            :href="whatsappHref(contactRow)"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-2.5 text-sm font-medium text-white transition hover:bg-emerald-700"
+                        >
+                            {{ t('customer.purchases.open_whatsapp', 'Abrir WhatsApp') }}
+                            <ExternalLink class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        </a>
                     </div>
                 </div>
             </div>

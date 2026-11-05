@@ -261,4 +261,62 @@ class CustomerPanelPurchasesTest extends TestCase
             ->where('purchases.1.payment_method_label', 'Pix')
         );
     }
+
+    public function test_painel_cliente_uses_product_support_or_seller_account(): void
+    {
+        $seller = User::factory()->create([
+            'role' => User::ROLE_INFOPRODUTOR,
+            'email' => 'conta@loja.test',
+            'phone' => '11987654321',
+        ]);
+
+        $buyer = User::factory()->create([
+            'role' => User::ROLE_CLIENTE,
+            'tenant_id' => $seller->id,
+            'email' => 'buyer@test.com',
+        ]);
+
+        $custom = $this->createTestProduct([
+            'name' => 'Com suporte do produto',
+            'tenant_id' => $seller->id,
+            'support_email' => 'suporte@curso.test',
+            'support_whatsapp' => '5511911112222',
+            'support_whatsapp_enabled' => true,
+        ]);
+        $fallback = $this->createTestProduct([
+            'name' => 'Com suporte da conta',
+            'tenant_id' => $seller->id,
+        ]);
+
+        foreach ([$fallback, $custom] as $product) {
+            $order = Order::create([
+                'tenant_id' => $seller->id,
+                'user_id' => $buyer->id,
+                'product_id' => $product->id,
+                'status' => 'completed',
+                'amount' => 40,
+                'email' => $buyer->email,
+            ]);
+            OrderItem::create([
+                'order_id' => $order->id,
+                'product_id' => $product->id,
+                'amount' => 40,
+                'position' => 0,
+            ]);
+        }
+
+        $response = $this->actingAs($buyer)->get('/painel-cliente');
+
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->component('Cliente/Index')
+            ->has('purchases', 2)
+            ->where('purchases.0.product_name', 'Com suporte do produto')
+            ->where('purchases.0.support_email', 'suporte@curso.test')
+            ->where('purchases.0.support_whatsapp', '5511911112222')
+            ->where('purchases.1.product_name', 'Com suporte da conta')
+            ->where('purchases.1.support_email', 'conta@loja.test')
+            ->where('purchases.1.support_whatsapp', null)
+        );
+    }
 }
