@@ -363,7 +363,8 @@ class CustomerPanelController extends Controller
     }
 
     /**
-     * E-mail e WhatsApp do produto. Cada um cai no cadastro do dono quando o produto não informa.
+     * E-mail do produto, com fallback no cadastro do dono.
+     * WhatsApp só entra se o vendedor ativar o canal e informar o número no produto.
      *
      * @return array{support_email: ?string, support_whatsapp: ?string}
      */
@@ -379,9 +380,9 @@ class CustomerPanelController extends Controller
             $email = null;
         }
 
-        $whatsapp = WhatsappPhoneNormalizer::normalize($product?->support_whatsapp);
-        if ($whatsapp === null) {
-            $whatsapp = WhatsappPhoneNormalizer::normalize($owner?->phone);
+        $whatsapp = null;
+        if ($product !== null && $product->support_whatsapp_enabled) {
+            $whatsapp = WhatsappPhoneNormalizer::normalize($product->support_whatsapp);
         }
 
         return [

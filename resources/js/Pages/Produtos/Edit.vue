@@ -157,6 +157,7 @@ const form = useForm({
     name: props.produto.name,
     notification_name: props.produto.notification_name ?? '',
     support_email: props.produto.support_email ?? '',
+    support_whatsapp_enabled: Boolean(props.produto.support_whatsapp_enabled),
     support_whatsapp: props.produto.support_whatsapp ?? '',
     description: props.produto.description ?? '',
     category: props.produto.category ?? '',
@@ -1244,6 +1245,7 @@ function appendCoreProductFields(fd) {
     fd.append('name', form.name);
     fd.append('notification_name', form.notification_name ?? '');
     fd.append('support_email', form.support_email ?? '');
+    fd.append('support_whatsapp_enabled', form.support_whatsapp_enabled ? '1' : '0');
     fd.append('support_whatsapp', form.support_whatsapp ?? '');
     fd.append('description', form.description ?? '');
     fd.append('category', form.category ?? '');
@@ -1524,24 +1526,33 @@ function submit() {
                                         {{ form.errors.support_email }}
                                     </p>
                                 </div>
-                                <div>
-                                    <label class="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                                        WhatsApp para Suporte
-                                    </label>
-                                    <input
-                                        v-model="form.support_whatsapp"
-                                        type="tel"
-                                        inputmode="tel"
-                                        maxlength="32"
-                                        placeholder="11999999999"
-                                        :class="inputClass"
+                                <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-700">
+                                    <Toggle
+                                        v-model="form.support_whatsapp_enabled"
+                                        label="Ativar suporte por WhatsApp"
                                     />
-                                    <p class="mt-1 text-xs text-zinc-500">
-                                        Se deixado em branco, o aluno vê o WhatsApp cadastrado na sua conta.
+                                    <p class="mt-2 text-xs text-zinc-500">
+                                        Desligado, o aluno vê só o e-mail. O WhatsApp da sua conta não é enviado.
                                     </p>
-                                    <p v-if="form.errors.support_whatsapp" class="mt-1.5 text-sm text-red-600 dark:text-red-400">
-                                        {{ form.errors.support_whatsapp }}
-                                    </p>
+                                    <div v-if="form.support_whatsapp_enabled" class="mt-4">
+                                        <label class="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                                            WhatsApp para Suporte
+                                        </label>
+                                        <input
+                                            v-model="form.support_whatsapp"
+                                            type="tel"
+                                            inputmode="tel"
+                                            maxlength="32"
+                                            placeholder="11999999999"
+                                            :class="inputClass"
+                                        />
+                                        <p class="mt-1 text-xs text-zinc-500">
+                                            Este número aparece para o aluno quando o canal está ativo.
+                                        </p>
+                                        <p v-if="form.errors.support_whatsapp" class="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                                            {{ form.errors.support_whatsapp }}
+                                        </p>
+                                    </div>
                                 </div>
                                 <div>
                                     <label class="mb-1.5 block text-sm font-medium text-zinc-700 dark:text-zinc-300">{{ t('common.description', 'Descrição') }}</label>

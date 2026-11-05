@@ -281,6 +281,7 @@ class CustomerPanelPurchasesTest extends TestCase
             'tenant_id' => $seller->id,
             'support_email' => 'suporte@curso.test',
             'support_whatsapp' => '5511911112222',
+            'support_whatsapp_enabled' => true,
         ]);
         $fallback = $this->createTestProduct([
             'name' => 'Com suporte da conta',
@@ -315,7 +316,7 @@ class CustomerPanelPurchasesTest extends TestCase
             ->where('purchases.0.support_whatsapp', '5511911112222')
             ->where('purchases.1.product_name', 'Com suporte da conta')
             ->where('purchases.1.support_email', 'conta@loja.test')
-            ->where('purchases.1.support_whatsapp', '5511987654321')
+            ->where('purchases.1.support_whatsapp', null)
         );
     }
 }
