@@ -98,8 +98,36 @@ function getInstallments() {
     return fromDom;
 }
 
+function payerEmailReady() {
+    return (props.initialPayer?.email || '').trim().includes('@');
+}
+
 async function onCardMountReady() {
     syncPayerFromProps();
+}
+
+async function primeCardField() {
+    if (!controller.value || cardPrimingInFlight.value || cardFieldReady.value || !isCardMethod.value) return;
+    cardPrimingInFlight.value = true;
+    syncPayerFromProps();
+
+    try {
+        await controller.value.confirm();
+        cardFieldReady.value = true;
+        error.value = '';
+    } catch (e) {
+        const msg = (e?.message || e?.error || '').toString().toLowerCase();
+        if (msg.includes('awaiting') || msg.includes('card_details')) {
+            cardFieldReady.value = true;
+            error.value = '';
+        } else if (msg.includes('payer_name') || msg.includes('payer_email') || msg.includes('payer_document')) {
+            error.value = 'Preencha seus dados acima para carregar o pagamento.';
+        } else if (!cardFieldReady.value) {
+            error.value = e?.message || 'Falha ao iniciar o cartão.';
+        }
+    } finally {
+        cardPrimingInFlight.value = false;
+    }
 }
 
 async function primeWalletField() {
@@ -156,11 +184,12 @@ async function tryMount() {
 
         const base = (props.apiBaseUrl || '').trim() || undefined;
         const defaultMethod = cajupayDefaultMethodFor(props.paymentMethod);
+        const primeCardOnMount = defaultMethod === 'card' && payerEmailReady();
         const nextController = await mountCajuPayCheckout(containerSelector.value, {
             token: props.sessionToken,
             baseUrl: base,
             defaultMethod,
-            preparePaymentUIOnMount: defaultMethod === 'card',
+            preparePaymentUIOnMount: primeCardOnMount,
             initialPayer: props.initialPayer,
             locale: (props.locale || '').trim(),
             onStatus: onSdkStatus,
@@ -217,12 +246,15 @@ watch(
     () => props.initialPayer,
     (val) => {
         if (!controller.value) return;
-        const hasMinPayer = (val?.name || '').trim() !== '' && (val?.email || '').trim() !== '';
-        if (!hasMinPayer) return;
+        const hasEmail = (val?.email || '').trim().includes('@');
+        if (!hasEmail) return;
         clearTimeout(payerRetryTimer);
         payerRetryTimer = setTimeout(() => {
             if (!controller.value) return;
             syncPayerFromProps();
+            if (isCardMethod.value && !cardFieldReady.value && !cardPrimingInFlight.value) {
+                void primeCardField();
+            }
             if (isWalletMethod.value && !cardFieldReady.value && !cardPrimingInFlight.value) {
                 void primeWalletField();
             }
