@@ -52,6 +52,7 @@ class Product extends Model
         'name',
         'notification_name',
         'support_email',
+        'support_whatsapp',
         'slug',
         'checkout_slug',
         'checkout_config',

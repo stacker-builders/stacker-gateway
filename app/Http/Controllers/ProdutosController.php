@@ -35,6 +35,8 @@ use App\Support\CardInstallments;
 use App\Support\EmailLogoImage;
 use App\Support\HtmlSanitizer;
 use App\Support\MarketplaceSettings;
+use App\Support\WhatsappPhoneNormalizer;
+use Illuminate\Validation\ValidationException;
 use App\Support\MoneyDecimal;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -196,6 +198,7 @@ class ProdutosController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'notification_name' => ['nullable', 'string', 'max:80'],
             'support_email' => ['nullable', 'email', 'max:255'],
+            'support_whatsapp' => ['nullable', 'string', 'max:32'],
             'slug' => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'category' => ['nullable', 'string', 'in:'.implode(',', Product::categoryKeys())],
@@ -225,6 +228,7 @@ class ProdutosController extends Controller
                 ? $supportEmail
                 : null;
         }
+        $this->normalizeSupportWhatsapp($validated);
         if (array_key_exists('description', $validated)) {
             $validated['description'] = HtmlSanitizer::plainTextMultiline($validated['description'], 20000) ?: null;
         }
@@ -688,6 +692,7 @@ class ProdutosController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'notification_name' => ['nullable', 'string', 'max:80'],
             'support_email' => ['nullable', 'email', 'max:255'],
+            'support_whatsapp' => ['nullable', 'string', 'max:32'],
             'description' => ['nullable', 'string'],
             'category' => ['nullable', 'string', 'in:'.implode(',', Product::categoryKeys())],
             'type' => ['required', 'string', 'in:'.implode(',', self::allowedProductTypes($produto))],
@@ -776,6 +781,7 @@ class ProdutosController extends Controller
                 ? $supportEmail
                 : null;
         }
+        $this->normalizeSupportWhatsapp($validated);
         if (array_key_exists('description', $validated)) {
             $validated['description'] = HtmlSanitizer::plainTextMultiline($validated['description'], 20000) ?: null;
         }
@@ -1045,6 +1051,9 @@ class ProdutosController extends Controller
         $newProduct = Product::create([
             'tenant_id' => $tenantId,
             'name' => $baseName,
+            'notification_name' => $produto->notification_name,
+            'support_email' => $produto->support_email,
+            'support_whatsapp' => $produto->support_whatsapp,
             'slug' => $uniqueSlug,
             'description' => $produto->description,
             'category' => $produto->category,
@@ -1515,6 +1524,7 @@ class ProdutosController extends Controller
             'name' => $p->name,
             'notification_name' => $p->notification_name,
             'support_email' => $p->support_email,
+            'support_whatsapp' => $p->support_whatsapp,
             'slug' => $p->slug,
             'checkout_slug' => $p->checkout_slug,
             'description' => $p->description,
@@ -1850,5 +1860,31 @@ class ProdutosController extends Controller
         $config = $product->checkout_config ?? [];
         $config['card_installments'] = $normalized;
         $product->update(['checkout_config' => $config]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function normalizeSupportWhatsapp(array &$validated): void
+    {
+        if (! array_key_exists('support_whatsapp', $validated)) {
+            return;
+        }
+
+        $raw = trim((string) ($validated['support_whatsapp'] ?? ''));
+        if ($raw === '') {
+            $validated['support_whatsapp'] = null;
+
+            return;
+        }
+
+        $normalized = WhatsappPhoneNormalizer::normalize($raw);
+        if ($normalized === null) {
+            throw ValidationException::withMessages([
+                'support_whatsapp' => 'Informe um WhatsApp válido com DDI ou DDD.',
+            ]);
+        }
+
+        $validated['support_whatsapp'] = $normalized;
     }
 }
