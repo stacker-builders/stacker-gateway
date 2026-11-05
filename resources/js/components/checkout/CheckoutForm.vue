@@ -1431,6 +1431,12 @@ const cajuPayPayer = computed(() => ({
     phone: showPhone.value ? `${form.country_code || ''}${phoneDigits.value || ''}` : '',
 }));
 
+function cajupayPayerKey() {
+    const payer = cajuPayPayer.value;
+
+    return [payer.name, payer.email, payer.document, payer.phone].join('|');
+}
+
 function buildCajuPaySessionPayload() {
     const payload = {
         product_id: form.product_id,
@@ -1509,9 +1515,35 @@ function onPaypalError(message) {
     form.setError('payment_method', msg);
 }
 
+function cajupayMissingCustomerLabels() {
+    const email = (form.email || '').trim();
+    const emailOk = email.length >= 5 && /.+@.+\..+/.test(email);
+    const nameOk = !showName.value || (form.name || '').trim().length >= 2;
+    const cpfDigits = (form.cpf || '').replace(/\D/g, '');
+    const cpfOk = !showCpf.value || (cpfDigits.length === 11 && isValidCpf(cpfDigits));
+    const phoneOk = !showPhone.value || isCheckoutPhoneComplete();
+    const missing = [];
+    if (showName.value && !nameOk) missing.push('nome');
+    if (!emailOk) missing.push('e-mail');
+    if (showCpf.value && !cpfOk) missing.push('CPF');
+    if (showPhone.value && !phoneOk) missing.push('telefone');
+
+    return missing;
+}
+
 function cajupayMinimumFieldsReady() {
-    cajupayMissingFieldsHint.value = '';
-    return true;
+    const missing = cajupayMissingCustomerLabels();
+    if (missing.length === 0) {
+        cajupayMissingFieldsHint.value = '';
+
+        return true;
+    }
+    const list = missing.length === 1
+        ? missing[0]
+        : `${missing.slice(0, -1).join(', ')} e ${missing[missing.length - 1]}`;
+    cajupayMissingFieldsHint.value = `Preencha ${list} acima para carregar o pagamento.`;
+
+    return false;
 }
 
 function validateCajuPayCustomerFields() {
@@ -1549,6 +1581,7 @@ async function ensureCajuPaySession({ silent = false } = {}) {
 
     cajupaySessionLoading.value = true;
     if (!silent) cajupayError.value = '';
+    const payerKeyAtRequest = cajupayPayerKey();
     try {
         const res = await axios.post('/checkout/cajupay/session', buildCajuPaySessionPayload(), {
             headers: {
@@ -1561,6 +1594,11 @@ async function ensureCajuPaySession({ silent = false } = {}) {
         const data = res?.data || {};
         if (!data.success || !data.token) {
             cajupayError.value = data?.message || 'Não foi possível iniciar o pagamento na CajuPay.';
+            return null;
+        }
+        if (cajupayPayerKey() !== payerKeyAtRequest) {
+            scheduleEnsureCajuPaySession();
+
             return null;
         }
         cajupaySessionToken.value = data.token;
@@ -1639,11 +1677,21 @@ watch(() => form.payment_method, () => {
         resetCajuPaySessionState();
     }
     if (isCajuPaySdkFlow.value) {
+        cajupayMinimumFieldsReady();
         scheduleEnsureCajuPaySession();
     } else {
         cajupayMissingFieldsHint.value = '';
     }
 });
+
+watch(
+    () => [form.email, form.name, form.cpf, form.country_code, phoneDigits.value],
+    () => {
+        if (!isCajuPaySdkFlow.value || cajupaySessionToken.value) return;
+        cajupayMinimumFieldsReady();
+        scheduleEnsureCajuPaySession();
+    },
+);
 
 watch(
     () => [form.coupon_code, props.orderBumpIds, props.productOfferId, props.subscriptionPlanId],
