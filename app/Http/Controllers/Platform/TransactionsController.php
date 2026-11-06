@@ -56,6 +56,8 @@ class TransactionsController extends Controller
         $status = PlatformTransactionsListing::normalizeStatus($request->query('status', 'all'));
         $q = trim((string) $request->query('q', ''));
         $perPage = PlatformTransactionsListing::normalizePerPage($request->query('per_page'));
+        $gateway = PlatformTransactionsListing::normalizeGateway($request->query('gateway'));
+        $method = PlatformTransactionsListing::normalizePaymentMethod($request->query('method'));
 
         if (DemoMode::isEnabled()) {
             $payload = DemoPlatformData::transactions(
@@ -63,9 +65,13 @@ class TransactionsController extends Controller
                 $q,
                 $request->url(),
                 $request->query(),
-                $perPage
+                $perPage,
+                $gateway,
+                $method
             );
             $payload['refund_requests_pending_count'] = app(PlatformAdminAlertCounts::class)->refundRequestsPendingCount();
+            $payload['gateway_options'] = PlatformTransactionsListing::gatewayOptions();
+            $payload['payment_method_options'] = PlatformTransactionsListing::paymentMethodOptions();
 
             return Inertia::render('Platform/Transactions/Index', $payload);
         }
@@ -78,6 +84,8 @@ class TransactionsController extends Controller
         if (Schema::hasTable('orders')) {
             $query = $this->baseOrdersQuery();
             PlatformTransactionsListing::applyStatusFilter($query, $status);
+            PlatformTransactionsListing::applyGatewayFilter($query, $gateway);
+            PlatformTransactionsListing::applyPaymentMethodFilter($query, $method);
             PlatformTransactionsListing::applySearchFilter($query, $q);
 
             if ($status === PlatformTransactionsListing::STATUS_REFUND_REQUESTS) {
@@ -104,7 +112,11 @@ class TransactionsController extends Controller
                 'status' => $status,
                 'q' => $q,
                 'per_page' => $perPage,
+                'gateway' => $gateway ?? '',
+                'method' => $method ?? '',
             ],
+            'gateway_options' => PlatformTransactionsListing::gatewayOptions(),
+            'payment_method_options' => PlatformTransactionsListing::paymentMethodOptions(),
             'refund_requests_pending_count' => app(PlatformAdminAlertCounts::class)->refundRequestsPendingCount(),
         ]);
     }
@@ -320,12 +332,16 @@ class TransactionsController extends Controller
         $q = $request->input('q', $request->query('q'));
         $perPage = $request->input('per_page', $request->query('per_page'));
         $page = $request->input('page', $request->query('page'));
+        $gateway = $request->input('gateway', $request->query('gateway'));
+        $method = $request->input('method', $request->query('method'));
 
         return array_filter([
             'status' => $status,
             'q' => $q,
             'per_page' => $perPage,
             'page' => $page,
+            'gateway' => $gateway,
+            'method' => $method,
         ], fn ($v) => $v !== null && $v !== '');
     }
 

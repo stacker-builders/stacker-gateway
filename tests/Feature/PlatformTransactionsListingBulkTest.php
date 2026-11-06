@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\GatewayCredential;
 use App\Models\Order;
 use App\Models\PlatformAuditLog;
 use App\Models\User;
@@ -157,6 +158,70 @@ class PlatformTransactionsListingBulkTest extends TestCase
             ->assertOk()
             ->assertInertia(fn ($page) => $page
                 ->where('filters.per_page', PlatformTransactionsListing::DEFAULT_PER_PAGE)
+            );
+    }
+
+    public function test_gateway_and_payment_method_filters(): void
+    {
+        $admin = $this->platformAdmin();
+        $seller = $this->seller('Seller Filtro Adquirente', 'seller.filtro.adquirente@example.com');
+
+        $pix = $this->makeOrder($seller, [
+            'status' => 'completed',
+            'gateway' => 'efi',
+            'payment_method' => 'pix',
+            'email' => 'pix.filtro@example.com',
+        ]);
+        $card = $this->makeOrder($seller, [
+            'status' => 'completed',
+            'gateway' => 'cielo',
+            'payment_method' => 'pix',
+            'email' => 'card.filtro@example.com',
+            'metadata' => ['checkout_payment_method' => 'card'],
+        ]);
+        $this->makeOrder($seller, [
+            'status' => 'completed',
+            'gateway' => 'mercadopago',
+            'payment_method' => 'boleto',
+            'email' => 'boleto.filtro@example.com',
+        ]);
+
+        GatewayCredential::create([
+            'tenant_id' => null,
+            'gateway_slug' => 'cielo',
+            'credentials' => 'x',
+            'is_connected' => false,
+            'is_enabled' => false,
+        ]);
+
+        $this->actingAs($admin)
+            ->get(route('plataforma.transacoes.index', [
+                'gateway' => 'cielo',
+                'method' => 'card',
+            ]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('filters.gateway', 'cielo')
+                ->where('filters.method', 'card')
+                ->where('orders.total', 1)
+                ->where('orders.data.0.id', $card->id)
+                ->where('gateway_options', fn ($options) => collect($options)->contains(
+                    fn ($opt) => ($opt['value'] ?? '') === 'cielo' && str_contains((string) ($opt['label'] ?? ''), 'desligada')
+                ))
+                ->where('payment_method_options', fn ($options) => collect($options)->contains(
+                    fn ($opt) => ($opt['value'] ?? '') === 'pix' && ($opt['label'] ?? '') === 'PIX'
+                ))
+            );
+
+        $this->actingAs($admin)
+            ->get(route('plataforma.transacoes.index', [
+                'gateway' => 'efi',
+                'method' => 'pix',
+            ]))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('orders.total', 1)
+                ->where('orders.data.0.id', $pix->id)
             );
     }
 

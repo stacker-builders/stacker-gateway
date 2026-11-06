@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Gateways\GatewayRegistry;
 use App\Jobs\ProcessPaymentWebhook;
+use App\Models\GatewayCredential;
 use App\Models\Order;
 use App\Support\GatewayPaymentCredentials;
 use Illuminate\Console\Command;
@@ -43,6 +44,9 @@ class ReconcilePendingPaymentsCommand extends Command
             $query->where('updated_at', '<=', now()->subMinutes($minAgeMinutes));
         }
 
+        $activeCredentials = GatewayCredential::activePaymentCredentialIndex();
+        $this->restrictToActiveAcquirers($query, $activeCredentials);
+
         $orders = $query
             ->orderByDesc('updated_at')
             ->limit($limit)
@@ -73,6 +77,12 @@ class ReconcilePendingPaymentsCommand extends Command
                     'reason' => 'missing_gateway_or_id',
                     'gateway' => $gatewaySlug,
                 ]);
+                continue;
+            }
+
+            $tenantId = $order->tenant_id !== null ? (int) $order->tenant_id : null;
+            if (! GatewayCredential::indexHasActivePaymentCredential($activeCredentials, $tenantId, $gatewaySlug)) {
+                $skippedCredential++;
                 continue;
             }
 
@@ -157,6 +167,54 @@ class ReconcilePendingPaymentsCommand extends Command
         $this->info("Checados: {$checked} | Pagos: {$paid} | Cancelados: {$cancelled} | Ignorados (janela): {$skipped} | Sem credencial: {$skippedCredential} | Erros API: {$apiErrors}");
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Pedidos de adquirente desconectada ou desabilitada não entram na fila.
+     * Sem isso, o mesmo pendente gera warning a cada ciclo e ocupa o limite do lote.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<Order>  $query
+     * @param  array{global: array<string, true>, tenants: array<int, array<string, true>>}  $index
+     */
+    private function restrictToActiveAcquirers($query, array $index): void
+    {
+        $globalSlugs = array_keys($index['global']);
+        $tenantScopes = [];
+        foreach ($index['tenants'] as $tenantId => $slugs) {
+            $onlyTenant = array_values(array_diff(array_keys($slugs), $globalSlugs));
+            if ($onlyTenant === []) {
+                continue;
+            }
+            $tenantScopes[] = [
+                'tenant_id' => (int) $tenantId,
+                'slugs' => $onlyTenant,
+            ];
+        }
+
+        if ($globalSlugs === [] && $tenantScopes === []) {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->where(function ($w) use ($globalSlugs, $tenantScopes) {
+            $started = false;
+            if ($globalSlugs !== []) {
+                $w->whereIn('gateway', $globalSlugs);
+                $started = true;
+            }
+            foreach ($tenantScopes as $scope) {
+                $clause = function ($t) use ($scope) {
+                    $t->where('tenant_id', $scope['tenant_id'])->whereIn('gateway', $scope['slugs']);
+                };
+                if ($started) {
+                    $w->orWhere($clause);
+                } else {
+                    $w->where($clause);
+                    $started = true;
+                }
+            }
+        });
     }
 
     private function isPastReconcileWindow(Order $order): bool
