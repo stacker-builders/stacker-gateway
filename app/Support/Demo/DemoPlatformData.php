@@ -163,10 +163,17 @@ class DemoPlatformData
     }
 
     /**
-     * @return array{orders: LengthAwarePaginator, filters: array{status: string, q: string}}
+     * @return array{orders: LengthAwarePaginator, filters: array{status: string, q: string, per_page: int, gateway: string, method: string}}
      */
-    public static function transactions(string $status, string $q, string $path, array $query, int $perPage = 25): array
-    {
+    public static function transactions(
+        string $status,
+        string $q,
+        string $path,
+        array $query,
+        int $perPage = 25,
+        ?string $gateway = null,
+        ?string $method = null,
+    ): array {
         $seed = crc32($status.'|'.$q);
         $items = [];
 
@@ -193,6 +200,7 @@ class DemoPlatformData
                 'amount_fee' => $fee,
                 'amount_net' => round($amount - $fee, 2),
                 'gateway' => self::GATEWAYS[($seed + $i) % count(self::GATEWAYS)],
+                'payment_method' => ($i % 2 === 0) ? 'pix' : 'card',
                 'gateway_label' => 'PIX',
                 'recebedor' => match (self::GATEWAYS[($seed + $i) % count(self::GATEWAYS)]) {
                     'cajupay' => 'CajuPay',
@@ -201,7 +209,7 @@ class DemoPlatformData
                     'mercadopago' => 'Mercado Pago',
                     default => '—',
                 },
-                'payment_method_label' => 'PIX',
+                'payment_method_label' => ($i % 2 === 0) ? 'PIX' : 'Cartão',
                 'product_display_name' => self::PRODUCT_NAMES[$idx],
                 'product_label' => self::PRODUCT_NAMES[$idx],
                 'product_name' => self::PRODUCT_NAMES[$idx],
@@ -232,6 +240,20 @@ class DemoPlatformData
             $items = array_values(array_filter(
                 $items,
                 fn (array $row) => ! empty($row['pending_refund_request'])
+            ));
+        }
+
+        if ($gateway !== null && $gateway !== '') {
+            $items = array_values(array_filter(
+                $items,
+                fn (array $row) => ($row['gateway'] ?? '') === $gateway
+            ));
+        }
+
+        if ($method !== null && $method !== '') {
+            $items = array_values(array_filter(
+                $items,
+                fn (array $row) => ($row['payment_method'] ?? '') === $method
             ));
         }
 
@@ -266,6 +288,8 @@ class DemoPlatformData
                 'status' => $status,
                 'q' => $q,
                 'per_page' => $perPage,
+                'gateway' => $gateway ?? '',
+                'method' => $method ?? '',
             ],
         ];
     }

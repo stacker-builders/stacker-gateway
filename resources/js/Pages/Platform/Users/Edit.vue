@@ -24,6 +24,7 @@ const props = defineProps({
     platform_integrations: { type: Array, default: () => [] },
     cajupay_accounts: { type: Array, default: () => [] },
     has_manual_approval_pin: { type: Boolean, default: false },
+    revenue_ranges: { type: Array, default: () => [] },
 });
 
 const page = usePage();
@@ -209,6 +210,9 @@ function formatBlockUntil(value) {
 
 const form = useForm({
     name: '', email: '', phone: '', password: '', password_confirmation: '', account_status: 'approved',
+    birth_date: '', document: '', company_name: '', trade_name: '', legal_representative_cpf: '',
+    address_zip: '', address_street: '', address_number: '', address_complement: '',
+    address_neighborhood: '', address_city: '', address_state: '', monthly_revenue_range: '',
     admin_withdrawal_blocked: false, admin_blocked_amount: '', admin_block_until: '', admin_block_note: '',
     merchant_fees: defaultFees(), merchant_settlement_overrides: defaultSettlement(),
     referral_commission_percent: '', api_pix_mode: 'inherit', integration_modes: defaultIntegrationModes(), med_zero_enabled: false,
@@ -235,20 +239,67 @@ watch(gatewayPrimary, (current) => {
 watch(() => form.errors, (errors) => {
     if (!errors || !Object.keys(errors).length) return;
     const has = (keys) => keys.some((key) => errors[key]);
-    if (has(['name', 'email', 'phone', 'password', 'account_status'])) setActiveTab('dados');
+    if (has(['name', 'email', 'phone', 'password', 'account_status', 'birth_date', 'document', 'company_name', 'trade_name', 'legal_representative_cpf', 'address_zip', 'address_street', 'address_number', 'address_complement', 'address_neighborhood', 'address_city', 'address_state', 'monthly_revenue_range'])) setActiveTab('dados');
     else if (has(['admin_blocked_amount', 'admin_block_until', 'admin_block_note', 'api_pix_mode', 'med_zero_enabled', 'api_pix_minimum_charge_brl', 'platform_minimum_charge_brl', 'cajupay_account_id', 'merchant_gateway_order'])) setActiveTab('financeiro');
     else if (has(['referral_commission_percent', 'merchant_fees', 'merchant_settlement_overrides'])) setActiveTab('taxas');
     else if (has(['integration_modes'])) setActiveTab('integracoes');
 }, { deep: true });
 
+const profile = computed(() => props.merchant.profile || {});
+const isPj = computed(() => (profile.value.person_type || props.merchant.person_type) === 'pj');
+const documentLocked = computed(() => Boolean(profile.value.document_locked));
+const representativeLocked = computed(() => Boolean(profile.value.legal_representative_cpf_locked));
+const documentLabel = computed(() => (isPj.value ? 'CNPJ' : 'CPF'));
+
+function digitsOnly(value) {
+    return String(value ?? '').replace(/\D/g, '');
+}
+function formatCpf(value) {
+    const digits = digitsOnly(value).slice(0, 11);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+}
+function formatCnpj(value) {
+    const digits = digitsOnly(value).slice(0, 14);
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+    if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+    if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+    return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+}
+function formatDocument(value) {
+    return isPj.value ? formatCnpj(value) : formatCpf(value);
+}
+function formatCep(value) {
+    const digits = digitsOnly(value).slice(0, 8);
+    if (digits.length <= 5) return digits;
+    return `${digits.slice(0, 5)}-${digits.slice(5)}`;
+}
+
 function initialize() {
     const merchant = props.merchant;
+    const registration = merchant.profile || {};
     const wallet = merchant.wallet_admin;
     const limits = merchant.charge_limits || {};
     savedFees.value = merchant.merchant_fees ?? null;
     form.defaults({
         name: merchant.name, email: merchant.email, phone: formatPhone(merchant.phone), password: '', password_confirmation: '',
         account_status: merchant.account_status || 'approved',
+        birth_date: registration.birth_date || '',
+        document: registration.document_locked ? formatDocument(registration.document) : '',
+        company_name: registration.company_name || '',
+        trade_name: registration.trade_name || merchant.trade_name || '',
+        legal_representative_cpf: registration.legal_representative_cpf_locked ? formatCpf(registration.legal_representative_cpf) : '',
+        address_zip: formatCep(registration.address_zip),
+        address_street: registration.address_street || '',
+        address_number: registration.address_number || '',
+        address_complement: registration.address_complement || '',
+        address_neighborhood: registration.address_neighborhood || '',
+        address_city: registration.address_city || '',
+        address_state: registration.address_state || '',
+        monthly_revenue_range: registration.monthly_revenue_range || '',
         admin_withdrawal_blocked: Boolean(wallet?.admin_withdrawal_blocked),
         admin_blocked_amount: wallet?.admin_blocked_amount != null ? String(wallet.admin_blocked_amount) : '',
         admin_block_until: formatBlockUntil(wallet?.admin_block_until), admin_block_note: wallet?.admin_block_note || '',
@@ -427,11 +478,122 @@ function submit() {
                     <p class="mt-1 text-xs text-zinc-500">Nome, contato, status da conta e senha deste infoprodutor.</p>
                 </div>
                 <div><label class="text-sm font-medium">Nome</label><input v-model="form.name" required class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800" /><p v-if="form.errors.name" class="mt-1 text-sm text-red-600">{{ form.errors.name }}</p></div>
-                <div><label class="text-sm font-medium">E-mail</label><input v-model="form.email" type="email" required class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800" /><p v-if="form.errors.email" class="mt-1 text-sm text-red-600">{{ form.errors.email }}</p></div>
+                <div>
+                    <label class="text-sm font-medium">E-mail</label>
+                    <input :value="form.email" type="email" readonly disabled class="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-400" />
+                    <p class="mt-1 text-xs text-zinc-500">O e-mail não pode ser alterado depois do cadastro.</p>
+                    <p v-if="form.errors.email" class="mt-1 text-sm text-red-600">{{ form.errors.email }}</p>
+                </div>
                 <div><label class="text-sm font-medium">WhatsApp / telefone</label><input :value="form.phone" type="tel" class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800" @input="form.phone = formatPhone($event.target.value)" /><p v-if="form.errors.phone" class="mt-1 text-sm text-red-600">{{ form.errors.phone }}</p></div>
                 <div><label class="text-sm font-medium">Status da conta</label><select v-model="form.account_status" class="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800"><option value="approved">Aprovado</option><option value="pending">Pendente</option><option value="rejected">Rejeitado</option><option value="suspended">Suspenso</option><option value="blocked">Bloqueado</option></select><p v-if="form.errors.account_status" class="mt-1 text-sm text-red-600">{{ form.errors.account_status }}</p></div>
                 <div><label class="text-sm font-medium">Nova senha (opcional)</label><input v-model="form.password" type="password" minlength="8" class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800" /><p v-if="form.errors.password" class="mt-1 text-sm text-red-600">{{ form.errors.password }}</p></div>
                 <div><label class="text-sm font-medium">Confirmar senha</label><input v-model="form.password_confirmation" type="password" minlength="8" class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800" /></div>
+            </section>
+
+            <section class="grid gap-4 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm sm:grid-cols-2 dark:border-zinc-700 dark:bg-zinc-900">
+                <div class="sm:col-span-2">
+                    <h2 class="font-semibold">Cadastro</h2>
+                    <p class="mt-1 text-xs text-zinc-500">
+                        {{ documentLabel }} já informado fica bloqueado. Endereço, nascimento e faturamento podem ser ajustados.
+                    </p>
+                </div>
+                <div>
+                    <label class="text-sm font-medium">{{ documentLabel }}</label>
+                    <input
+                        v-if="documentLocked"
+                        :value="formatDocument(profile.document)"
+                        readonly
+                        disabled
+                        class="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 font-mono text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-400"
+                    />
+                    <input
+                        v-else
+                        :value="form.document"
+                        inputmode="numeric"
+                        class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 font-mono dark:border-zinc-600 dark:bg-zinc-800"
+                        :placeholder="isPj ? '00.000.000/0000-00' : '000.000.000-00'"
+                        @input="form.document = formatDocument($event.target.value)"
+                    />
+                    <p class="mt-1 text-xs text-zinc-500">{{ documentLocked ? 'Já cadastrado. Não pode ser alterado.' : 'Preencha somente se ainda estiver ausente.' }}</p>
+                    <p v-if="form.errors.document" class="mt-1 text-sm text-red-600">{{ form.errors.document }}</p>
+                </div>
+                <div>
+                    <label class="text-sm font-medium">Nascimento</label>
+                    <input v-model="form.birth_date" type="date" class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800" />
+                    <p v-if="form.errors.birth_date" class="mt-1 text-sm text-red-600">{{ form.errors.birth_date }}</p>
+                </div>
+                <div v-if="isPj">
+                    <label class="text-sm font-medium">CPF do representante</label>
+                    <input
+                        v-if="representativeLocked"
+                        :value="formatCpf(profile.legal_representative_cpf)"
+                        readonly
+                        disabled
+                        class="mt-1 w-full rounded-lg border border-zinc-300 bg-zinc-100 px-3 py-2 font-mono text-zinc-600 dark:border-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-400"
+                    />
+                    <input
+                        v-else
+                        :value="form.legal_representative_cpf"
+                        inputmode="numeric"
+                        placeholder="000.000.000-00"
+                        class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 font-mono dark:border-zinc-600 dark:bg-zinc-800"
+                        @input="form.legal_representative_cpf = formatCpf($event.target.value)"
+                    />
+                    <p class="mt-1 text-xs text-zinc-500">{{ representativeLocked ? 'Já cadastrado. Não pode ser alterado.' : 'Preencha somente se ainda estiver ausente.' }}</p>
+                    <p v-if="form.errors.legal_representative_cpf" class="mt-1 text-sm text-red-600">{{ form.errors.legal_representative_cpf }}</p>
+                </div>
+                <div v-if="isPj">
+                    <label class="text-sm font-medium">Razão social</label>
+                    <input v-model="form.company_name" class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800" />
+                    <p v-if="form.errors.company_name" class="mt-1 text-sm text-red-600">{{ form.errors.company_name }}</p>
+                </div>
+                <div>
+                    <label class="text-sm font-medium">Nome fantasia</label>
+                    <input v-model="form.trade_name" class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800" />
+                    <p v-if="form.errors.trade_name" class="mt-1 text-sm text-red-600">{{ form.errors.trade_name }}</p>
+                </div>
+                <div>
+                    <label class="text-sm font-medium">Faturamento mensal</label>
+                    <select v-model="form.monthly_revenue_range" class="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800">
+                        <option value="">Não informado</option>
+                        <option v-for="opt in revenue_ranges" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
+                    <p v-if="form.errors.monthly_revenue_range" class="mt-1 text-sm text-red-600">{{ form.errors.monthly_revenue_range }}</p>
+                </div>
+                <div class="sm:col-span-2 border-t border-zinc-200 pt-4 dark:border-zinc-700">
+                    <h3 class="text-sm font-semibold">Endereço</h3>
+                </div>
+                <div>
+                    <label class="text-sm font-medium">CEP</label>
+                    <input :value="form.address_zip" inputmode="numeric" placeholder="00000-000" class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800" @input="form.address_zip = formatCep($event.target.value)" />
+                    <p v-if="form.errors.address_zip" class="mt-1 text-sm text-red-600">{{ form.errors.address_zip }}</p>
+                </div>
+                <div>
+                    <label class="text-sm font-medium">UF</label>
+                    <input v-model="form.address_state" maxlength="2" class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 uppercase dark:border-zinc-600 dark:bg-zinc-800" @input="form.address_state = String($event.target.value || '').toUpperCase().slice(0, 2)" />
+                    <p v-if="form.errors.address_state" class="mt-1 text-sm text-red-600">{{ form.errors.address_state }}</p>
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="text-sm font-medium">Logradouro</label>
+                    <input v-model="form.address_street" class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800" />
+                    <p v-if="form.errors.address_street" class="mt-1 text-sm text-red-600">{{ form.errors.address_street }}</p>
+                </div>
+                <div>
+                    <label class="text-sm font-medium">Número</label>
+                    <input v-model="form.address_number" class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800" />
+                </div>
+                <div>
+                    <label class="text-sm font-medium">Complemento</label>
+                    <input v-model="form.address_complement" class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800" />
+                </div>
+                <div>
+                    <label class="text-sm font-medium">Bairro</label>
+                    <input v-model="form.address_neighborhood" class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800" />
+                </div>
+                <div>
+                    <label class="text-sm font-medium">Cidade</label>
+                    <input v-model="form.address_city" class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800" />
+                </div>
             </section>
 
             <section class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">

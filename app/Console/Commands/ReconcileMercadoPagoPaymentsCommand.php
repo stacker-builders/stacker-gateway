@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Gateways\GatewayRegistry;
 use App\Gateways\MercadoPago\MercadoPagoDriver;
+use App\Models\GatewayCredential;
 use App\Models\Order;
 use App\Services\MercadoPago\MercadoPagoCheckoutCompletionService;
 use App\Support\GatewayPaymentCredentials;
@@ -54,6 +55,7 @@ class ReconcileMercadoPagoPaymentsCommand extends Command
         }
 
         $completion = app(MercadoPagoCheckoutCompletionService::class);
+        $activeCredentials = GatewayCredential::activePaymentCredentialIndex();
 
         foreach ($orders as $order) {
             if ($this->isPastReconcileWindow($order)) {
@@ -73,11 +75,14 @@ class ReconcileMercadoPagoPaymentsCommand extends Command
             $credentials = GatewayPaymentCredentials::resolve($order->tenant_id, 'mercadopago', $order);
             if ($credentials === null && MercadoPagoCredentialCandidates::forOrder($order) === []) {
                 $skippedCredential++;
-                Log::warning('payments:reconcile-mercadopago skip', [
-                    'order_id' => $order->id,
-                    'reason' => 'credential_missing',
-                    'tenant_id' => $order->tenant_id,
-                ]);
+                $tenantId = $order->tenant_id !== null ? (int) $order->tenant_id : null;
+                if (GatewayCredential::indexHasActivePaymentCredential($activeCredentials, $tenantId, 'mercadopago')) {
+                    Log::warning('payments:reconcile-mercadopago skip', [
+                        'order_id' => $order->id,
+                        'reason' => 'credential_missing',
+                        'tenant_id' => $order->tenant_id,
+                    ]);
+                }
                 continue;
             }
 

@@ -7,6 +7,7 @@ use App\Http\Controllers\Concerns\BuildsMerchantWalletProps;
 use App\Http\Controllers\Concerns\RequiresPlatformStepUp;
 use App\Http\Controllers\Concerns\ProvidesPlatformGatewayProps;
 use App\Http\Controllers\Controller;
+use App\Http\Controllers\InfoprodutorRegistrationController;
 use App\Services\AdminSettlementAnticipateService;
 use App\Services\AdminWalletAdjustmentService;
 use App\Gateways\GatewayRegistry;
@@ -29,6 +30,8 @@ use App\Services\PlatformAuditService;
 use App\Services\SalesAchievementsService;
 use App\Services\Withdrawal\WithdrawalPolicyService;
 use App\Support\BrazilianDocumentDigits;
+use App\Support\BrazilianDocuments;
+use App\Support\HtmlSanitizer;
 use App\Support\MerchantAdminProductsListing;
 use App\Support\MerchantAdminWalletMovementsListing;
 use App\Support\MerchantProfileSnapshot;
@@ -315,6 +318,7 @@ class UsersController extends Controller
             'person_type' => $user->person_type,
             'document' => $user->document,
             'account_status' => $user->account_status ?? 'approved',
+            'profile' => $this->merchantProfileFormPayload($user),
             'merchant_fees' => $user->merchant_fees ?? [],
             'merchant_settlement_overrides' => $user->merchant_settlement_overrides ?? [],
             'merchant_gateway_order' => $user->merchant_gateway_order ?? [],
@@ -365,6 +369,7 @@ class UsersController extends Controller
                 ->values()
                 ->all(),
             'has_manual_approval_pin' => WithdrawalPolicyService::hasManualApprovalPin(),
+            'revenue_ranges' => InfoprodutorRegistrationController::revenueRangeOptions(),
         ]);
     }
 
@@ -863,14 +868,36 @@ class UsersController extends Controller
     {
         Gate::authorize('manageMerchantForPlatform', $user);
 
-        $request->merge(['email' => NormalizedEmail::normalize($request->input('email'))]);
+        if ($request->filled('address_zip')) {
+            $request->merge([
+                'address_zip' => BrazilianDocuments::digits((string) $request->input('address_zip')),
+            ]);
+        }
+        if ($request->has('address_state')) {
+            $request->merge([
+                'address_state' => strtoupper(trim((string) $request->input('address_state'))),
+            ]);
+        }
 
         $prevAccountStatus = $user->account_status;
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email,'.$user->id],
+            'email' => ['nullable', 'string', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:32'],
+            'birth_date' => ['nullable', 'date', 'before:'.now()->subYears(18)->toDateString()],
+            'document' => ['nullable', 'string', 'max:20'],
+            'company_name' => ['nullable', 'string', 'max:255'],
+            'trade_name' => ['nullable', 'string', 'max:255'],
+            'legal_representative_cpf' => ['nullable', 'string', 'max:20'],
+            'address_zip' => ['nullable', 'string', 'regex:/^(\d{8})?$/'],
+            'address_street' => ['nullable', 'string', 'max:255'],
+            'address_number' => ['nullable', 'string', 'max:32'],
+            'address_complement' => ['nullable', 'string', 'max:120'],
+            'address_neighborhood' => ['nullable', 'string', 'max:120'],
+            'address_city' => ['nullable', 'string', 'max:120'],
+            'address_state' => ['nullable', 'string', 'regex:/^([A-Z]{2})?$/'],
+            'monthly_revenue_range' => ['nullable', 'string', 'in:'.implode(',', User::MONTHLY_REVENUE_RANGES)],
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
             'account_status' => ['nullable', 'string', 'in:approved,pending,rejected,suspended,blocked'],
             'admin_withdrawal_blocked' => ['nullable', 'boolean'],
@@ -888,12 +915,23 @@ class UsersController extends Controller
             'cajupay_account_id' => ['nullable', 'integer', 'exists:cajupay_accounts,id'],
             'referral_commission_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ], [
-            'email.unique' => 'Este e-mail já está em uso.',
             'password.confirmed' => 'A confirmação da senha não confere.',
+            'birth_date.before' => 'É necessário ter pelo menos 18 anos.',
+            'address_zip.regex' => 'Informe o CEP com 8 dígitos.',
+            'address_state.regex' => 'Informe a UF com 2 letras.',
+            'monthly_revenue_range.in' => 'Selecione uma faixa de faturamento válida.',
         ]);
 
+        $incomingEmail = NormalizedEmail::normalize($validated['email'] ?? '');
+        $currentEmail = NormalizedEmail::normalize($user->email);
+        if ($incomingEmail !== '' && $incomingEmail !== $currentEmail) {
+            throw ValidationException::withMessages([
+                'email' => 'O e-mail não pode ser alterado depois do cadastro.',
+            ]);
+        }
+
         $user->name = $validated['name'];
-        $user->email = $validated['email'];
+        $this->applyMerchantProfileFields($user, $validated);
         if (Schema::hasColumn('users', 'phone') && array_key_exists('phone', $validated)) {
             $rawPhone = trim((string) ($validated['phone'] ?? ''));
             if ($rawPhone === '') {
@@ -1366,6 +1404,136 @@ class UsersController extends Controller
             "REPLACE(REPLACE(REPLACE(COALESCE(users.document, ''), '.', ''), '-', ''), '/', '') LIKE ?",
             [$digitLike]
         );
+    }
+
+    /**
+     * Campos de cadastro exibidos na aba Dados. Documento preenchido fica travado.
+     *
+     * @return array<string, mixed>
+     */
+    private function merchantProfileFormPayload(User $user): array
+    {
+        $document = BrazilianDocuments::digits((string) ($user->document ?? ''));
+        $rep = Schema::hasColumn('users', 'legal_representative_cpf')
+            ? BrazilianDocuments::digits((string) ($user->legal_representative_cpf ?? ''))
+            : '';
+
+        return [
+            'person_type' => ($user->person_type ?? 'pf') === 'pj' ? 'pj' : 'pf',
+            'birth_date' => $user->birth_date?->format('Y-m-d') ?? '',
+            'document' => $document,
+            'document_locked' => $document !== '',
+            'company_name' => (string) ($user->company_name ?? ''),
+            'trade_name' => (string) ($user->trade_name ?? ''),
+            'legal_representative_cpf' => $rep,
+            'legal_representative_cpf_locked' => $rep !== '',
+            'address_zip' => BrazilianDocuments::digits((string) ($user->address_zip ?? '')),
+            'address_street' => (string) ($user->address_street ?? ''),
+            'address_number' => (string) ($user->address_number ?? ''),
+            'address_complement' => (string) ($user->address_complement ?? ''),
+            'address_neighborhood' => (string) ($user->address_neighborhood ?? ''),
+            'address_city' => (string) ($user->address_city ?? ''),
+            'address_state' => strtoupper(trim((string) ($user->address_state ?? ''))),
+            'monthly_revenue_range' => (string) ($user->monthly_revenue_range ?? ''),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function applyMerchantProfileFields(User $user, array $validated): void
+    {
+        $plain = function (?string $value, int $max): ?string {
+            $clean = HtmlSanitizer::plainText($value, $max);
+
+            return $clean !== '' ? $clean : null;
+        };
+
+        if (Schema::hasColumn('users', 'birth_date') && array_key_exists('birth_date', $validated)) {
+            $user->birth_date = $validated['birth_date'] ?: null;
+        }
+        if (Schema::hasColumn('users', 'monthly_revenue_range') && array_key_exists('monthly_revenue_range', $validated)) {
+            $user->monthly_revenue_range = $validated['monthly_revenue_range'] ?: null;
+        }
+        if (Schema::hasColumn('users', 'trade_name') && array_key_exists('trade_name', $validated)) {
+            $user->trade_name = $plain($validated['trade_name'] ?? null, 255);
+        }
+
+        $personType = ($user->person_type ?? 'pf') === 'pj' ? 'pj' : 'pf';
+        if ($personType === 'pj' && Schema::hasColumn('users', 'company_name') && array_key_exists('company_name', $validated)) {
+            $user->company_name = $plain($validated['company_name'] ?? null, 255);
+        }
+
+        foreach ([
+            'address_street' => 255,
+            'address_number' => 32,
+            'address_complement' => 120,
+            'address_neighborhood' => 120,
+            'address_city' => 120,
+        ] as $field => $max) {
+            if (! Schema::hasColumn('users', $field) || ! array_key_exists($field, $validated)) {
+                continue;
+            }
+            $user->{$field} = $plain(isset($validated[$field]) ? (string) $validated[$field] : null, $max);
+        }
+
+        if (Schema::hasColumn('users', 'address_state') && array_key_exists('address_state', $validated)) {
+            $state = strtoupper(trim((string) ($validated['address_state'] ?? '')));
+            $user->address_state = $state !== '' ? $state : null;
+        }
+        if (Schema::hasColumn('users', 'address_zip') && array_key_exists('address_zip', $validated)) {
+            $zip = BrazilianDocuments::digits((string) ($validated['address_zip'] ?? ''));
+            $user->address_zip = $zip !== '' ? $zip : null;
+        }
+
+        if (Schema::hasColumn('users', 'document') && BrazilianDocuments::digits((string) ($user->document ?? '')) === '') {
+            $incoming = BrazilianDocuments::digits((string) ($validated['document'] ?? ''));
+            if ($incoming !== '') {
+                if ($personType === 'pj') {
+                    if (! BrazilianDocuments::isValidCnpj($incoming)) {
+                        throw ValidationException::withMessages(['document' => 'CNPJ inválido.']);
+                    }
+                } elseif (! BrazilianDocuments::isValidCpf($incoming)) {
+                    throw ValidationException::withMessages(['document' => 'CPF inválido.']);
+                }
+                $this->assertMerchantDocumentAvailable($user, $incoming, 'document');
+                $user->document = $incoming;
+            }
+        }
+
+        if ($personType === 'pj'
+            && Schema::hasColumn('users', 'legal_representative_cpf')
+            && BrazilianDocuments::digits((string) ($user->legal_representative_cpf ?? '')) === '') {
+            $incoming = BrazilianDocuments::digits((string) ($validated['legal_representative_cpf'] ?? ''));
+            if ($incoming !== '') {
+                if (! BrazilianDocuments::isValidCpf($incoming)) {
+                    throw ValidationException::withMessages([
+                        'legal_representative_cpf' => 'CPF do representante legal inválido.',
+                    ]);
+                }
+                $this->assertMerchantDocumentAvailable($user, $incoming, 'legal_representative_cpf');
+                $user->legal_representative_cpf = $incoming;
+            }
+        }
+    }
+
+    private function assertMerchantDocumentAvailable(User $user, string $digits, string $field): void
+    {
+        $taken = User::query()
+            ->where('id', '!=', $user->id)
+            ->where(function ($q) use ($digits) {
+                $q->where('document', $digits);
+                if (Schema::hasColumn('users', 'legal_representative_cpf')) {
+                    $q->orWhere('legal_representative_cpf', $digits);
+                }
+            })
+            ->exists();
+
+        if ($taken) {
+            throw ValidationException::withMessages([
+                $field => 'Este documento já está cadastrado em outra conta.',
+            ]);
+        }
     }
 
     private function documentTypeLabel(User $user): string

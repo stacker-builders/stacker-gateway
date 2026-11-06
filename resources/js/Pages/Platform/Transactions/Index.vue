@@ -28,7 +28,15 @@ const props = defineProps({
     },
     filters: {
         type: Object,
-        default: () => ({ status: 'all', q: '', per_page: 25 }),
+        default: () => ({ status: 'all', q: '', per_page: 25, gateway: '', method: '' }),
+    },
+    gateway_options: {
+        type: Array,
+        default: () => [],
+    },
+    payment_method_options: {
+        type: Array,
+        default: () => [],
     },
     refund_requests_pending_count: {
         type: Number,
@@ -39,6 +47,8 @@ const props = defineProps({
 const filterStatus = ref(props.filters?.status ?? 'all');
 const filterQ = ref(props.filters?.q ?? '');
 const filterPerPage = ref(String(props.filters?.per_page ?? 25));
+const filterGateway = ref(props.filters?.gateway ?? '');
+const filterMethod = ref(props.filters?.method ?? '');
 
 const sidebarOpen = ref(false);
 const selectedVenda = ref(null);
@@ -72,6 +82,8 @@ watch(
         filterStatus.value = f?.status ?? 'all';
         filterQ.value = f?.q ?? '';
         filterPerPage.value = String(f?.per_page ?? 25);
+        filterGateway.value = f?.gateway ?? '';
+        filterMethod.value = f?.method ?? '';
     },
     { deep: true }
 );
@@ -116,6 +128,8 @@ function listQueryParams(extra = {}) {
         status: filterStatus.value,
         q: filterQ.value?.trim() || undefined,
         per_page: Number(filterPerPage.value) || 25,
+        gateway: filterGateway.value || undefined,
+        method: filterMethod.value || undefined,
         ...extra,
     };
 }
@@ -204,6 +218,8 @@ function approveQuerySuffix() {
     if (filterStatus.value && filterStatus.value !== 'all') params.set('status', filterStatus.value);
     if (filterQ.value?.trim()) params.set('q', filterQ.value.trim());
     if (filterPerPage.value) params.set('per_page', filterPerPage.value);
+    if (filterGateway.value) params.set('gateway', filterGateway.value);
+    if (filterMethod.value) params.set('method', filterMethod.value);
     const s = params.toString();
     return s ? `?${s}` : '';
 }
@@ -380,6 +396,8 @@ function submitBulkDelete() {
             status: filterStatus.value,
             q: filterQ.value?.trim() || undefined,
             per_page: Number(filterPerPage.value) || 25,
+            gateway: filterGateway.value || undefined,
+            method: filterMethod.value || undefined,
         },
         {
             preserveScroll: true,
@@ -578,6 +596,38 @@ const tableColCount = computed(() => (isRefundRequestsFilter.value ? 12 : 11));
                         placeholder="Ex.: cliente@email.com, vendedor ou 12345"
                         autocomplete="off"
                     />
+                </div>
+                <div class="w-full sm:w-56">
+                    <label for="tx-gateway" class="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                        Recebedor
+                    </label>
+                    <select
+                        id="tx-gateway"
+                        v-model="filterGateway"
+                        class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                        @change="applyFilters"
+                    >
+                        <option value="">Todos</option>
+                        <option v-for="opt in gateway_options" :key="opt.value" :value="opt.value">
+                            {{ opt.label }}
+                        </option>
+                    </select>
+                </div>
+                <div class="w-full sm:w-48">
+                    <label for="tx-method" class="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                        Método
+                    </label>
+                    <select
+                        id="tx-method"
+                        v-model="filterMethod"
+                        class="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                        @change="applyFilters"
+                    >
+                        <option value="">Todos</option>
+                        <option v-for="opt in payment_method_options" :key="opt.value" :value="opt.value">
+                            {{ opt.label }}
+                        </option>
+                    </select>
                 </div>
                 <div class="w-full sm:w-36">
                     <label for="tx-per-page" class="mb-1 block text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">

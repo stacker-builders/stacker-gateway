@@ -2,8 +2,12 @@
 
 namespace App\Support;
 
+use App\Gateways\GatewayRegistry;
+use App\Models\GatewayCredential;
+use App\Services\PlatformPaymentMethods;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 /**
  * Filtros e paginação da listagem admin de transações (orders).
@@ -63,6 +67,160 @@ final class PlatformTransactionsListing
         }
 
         $query->where('orders.status', $status);
+    }
+
+    public static function normalizeGateway(mixed $gateway): ?string
+    {
+        $gateway = is_string($gateway) ? strtolower(trim($gateway)) : '';
+        if ($gateway === '' || $gateway === 'all') {
+            return null;
+        }
+        if (! preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/', $gateway)) {
+            return null;
+        }
+
+        return $gateway;
+    }
+
+    public static function normalizePaymentMethod(mixed $method): ?string
+    {
+        $method = is_string($method) ? strtolower(trim($method)) : '';
+        if ($method === '' || $method === 'all') {
+            return null;
+        }
+        if (! in_array($method, PlatformPaymentMethods::METHOD_KEYS, true)) {
+            return null;
+        }
+
+        return $method;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function paymentMethodAliases(string $method): array
+    {
+        return match ($method) {
+            'card' => ['card', 'credit_card', 'creditcard'],
+            default => [$method],
+        };
+    }
+
+    /**
+     * @param  Builder<\App\Models\Order>  $query
+     */
+    public static function applyGatewayFilter(Builder $query, ?string $gateway): void
+    {
+        $gateway = self::normalizeGateway($gateway);
+        if ($gateway === null) {
+            return;
+        }
+
+        $query->whereRaw('LOWER(orders.gateway) = ?', [$gateway]);
+    }
+
+    /**
+     * Método exibido na transação: metadata do checkout tem prioridade sobre a coluna.
+     *
+     * @param  Builder<\App\Models\Order>  $query
+     */
+    public static function applyPaymentMethodFilter(Builder $query, ?string $method): void
+    {
+        $method = self::normalizePaymentMethod($method);
+        if ($method === null) {
+            return;
+        }
+
+        $aliases = self::paymentMethodAliases($method);
+        $query->where(function (Builder $w) use ($aliases) {
+            $w->whereIn('orders.metadata->checkout_payment_method', $aliases)
+                ->orWhere(function (Builder $fallback) use ($aliases) {
+                    $fallback->where(function (Builder $emptyMeta) {
+                        $emptyMeta->whereNull('orders.metadata->checkout_payment_method')
+                            ->orWhere('orders.metadata->checkout_payment_method', '');
+                    })->whereIn('orders.payment_method', $aliases);
+                });
+        });
+    }
+
+    /**
+     * Adquirentes conhecidas, ligadas ou não. Desligada = nenhuma credencial conectada e habilitada.
+     *
+     * @return list<array{value: string, label: string, connected: bool}>
+     */
+    public static function gatewayOptions(): array
+    {
+        $bySlug = [];
+        foreach (GatewayRegistry::all() as $gateway) {
+            $slug = strtolower(trim((string) ($gateway['slug'] ?? '')));
+            if ($slug === '' || ! preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/', $slug)) {
+                continue;
+            }
+            $name = trim((string) ($gateway['name'] ?? ''));
+            $bySlug[$slug] = $name !== '' ? $name : Str::headline(str_replace(['_', '-'], ' ', $slug));
+        }
+        $bySlug['manual'] = $bySlug['manual'] ?? 'Manual';
+
+        if (Schema::hasTable('gateway_credentials')) {
+            $extra = GatewayCredential::query()->distinct()->pluck('gateway_slug');
+            foreach ($extra as $slug) {
+                $slug = strtolower(trim((string) $slug));
+                if ($slug === '' || isset($bySlug[$slug]) || ! preg_match('/^[a-z0-9][a-z0-9_-]{0,63}$/', $slug)) {
+                    continue;
+                }
+                $def = GatewayRegistry::get($slug);
+                $name = is_array($def) ? trim((string) ($def['name'] ?? '')) : '';
+                $bySlug[$slug] = $name !== '' ? $name : Str::headline(str_replace(['_', '-'], ' ', $slug));
+            }
+        }
+
+        $active = [];
+        if (Schema::hasTable('gateway_credentials')) {
+            $active = GatewayCredential::query()
+                ->where('is_connected', true)
+                ->enabledForPayments()
+                ->pluck('gateway_slug')
+                ->map(fn ($slug) => strtolower(trim((string) $slug)))
+                ->filter(fn (string $slug) => $slug !== '')
+                ->all();
+        }
+        $activeSet = array_flip($active);
+
+        $options = [];
+        foreach ($bySlug as $slug => $name) {
+            $connected = isset($activeSet[$slug]);
+            $options[] = [
+                'value' => $slug,
+                'name' => $name,
+                'label' => $connected ? $name : $name.' (desligada)',
+                'connected' => $connected,
+            ];
+        }
+
+        usort($options, function (array $a, array $b) {
+            if ($a['connected'] !== $b['connected']) {
+                return $a['connected'] ? -1 : 1;
+            }
+
+            return strcasecmp($a['name'], $b['name']);
+        });
+
+        return array_map(fn (array $row) => [
+            'value' => $row['value'],
+            'label' => $row['label'],
+            'connected' => $row['connected'],
+        ], $options);
+    }
+
+    /**
+     * @return list<array{value: string, label: string}>
+     */
+    public static function paymentMethodOptions(): array
+    {
+        return array_map(fn (array $row) => [
+            'value' => $row['key'],
+            'label' => $row['label'],
+        ], PlatformPaymentMethods::labelsForAdmin());
     }
 
     /**

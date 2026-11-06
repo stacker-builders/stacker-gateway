@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class GatewayCredential extends Model
 {
@@ -95,6 +96,56 @@ class GatewayCredential extends Model
         }
 
         return null;
+    }
+
+    /**
+     * Adquirentes com credencial conectada e habilitada para cobrança.
+     * Global cobre qualquer tenant; o mapa de tenants só entra quando não há global daquele slug.
+     *
+     * @return array{global: array<string, true>, tenants: array<int, array<string, true>>}
+     */
+    public static function activePaymentCredentialIndex(): array
+    {
+        $global = [];
+        $tenants = [];
+        if (! Schema::hasTable('gateway_credentials')) {
+            return ['global' => $global, 'tenants' => $tenants];
+        }
+
+        $rows = static::query()
+            ->where('is_connected', true)
+            ->enabledForPayments()
+            ->get(['tenant_id', 'gateway_slug']);
+
+        foreach ($rows as $row) {
+            $slug = strtolower(trim((string) $row->gateway_slug));
+            if ($slug === '') {
+                continue;
+            }
+            if ($row->tenant_id === null) {
+                $global[$slug] = true;
+                continue;
+            }
+            $tenants[(int) $row->tenant_id][$slug] = true;
+        }
+
+        return ['global' => $global, 'tenants' => $tenants];
+    }
+
+    /**
+     * @param  array{global: array<string, true>, tenants: array<int, array<string, true>>}  $index
+     */
+    public static function indexHasActivePaymentCredential(array $index, ?int $tenantId, string $gatewaySlug): bool
+    {
+        $slug = strtolower(trim($gatewaySlug));
+        if ($slug === '') {
+            return false;
+        }
+        if (isset($index['global'][$slug])) {
+            return true;
+        }
+
+        return $tenantId !== null && isset($index['tenants'][$tenantId][$slug]);
     }
 
     /**
