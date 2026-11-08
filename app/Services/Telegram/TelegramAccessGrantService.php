@@ -288,7 +288,7 @@ class TelegramAccessGrantService
                 'telegram_username' => $username,
                 'identity_linked_at' => $locked->identity_linked_at ?? now()->utc(),
                 // Invalida deep link anterior (anti reutilização / sequestro).
-                'identity_link_nonce' => Str::lower(Str::random(24)),
+                'identity_link_nonce' => Str::lower(Str::random(8)),
             ])->save();
 
             if (! $wasLinked) {

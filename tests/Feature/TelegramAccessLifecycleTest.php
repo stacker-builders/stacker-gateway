@@ -252,6 +252,11 @@ class TelegramAccessLifecycleTest extends TestCase
         $grant = app(TelegramAccessGrantService::class)->grantForOrderProduct($order, $product, false);
 
         $payload = \App\Services\Telegram\TelegramIdentityLink::payload($grant);
+        $this->assertLessThanOrEqual(
+            \App\Services\Telegram\TelegramIdentityLink::START_PARAM_MAX,
+            strlen($payload),
+            'Telegram limita ?start= a 64 caracteres'
+        );
         $parsed = \App\Services\Telegram\TelegramIdentityLink::parse('/start '.$payload);
         $this->assertNotNull($parsed);
         $this->assertTrue(\App\Services\Telegram\TelegramIdentityLink::verify(
