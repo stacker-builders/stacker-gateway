@@ -945,7 +945,7 @@ class ProdutosController extends Controller
             if ($request->boolean('is_active', false)) {
                 return back()->with(
                     'error',
-                    'Produtos Telegram ainda não podem ser publicados para venda nesta conta. Configure a entrega e aguarde a liberação operacional.'
+                    'Produtos Telegram ainda não podem ser publicados nesta conta. Peça ao admin para liberar Novas vendas em Plataforma → Telegram.'
                 )->withInput();
             }
             $validated['is_active'] = false;

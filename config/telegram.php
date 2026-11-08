@@ -5,9 +5,9 @@ return [
     'http_timeout' => (int) env('TELEGRAM_HTTP_TIMEOUT', 12),
     'queue' => env('TELEGRAM_QUEUE', 'webhooks-inbound'),
     'botfather_url' => 'https://t.me/BotFather',
-    // Ciclo de vida 3.1–3.4 implementado; vendas públicas bloqueadas até autorização expressa.
+    // Override de emergência. Fonte principal: Plataforma → Telegram (sales_enabled / política por seller).
     'product_sales_operational' => (bool) env('TELEGRAM_PRODUCT_SALES_OPERATIONAL', false),
-    // Allowlist opcional (CSV de tenant_id) para homologar venda/entrega sem ligar a flag global.
+    // Allowlist legado opcional (CSV de tenant_id). Preferir política por seller no painel.
     'product_sales_tenant_ids' => array_values(array_filter(array_map(
         static fn ($value) => (int) trim((string) $value),
         explode(',', (string) env('TELEGRAM_PRODUCT_SALES_TENANT_IDS', ''))

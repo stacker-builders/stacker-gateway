@@ -75,6 +75,40 @@ class TelegramSellerPolicy
         return self::allowed($tenantId, 'sales', TelegramModuleSettings::get()['sales_enabled']);
     }
 
+    /**
+     * Tenants com override explícito "Habilitada" (mesmo com vendas globais desligadas).
+     *
+     * @return list<int>
+     */
+    public static function tenantIdsWithSalesForcedEnabled(): array
+    {
+        return Setting::query()
+            ->where('key', self::KEY)
+            ->whereNotNull('tenant_id')
+            ->get(['tenant_id', 'value'])
+            ->filter(function ($row) {
+                $decoded = null;
+                $raw = $row->value;
+                if (is_array($raw)) {
+                    $decoded = $raw;
+                } elseif (is_string($raw) && trim($raw) !== '') {
+                    try {
+                        $parsed = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+                        $decoded = is_array($parsed) ? $parsed : null;
+                    } catch (\JsonException) {
+                        $decoded = null;
+                    }
+                }
+
+                return self::mode($decoded['sales'] ?? null) === SellerIntegrationVisibility::MODE_ENABLED;
+            })
+            ->map(fn ($row) => (int) $row->tenant_id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
     private static function allowed(int $tenantId, string $field, bool $global): bool
     {
         $mode = self::forTenant($tenantId)[$field];

@@ -58,7 +58,9 @@ class TelegramLifecycleMetricsService
             'renewals_processed' => Schema::hasTable('telegram_access_events')
                 ? TelegramAccessEvent::query()->where('event_type', TelegramAccessEvent::ACCESS_RENEWED)->count()
                 : 0,
-            'product_sales_operational' => (bool) config('telegram.product_sales_operational', false),
+            'product_sales_operational' => (bool) (TelegramModuleSettings::get()['sales_enabled'] ?? false)
+                && (bool) (TelegramModuleSettings::get()['auto_delivery_enabled'] ?? false),
+            'product_sales_env_override' => (bool) config('telegram.product_sales_operational', false),
             'auto_compensation_enabled' => (bool) (TelegramModuleSettings::get()['auto_compensation_enabled'] ?? false),
         ];
     }

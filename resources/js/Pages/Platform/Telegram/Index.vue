@@ -122,7 +122,7 @@ function saveSeller(seller) {
                 Telegram
             </h1>
             <p class="mt-1 max-w-3xl text-sm text-zinc-600 dark:text-zinc-400">
-                Política do módulo, ciclo de vida de acessos e métricas reais. Vendas de produto permanecem bloqueadas até autorização expressa.
+                Política do módulo, ciclo de vida de acessos e métricas. Liberação de novas vendas e checkout é controlada aqui no painel (global ou por infoprodutor).
             </p>
         </div>
 
@@ -205,9 +205,9 @@ function saveSeller(seller) {
                         <Toggle v-model="form.expiry_removal_enabled" label="Remoção automática após vencimento" />
                     </div>
                     <div class="rounded-xl border border-zinc-200 px-4 py-3 dark:border-zinc-700">
-                        <Toggle v-model="form.sales_enabled" label="Novas vendas Telegram (política módulo)" />
+                        <Toggle v-model="form.sales_enabled" label="Novas vendas Telegram (checkout)" />
                         <p class="mt-2 text-xs text-zinc-500">
-                            Independente da flag TELEGRAM_PRODUCT_SALES_OPERATIONAL. Desligar não impede renovação/vencimento/revogação.
+                            Liga publicação e checkout de produtos Telegram para quem herda a política global. Desligar não impede renovação, vencimento nem revogação do que já foi vendido. Para liberar só um seller: deixe isto off e use “Habilitada” na política por infoprodutor.
                         </p>
                     </div>
                     <div class="rounded-xl border border-zinc-200 px-4 py-3 dark:border-zinc-700">
@@ -324,7 +324,8 @@ function saveSeller(seller) {
                 </div>
             </dl>
             <p class="mt-3 text-xs text-zinc-500">
-                Flag comercial (env): {{ monitoring.product_sales_operational ? 'ligada' : 'desligada' }}
+                Vendas no painel: {{ monitoring.product_sales_operational ? 'ligadas' : 'desligadas' }}
+                · Override env: {{ monitoring.product_sales_env_override ? 'ligado' : 'desligado' }}
                 · Compensação automática: {{ monitoring.auto_compensation_enabled ? 'ligada' : 'desligada' }}
             </p>
         </section>
