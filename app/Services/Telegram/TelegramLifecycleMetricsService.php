@@ -186,11 +186,16 @@ class TelegramLifecycleMetricsService
             'telegram_user_id' => $g->telegram_user_id,
             'product' => $g->product ? ['id' => $g->product->id, 'name' => $g->product->name] : null,
             'buyer' => $g->user ? ['id' => $g->user->id, 'name' => $g->user->name, 'email' => $g->user->email] : null,
+            'has_identity' => $g->telegram_user_id !== null,
+            'last_error' => $g->communities->pluck('last_error')->filter()->first() ?: $g->last_error,
             'communities' => $g->communities->map(fn ($c) => [
                 'id' => $c->telegram_community_id,
                 'title' => $c->community?->title,
                 'status' => $c->status,
+                'last_error' => $c->last_error,
+                'has_invite' => filled($c->invite_link),
             ])->values()->all(),
+            'buyer_access_url' => route('painel-cliente.telegram.show', ['grant' => $g->id]),
         ];
     }
 }

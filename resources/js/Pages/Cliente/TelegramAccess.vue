@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import LayoutGuest from '@/Layouts/LayoutGuest.vue';
 import Button from '@/components/ui/Button.vue';
@@ -13,6 +13,8 @@ const props = defineProps({
 
 const page = usePage();
 const flashSuccess = computed(() => page.props.flash?.success || null);
+const polling = ref(false);
+let pollTimer = null;
 
 const deliveryLabel = computed(() => {
     const map = {
@@ -28,7 +30,7 @@ function communityStatusLabel(status) {
     const map = {
         pending: 'Aguardando convite',
         invite_ready: 'Convite disponível',
-        awaiting_join_request: 'Solicitação em análise',
+        awaiting_join_request: 'Aguardando aprovação automática do bot',
         joined: 'Entrada confirmada',
         failed: 'Falha técnica',
         revoked: 'Revogado',
@@ -39,6 +41,49 @@ function communityStatusLabel(status) {
 function refreshInvites() {
     router.post(`/painel-cliente/telegram/${props.grant.id}/refresh-invites`, {}, { preserveScroll: true });
 }
+
+function stopPolling() {
+    if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+    }
+    polling.value = false;
+}
+
+function startPolling() {
+    stopPolling();
+    if (props.grant.has_identity) return;
+    polling.value = true;
+    pollTimer = setInterval(() => {
+        router.reload({
+            only: ['grant', 'events'],
+            preserveUrl: true,
+            onFinish: () => {
+                if (props.grant.has_identity) {
+                    stopPolling();
+                }
+            },
+        });
+    }, 3000);
+}
+
+watch(
+    () => props.grant.has_identity,
+    (linked) => {
+        if (linked) stopPolling();
+        else startPolling();
+    },
+);
+
+onMounted(() => {
+    if (!props.grant.has_identity) {
+        startPolling();
+    }
+});
+
+onBeforeUnmount(() => {
+    stopPolling();
+});
 </script>
 
 <template>
@@ -72,8 +117,10 @@ function refreshInvites() {
         >
             <h2 class="text-base font-semibold text-zinc-900 dark:text-white">1. Vincule seu Telegram</h2>
             <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
-                Abra o bot, toque em Start e volte aqui. Depois disso o convite do grupo/canal fica liberado para entrada.
+                Abra o bot pelo botão abaixo e toque em Start. Esta página atualiza sozinha quando a conta for vinculada.
+                Se o bot não responder, o Start precisa vir deste link (não digite /start manualmente).
             </p>
+            <p v-if="polling" class="mt-2 text-xs text-zinc-500">Aguardando vínculo no Telegram…</p>
             <a
                 :href="grant.identity_bot_url"
                 target="_blank"
@@ -115,7 +162,7 @@ function refreshInvites() {
                 <Button type="button" variant="outline" @click="refreshInvites">Atualizar convites</Button>
             </div>
             <p class="mt-1 text-xs text-zinc-500">
-                Use o botão Entrar quando o convite aparecer. A entrega só conclui após a entrada ser confirmada no Telegram.
+                Use Entrar só depois de vincular o bot. Se o grupo exige aprovação, o bot aprova automaticamente (admin com “Gerenciar solicitações”). A entrega conclui quando a entrada for confirmada.
             </p>
             <p
                 v-if="!(grant.communities || []).some((c) => c.invite_link)"

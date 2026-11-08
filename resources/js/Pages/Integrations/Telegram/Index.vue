@@ -556,7 +556,9 @@ function unlinkCommunity(community) {
 
         <section class="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-800 sm:p-6">
             <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Assinantes e acessos</h2>
-            <p class="mt-1 text-sm text-zinc-500">Somente dados do seu tenant. Vendas comerciais ainda aguardam liberação operacional.</p>
+            <p class="mt-1 text-sm text-zinc-500">
+                Status real da entrega (identidade, convite, aprovação e erros do Telegram). Use o histórico do comprador e a coluna Erro para ver o retorno.
+            </p>
 
             <dl class="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
                 <div class="rounded-xl border border-zinc-200 px-3 py-2 dark:border-zinc-700">
@@ -609,24 +611,51 @@ function unlinkCommunity(community) {
                         <tr>
                             <th class="px-2 py-2">Comprador</th>
                             <th class="px-2 py-2">Produto</th>
-                            <th class="px-2 py-2">Status</th>
-                            <th class="px-2 py-2">Entrega</th>
-                            <th class="px-2 py-2">Vencimento</th>
-                            <th class="px-2 py-2">Renovações</th>
+                            <th class="px-2 py-2">Identidade</th>
+                            <th class="px-2 py-2">Status / entrega</th>
+                            <th class="px-2 py-2">Comunidades</th>
+                            <th class="px-2 py-2">Erro Telegram</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr v-for="row in access.grants" :key="row.id" class="border-t border-zinc-100 dark:border-zinc-700">
+                        <tr v-for="row in access.grants" :key="row.id" class="border-t border-zinc-100 dark:border-zinc-700 align-top">
                             <td class="px-2 py-2">
                                 <div class="font-medium text-zinc-900 dark:text-white">{{ row.buyer?.name || '—' }}</div>
                                 <div class="text-xs text-zinc-500">{{ row.buyer?.email }}</div>
-                                <div v-if="row.telegram_username" class="text-xs text-zinc-500">@{{ row.telegram_username }}</div>
+                                <a
+                                    v-if="row.buyer_access_url"
+                                    :href="row.buyer_access_url"
+                                    class="mt-1 inline-flex text-xs text-[var(--color-primary)] hover:underline"
+                                    target="_blank"
+                                    rel="noopener"
+                                >
+                                    Abrir página do comprador
+                                </a>
                             </td>
                             <td class="px-2 py-2">{{ row.product?.name || '—' }}</td>
-                            <td class="px-2 py-2">{{ row.status }}</td>
-                            <td class="px-2 py-2">{{ row.delivery_status }}</td>
-                            <td class="px-2 py-2">{{ row.access_ends_at_label || '—' }}</td>
-                            <td class="px-2 py-2">{{ row.renewal_count }}</td>
+                            <td class="px-2 py-2">
+                                <div v-if="row.has_identity" class="text-emerald-700 dark:text-emerald-300">
+                                    Vinculada
+                                    <div v-if="row.telegram_username" class="text-xs">@{{ row.telegram_username }}</div>
+                                    <div v-else-if="row.telegram_user_id" class="text-xs">ID {{ row.telegram_user_id }}</div>
+                                </div>
+                                <div v-else class="text-amber-700 dark:text-amber-300">Pendente (Start no bot)</div>
+                            </td>
+                            <td class="px-2 py-2">
+                                <div>{{ row.status }}</div>
+                                <div class="text-xs text-zinc-500">{{ row.delivery_status }}</div>
+                                <div class="text-xs text-zinc-500">{{ row.access_ends_at_label || '—' }}</div>
+                            </td>
+                            <td class="px-2 py-2">
+                                <ul class="space-y-1 text-xs">
+                                    <li v-for="c in (row.communities || [])" :key="`${row.id}-${c.id}`">
+                                        {{ c.title || c.id }} → {{ c.status }}{{ c.has_invite ? ' · convite ok' : '' }}
+                                    </li>
+                                </ul>
+                            </td>
+                            <td class="px-2 py-2 text-xs text-red-600 dark:text-red-400">
+                                {{ row.last_error || '—' }}
+                            </td>
                         </tr>
                     </tbody>
                 </table>

@@ -321,6 +321,16 @@ class TelegramInviteService
                     'community_id' => $row->telegram_community_id,
                     'telegram_user_id' => $telegramUserId,
                 ], $row);
+
+                try {
+                    $this->api->sendMessage(
+                        $bot->plainToken(),
+                        $telegramUserId,
+                        'Solicitação de entrada aprovada automaticamente. Você já pode acessar o grupo/canal.'
+                    );
+                } catch (TelegramApiException) {
+                    // Notificação opcional; a aprovação já ocorreu.
+                }
             } catch (TelegramApiException $e) {
                 $this->markCommunityFailed(
                     $grant,
@@ -328,7 +338,7 @@ class TelegramInviteService
                     $e->retryable
                         ? TelegramDeliveryIncident::REASON_INVITE_ERROR
                         : TelegramDeliveryIncident::REASON_DELIVERY_PROCESSING,
-                    'Falha ao aprovar solicitação de entrada: '.$e->getMessage()
+                    'Falha ao aprovar solicitação de entrada: '.$e->getMessage().' Confirme se o bot é admin com permissão “Gerenciar solicitações de entrada”.'
                 );
                 if ($e->retryable) {
                     throw $e;
