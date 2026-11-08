@@ -36,12 +36,24 @@ class TelegramProductDeliveryService
     public const ACCESS_PRESET_CUSTOM = 'custom';
 
     /**
-     * Entrega automática ainda não operacional nesta etapa.
-     * Mantém produtos Telegram bloqueados para venda real até 3.2/3.3.
+     * Venda/checkout Telegram liberados globalmente ou por allowlist de tenant (homologação).
      */
-    public function automaticDeliveryOperational(): bool
+    public function automaticDeliveryOperational(?int $tenantId = null): bool
     {
-        return (bool) config('telegram.product_sales_operational', false);
+        if ((bool) config('telegram.product_sales_operational', false)) {
+            return true;
+        }
+
+        if ($tenantId === null || $tenantId <= 0) {
+            return false;
+        }
+
+        $allowlist = config('telegram.product_sales_tenant_ids', []);
+        if (! is_array($allowlist) || $allowlist === []) {
+            return false;
+        }
+
+        return in_array($tenantId, array_map('intval', $allowlist), true);
     }
 
     public function tablesReady(): bool
@@ -129,7 +141,7 @@ class TelegramProductDeliveryService
             'configured' => false,
             'ready_for_sale' => false,
             'blocking_reasons' => ['A entrega automática do Telegram ainda não está operacional nesta etapa.'],
-            'sales_operational' => $this->automaticDeliveryOperational(),
+            'sales_operational' => $this->automaticDeliveryOperational($tenantId),
         ];
 
         if ($product !== null && $product->isTelegram() && $this->tablesReady()) {
@@ -139,6 +151,8 @@ class TelegramProductDeliveryService
             }
             $readiness = $this->evaluateReadiness($tenantId, $product, $setting);
         }
+
+        $salesOperational = $this->automaticDeliveryOperational($tenantId);
 
         return [
             'module_available' => $moduleAvailable,
@@ -150,7 +164,10 @@ class TelegramProductDeliveryService
             'bots' => $bots,
             'setting' => $settingPayload,
             'readiness' => $readiness,
-            'sales_blocked_message' => 'Produtos Telegram podem ser salvos como rascunho, mas a publicação e a venda ficam bloqueadas até a entrega automática estar operacional.',
+            'sales_operational' => $salesOperational,
+            'sales_blocked_message' => $salesOperational
+                ? ''
+                : 'Produtos Telegram podem ser configurados e salvos. Publicação e checkout ficam bloqueados até a entrega automática estar operacional para esta conta.',
         ];
     }
 
@@ -305,10 +322,10 @@ class TelegramProductDeliveryService
     {
         $reasons = [];
         $policy = app(TelegramPolicy::class);
-        $operational = $this->automaticDeliveryOperational();
+        $operational = $this->automaticDeliveryOperational($tenantId);
 
         if (! $operational) {
-            $reasons[] = 'A entrega automática do Telegram ainda não está operacional nesta etapa.';
+            $reasons[] = 'A entrega automática do Telegram ainda não está operacional para esta conta.';
         }
 
         if (! $policy->moduleAvailable($tenantId)) {

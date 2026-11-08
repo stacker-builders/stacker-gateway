@@ -43,7 +43,7 @@ class TelegramBotService
     {
         $this->assertModuleAvailable($tenantId);
 
-        return DB::transaction(function () use ($tenantId, $token) {
+        $bot = DB::transaction(function () use ($tenantId, $token) {
             $me = $this->api->getMe($token);
             $telegramBotId = (int) ($me['id'] ?? 0);
             if ($telegramBotId <= 0) {
@@ -111,18 +111,21 @@ class TelegramBotService
 
             $bot->save();
 
-            try {
-                $this->webhooks->syncWebhook($bot);
-            } catch (TelegramApiException $e) {
-                $bot->forceFill([
-                    'status' => TelegramBot::STATUS_ERROR,
-                    'last_error' => 'Bot conectado, mas o webhook falhou: '.$e->getMessage(),
-                    'last_checked_at' => now(),
-                ])->save();
-            }
-
             return $bot->fresh();
         });
+
+        // Webhook HTTP fora da transação (evita lock longo e falha após commit bem-sucedido).
+        try {
+            $this->webhooks->syncWebhook($bot);
+        } catch (TelegramApiException $e) {
+            $bot->forceFill([
+                'status' => TelegramBot::STATUS_ERROR,
+                'last_error' => 'Bot conectado, mas o webhook falhou: '.$e->getMessage(),
+                'last_checked_at' => now(),
+            ])->save();
+        }
+
+        return $bot->fresh();
     }
 
     public function updateToken(int $tenantId, TelegramBot $bot, string $token): TelegramBot

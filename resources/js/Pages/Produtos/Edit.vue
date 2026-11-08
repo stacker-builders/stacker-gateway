@@ -1623,20 +1623,20 @@ function submit() {
                                     <Toggle
                                         v-model="form.is_active"
                                         :label="t('products.create.active_product', 'Produto ativo')"
-                                        :disabled="form.type === 'telegram' || (produto.approval?.status && produto.approval.status !== 'approved')"
+                                        :disabled="(form.type === 'telegram' && !telegram_delivery?.sales_operational) || (produto.approval?.status && produto.approval.status !== 'approved')"
                                     />
                                 </div>
                                 <p
-                                    v-if="form.type === 'telegram'"
+                                    v-if="form.type === 'telegram' && !telegram_delivery?.sales_operational"
                                     class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100"
                                 >
-                                    Publicação e venda de produtos Telegram ficam bloqueadas até a entrega automática estar operacional (próximas etapas).
+                                    Configure bot e comunidades abaixo. Publicação e checkout liberam quando a entrega automática estiver operacional para sua conta.
                                 </p>
                                 <div class="pt-1">
                                     <Checkbox
                                         v-model="form.show_in_marketplace"
                                         :label="marketplaceToggleLabel"
-                                        :disabled="form.type === 'telegram'"
+                                        :disabled="form.type === 'telegram' && !telegram_delivery?.sales_operational"
                                         class="w-full"
                                     />
                                     <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">

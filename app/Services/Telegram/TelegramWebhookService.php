@@ -18,6 +18,7 @@ class TelegramWebhookService
         private TelegramApiClient $api,
         private TelegramInviteService $invites,
         private TelegramAccessGrantService $grants,
+        private TelegramCommunityService $communities,
     ) {}
 
     public function syncWebhook(TelegramBot $bot): void
@@ -277,13 +278,23 @@ class TelegramWebhookService
      */
     private function handleMyChatMember(TelegramBot $bot, array $myChatMember): void
     {
-        // Mudanças de permissão do bot: reprocessamento de convites pendentes do chat.
-        $chatId = (int) ($myChatMember['chat']['id'] ?? 0);
+        $chat = is_array($myChatMember['chat'] ?? null) ? $myChatMember['chat'] : [];
+        $chatId = (int) ($chat['id'] ?? 0);
         if ($chatId === 0) {
             return;
         }
 
         $newStatus = (string) ($myChatMember['new_chat_member']['status'] ?? '');
+        $joinedStatuses = ['member', 'administrator', 'creator', 'restricted'];
+        $leftStatuses = ['left', 'kicked'];
+
+        if (in_array($newStatus, $joinedStatuses, true)) {
+            $this->communities->rememberMembership($bot, $chat, $newStatus);
+        } elseif (in_array($newStatus, $leftStatuses, true)) {
+            $this->communities->forgetMembership($bot, $chatId);
+        }
+
+        // Mudanças de permissão do bot: reprocessamento de convites pendentes do chat.
         if (! in_array($newStatus, ['administrator', 'creator'], true)) {
             return;
         }

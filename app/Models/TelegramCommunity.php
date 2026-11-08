@@ -20,6 +20,9 @@ class TelegramCommunity extends Model
 
     public const STATUS_UNLINKED = 'unlinked';
 
+    /** Detectado via webhook (bot adicionado ao chat); aguarda confirmação do seller. */
+    public const STATUS_DISCOVERED = 'discovered';
+
     protected $fillable = [
         'tenant_id',
         'telegram_bot_id',
@@ -61,6 +64,11 @@ class TelegramCommunity extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->whereIn('status', [self::STATUS_LINKED, self::STATUS_ERROR]);
+    }
+
+    public function scopeDiscovered(Builder $query): Builder
+    {
+        return $query->where('status', self::STATUS_DISCOVERED);
     }
 
     public function isUnlinked(): bool

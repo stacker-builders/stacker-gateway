@@ -13,6 +13,7 @@ import {
 } from 'lucide-vue-next';
 import Button from '@/components/ui/Button.vue';
 import Toggle from '@/components/ui/Toggle.vue';
+import TelegramDeliveryConfig from '@/components/produtos/TelegramDeliveryConfig.vue';
 import { useI18n } from '@/composables/useI18n';
 import { sanitizeHtmlAllowlist } from '@/lib/sanitizeHtml';
 import { normalizeMoneyInput } from '@/lib/moneyDecimal';
@@ -34,6 +35,7 @@ const props = defineProps({
         }),
     },
     bundleCandidates: { type: Array, default: () => [] },
+    telegramDelivery: { type: Object, default: () => ({}) },
 });
 
 const emit = defineEmits(['close', 'success']);
@@ -53,10 +55,23 @@ const selectedType = ref(null);
 const typeIcons = {
     aplicativo: Smartphone,
     area_membros: Users,
+    area_membros_externa: Users,
     link: Link,
     link_pagamento: CreditCard,
+    telegram: 'telegram-img',
     produto_fisico: Truck,
 };
+
+const defaultTelegramForm = () => ({
+    bot_id: null,
+    community_ids: [],
+    access_duration_preset: '30',
+    access_duration_days: 30,
+    is_lifetime: false,
+    invite_expiration_hours: 24,
+    welcome_message: '',
+    auto_remove_on_expiry: true,
+});
 
 const form = useForm({
     name: '',
@@ -74,6 +89,7 @@ const form = useForm({
         max: 2,
     },
     bundle_product_ids: [],
+    telegram: defaultTelegramForm(),
 });
 
 const priceNum = computed(() => parseFloat(form.price) || 0);
@@ -128,6 +144,12 @@ function selectType(type) {
     if (!type.available) return;
     selectedType.value = type.value;
     form.type = type.value;
+    if (type.value === 'telegram') {
+        if (!props.telegramDelivery?.sales_operational) {
+            form.is_active = false;
+        }
+        form.telegram = defaultTelegramForm();
+    }
     step.value = 2;
 }
 
@@ -168,6 +190,19 @@ function submit() {
             'card_installments[max]',
             String(enabled ? Math.min(platformInstallmentMax.value, Math.max(2, form.card_installments.max || 2)) : 1)
         );
+    }
+    if (form.type === 'telegram' && form.telegram) {
+        const tg = form.telegram;
+        if (tg.bot_id) fd.append('telegram[bot_id]', String(tg.bot_id));
+        (tg.community_ids || []).forEach((id) => fd.append('telegram[community_ids][]', String(id)));
+        fd.append('telegram[access_duration_preset]', tg.access_duration_preset || '30');
+        if (tg.access_duration_preset === 'custom') {
+            fd.append('telegram[access_duration_days]', String(tg.access_duration_days || 30));
+        }
+        fd.append('telegram[is_lifetime]', tg.access_duration_preset === 'lifetime' || tg.is_lifetime ? '1' : '0');
+        fd.append('telegram[invite_expiration_hours]', String(tg.invite_expiration_hours || 24));
+        fd.append('telegram[welcome_message]', tg.welcome_message || '');
+        fd.append('telegram[auto_remove_on_expiry]', tg.auto_remove_on_expiry ? '1' : '0');
     }
 
     form.transform(() => fd).post('/produtos', {
@@ -255,7 +290,14 @@ function safePluginSectionHtml(html) {
                                 <span
                                     class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white dark:bg-zinc-700"
                                 >
+                                    <img
+                                        v-if="typeIcons[typeOption.value] === 'telegram-img'"
+                                        src="/images/integrations/telegram.svg"
+                                        alt=""
+                                        class="h-5 w-5"
+                                    />
                                     <component
+                                        v-else
                                         :is="typeIcons[typeOption.value] || BookOpen"
                                         class="h-5 w-5 text-zinc-600 dark:text-zinc-300"
                                     />
@@ -378,6 +420,20 @@ function safePluginSectionHtml(html) {
                                 {{ form.errors.deliverable_link }}
                             </p>
                         </div>
+                        <div
+                            v-if="form.type === 'telegram'"
+                            class="space-y-2 rounded-xl border border-zinc-200 p-3 dark:border-zinc-700"
+                        >
+                            <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">
+                                Configuração de entrega Telegram
+                            </h3>
+                            <TelegramDeliveryConfig
+                                v-model="form.telegram"
+                                :delivery="telegramDelivery"
+                                :errors="form.errors"
+                                compact
+                            />
+                        </div>
                         <div>
                             <label class="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                                 {{ t('products.create.price_brl', 'Preço (BRL)') }} *
@@ -490,11 +546,17 @@ function safePluginSectionHtml(html) {
                             <Toggle
                                 v-model="form.is_active"
                                 :label="t('products.create.active_product', 'Produto ativo')"
-                                :disabled="page.props.product_approval_required === true"
+                                :disabled="page.props.product_approval_required === true || (form.type === 'telegram' && !telegramDelivery?.sales_operational)"
                             />
                         </div>
                         <p
-                            v-if="page.props.product_approval_required"
+                            v-if="form.type === 'telegram' && !telegramDelivery?.sales_operational"
+                            class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100"
+                        >
+                            Você já pode configurar bot e comunidades. Publicação e checkout liberam quando a entrega automática estiver operacional para sua conta.
+                        </p>
+                        <p
+                            v-else-if="page.props.product_approval_required"
                             class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100"
                         >
                             <span class="font-semibold">Entra em análise da plataforma.</span>
