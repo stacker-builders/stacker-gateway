@@ -234,7 +234,7 @@ onBeforeUnmount(() => {
                     :key="event.id"
                     class="flex flex-wrap items-baseline justify-between gap-2 border-b border-zinc-100 py-2 text-sm last:border-0 dark:border-zinc-800"
                 >
-                    <span class="font-medium text-zinc-800 dark:text-zinc-200">{{ event.event_type }}</span>
+                    <span class="font-medium text-zinc-800 dark:text-zinc-200">{{ event.event_label || event.event_type }}</span>
                     <span class="text-xs text-zinc-500">{{ event.occurred_at_label }}</span>
                 </li>
                 <li v-if="!events.length" class="text-sm text-zinc-500">Sem eventos registrados.</li>
