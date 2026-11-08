@@ -31,6 +31,8 @@ class Product extends Model
 
     public const TYPE_PRODUTO_FISICO = 'produto_fisico';
 
+    public const TYPE_TELEGRAM = 'telegram';
+
     public const BILLING_ONE_TIME = 'one_time';
 
     public const BILLING_SUBSCRIPTION = 'subscription';
@@ -120,6 +122,16 @@ class Product extends Model
     public function isPhysical(): bool
     {
         return $this->type === self::TYPE_PRODUTO_FISICO;
+    }
+
+    public function isTelegram(): bool
+    {
+        return $this->type === self::TYPE_TELEGRAM;
+    }
+
+    public function telegramSetting(): HasOne
+    {
+        return $this->hasOne(ProductTelegramSetting::class, 'product_id');
     }
 
     public function requiresShippingAddress(): bool
@@ -744,7 +756,13 @@ class Product extends Model
         if (\Illuminate\Support\Facades\Schema::hasColumn($this->getTable(), 'approval_status')) {
             $status = $this->approval_status ?? self::APPROVAL_APPROVED;
 
-            return $status === self::APPROVAL_APPROVED;
+            if ($status !== self::APPROVAL_APPROVED) {
+                return false;
+            }
+        }
+
+        if ($this->isTelegram()) {
+            return app(\App\Services\Telegram\TelegramProductDeliveryService::class)->canSellProduct($this);
         }
 
         return true;
@@ -756,6 +774,11 @@ class Product extends Model
 
         if (\Illuminate\Support\Facades\Schema::hasColumn((new static)->getTable(), 'approval_status')) {
             $query->where('approval_status', self::APPROVAL_APPROVED);
+        }
+
+        // Etapa 3.1: entrega Telegram ainda não vende no checkout.
+        if (! app(\App\Services\Telegram\TelegramProductDeliveryService::class)->automaticDeliveryOperational()) {
+            $query->where('type', '!=', self::TYPE_TELEGRAM);
         }
 
         return $query;
@@ -1032,6 +1055,11 @@ class Product extends Model
             self::TYPE_LINK_PAGAMENTO => [
                 'label' => 'Somente link de pagamento',
                 'description' => 'Apenas gera link de checkout, sem entrega automática.',
+                'available' => true,
+            ],
+            self::TYPE_TELEGRAM => [
+                'label' => 'Telegram',
+                'description' => 'Venda acesso a grupos e canais privados do Telegram com gerenciamento automático de assinantes.',
                 'available' => true,
             ],
             self::TYPE_PRODUTO_FISICO => [

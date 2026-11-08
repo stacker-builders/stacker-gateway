@@ -76,6 +76,11 @@ class Order extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function telegramAccessGrants(): HasMany
+    {
+        return $this->hasMany(TelegramAccessGrant::class);
+    }
+
     /** Dono do tenant (infoprodutor): `tenant_id` referencia `users.id` do infoprodutor. */
     public function tenantOwner(): BelongsTo
     {

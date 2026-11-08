@@ -34,6 +34,7 @@ import {
 } from 'lucide-vue-next';
 import axios from 'axios';
 import EmailTemplatePreview from '@/components/produtos/EmailTemplatePreview.vue';
+import TelegramDeliveryConfig from '@/components/produtos/TelegramDeliveryConfig.vue';
 import { useI18n } from '@/composables/useI18n';
 import {
     mergeConversionPixels,
@@ -110,6 +111,7 @@ const props = defineProps({
     wallet_acquirer_label: { type: String, default: '' },
     shipping_stores: { type: Array, default: () => [] },
     coproduction_readonly: { type: Boolean, default: false },
+    telegram_delivery: { type: Object, default: () => ({}) },
 });
 
 const page = usePage();
@@ -198,6 +200,19 @@ const form = useForm({
     shipping_store_id: props.produto.shipping_store_id ?? null,
     physical_free_shipping: Boolean(props.produto.physical_config?.free_shipping),
     bundle_product_ids: [...(props.produto.bundle_product_ids ?? [])].map(String),
+    telegram: (() => {
+        const s = props.telegram_delivery?.setting;
+        return {
+            bot_id: s?.bot_id ?? null,
+            community_ids: [...(s?.community_ids ?? [])],
+            access_duration_preset: s?.access_duration_preset ?? '30',
+            access_duration_days: s?.access_duration ?? 30,
+            is_lifetime: Boolean(s?.is_lifetime),
+            invite_expiration_hours: s?.invite_expiration_hours ?? 24,
+            welcome_message: s?.welcome_message ?? '',
+            auto_remove_on_expiry: s?.auto_remove_on_expiry !== false,
+        };
+    })(),
 });
 
 watch(
@@ -206,6 +221,9 @@ watch(
         if (t === 'produto_fisico') {
             form.billing_type = 'one_time';
             form.currency = 'BRL';
+        }
+        if (t === 'telegram') {
+            form.is_active = false;
         }
     }
 );
@@ -1219,6 +1237,7 @@ const typeIcons = {
     area_membros_externa: Users,
     link: Link2,
     link_pagamento: CreditCard,
+    telegram: 'telegram-img',
     produto_fisico: Truck,
 };
 
@@ -1261,6 +1280,19 @@ function appendCoreProductFields(fd) {
     if (form.type === 'produto_fisico') {
         if (form.shipping_store_id) fd.append('shipping_store_id', String(form.shipping_store_id));
         fd.append('physical_free_shipping', form.physical_free_shipping ? '1' : '0');
+    }
+    if (form.type === 'telegram' && form.telegram) {
+        const tg = form.telegram;
+        if (tg.bot_id) fd.append('telegram[bot_id]', String(tg.bot_id));
+        (tg.community_ids || []).forEach((id) => fd.append('telegram[community_ids][]', String(id)));
+        fd.append('telegram[access_duration_preset]', tg.access_duration_preset || '30');
+        if (tg.access_duration_preset === 'custom') {
+            fd.append('telegram[access_duration_days]', String(tg.access_duration_days || 30));
+        }
+        fd.append('telegram[is_lifetime]', tg.access_duration_preset === 'lifetime' || tg.is_lifetime ? '1' : '0');
+        fd.append('telegram[invite_expiration_hours]', String(tg.invite_expiration_hours || 24));
+        fd.append('telegram[welcome_message]', tg.welcome_message || '');
+        fd.append('telegram[auto_remove_on_expiry]', tg.auto_remove_on_expiry ? '1' : '0');
     }
     if (form.refund_enabled) {
         fd.append('refund_policy_days', String(form.refund_policy_days ?? 7));
@@ -1591,13 +1623,20 @@ function submit() {
                                     <Toggle
                                         v-model="form.is_active"
                                         :label="t('products.create.active_product', 'Produto ativo')"
-                                        :disabled="produto.approval?.status && produto.approval.status !== 'approved'"
+                                        :disabled="form.type === 'telegram' || (produto.approval?.status && produto.approval.status !== 'approved')"
                                     />
                                 </div>
+                                <p
+                                    v-if="form.type === 'telegram'"
+                                    class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100"
+                                >
+                                    Publicação e venda de produtos Telegram ficam bloqueadas até a entrega automática estar operacional (próximas etapas).
+                                </p>
                                 <div class="pt-1">
                                     <Checkbox
                                         v-model="form.show_in_marketplace"
                                         :label="marketplaceToggleLabel"
+                                        :disabled="form.type === 'telegram'"
                                         class="w-full"
                                     />
                                     <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
@@ -2128,7 +2167,17 @@ function submit() {
                                 ]"
                                 @click="form.type = t.value"
                             >
-                                <component :is="typeIcons[t.value] || Package" class="mt-0.5 h-5 w-5 shrink-0 text-zinc-500 dark:text-zinc-400" />
+                                <img
+                                    v-if="typeIcons[t.value] === 'telegram-img'"
+                                    src="/images/integrations/telegram.svg"
+                                    alt=""
+                                    class="mt-0.5 h-5 w-5 shrink-0"
+                                />
+                                <component
+                                    v-else
+                                    :is="typeIcons[t.value] || Package"
+                                    class="mt-0.5 h-5 w-5 shrink-0 text-zinc-500 dark:text-zinc-400"
+                                />
                                 <div class="min-w-0 flex-1">
                                     <span class="font-medium text-zinc-900 dark:text-white">{{ t.label }}</span>
                                 </div>
@@ -2155,6 +2204,25 @@ function submit() {
                             </button>
                         </div>
                         <p v-if="form.errors.type" class="mt-2 text-sm text-red-600 dark:text-red-400">{{ form.errors.type }}</p>
+                    </div>
+                </section>
+
+                <section
+                    v-if="form.type === 'telegram'"
+                    class="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-700/80 dark:bg-zinc-800/95"
+                >
+                    <div class="border-b border-zinc-200/80 bg-zinc-50/80 px-6 py-4 dark:border-zinc-700/80 dark:bg-zinc-800/50">
+                        <h2 class="text-base font-semibold text-zinc-900 dark:text-white">Configuração de entrega Telegram</h2>
+                        <p class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
+                            Vincule bot e comunidades. A duração configura o direito de acesso do comprador; a validade do convite é separada.
+                        </p>
+                    </div>
+                    <div class="p-6">
+                        <TelegramDeliveryConfig
+                            v-model="form.telegram"
+                            :delivery="telegram_delivery"
+                            :errors="form.errors"
+                        />
                     </div>
                 </section>
 

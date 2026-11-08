@@ -39,6 +39,7 @@ const props = defineProps({
         }),
     },
     bundle_candidates: { type: Array, default: () => [] },
+    telegram_delivery: { type: Object, default: () => ({}) },
 });
 
 const produtosList = computed(() => props.produtos?.data ?? (Array.isArray(props.produtos) ? props.produtos : []));
@@ -401,6 +402,7 @@ function pluginActions(productId) {
         :plugin-form-sections="plugin_form_sections"
         :checkout-gateway-ui="checkout_gateway_ui"
         :bundle-candidates="bundle_candidates"
+        :telegram-delivery="telegram_delivery"
         @close="closeSidebar"
         @success="closeSidebar"
     />

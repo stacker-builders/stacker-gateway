@@ -31,6 +31,8 @@ use App\Services\SellerActivityLogService;
 use App\Services\SellerIntegrationVisibility;
 use App\Services\StorageService;
 use App\Services\TeamAccessService;
+use App\Services\Telegram\TelegramPolicy;
+use App\Services\Telegram\TelegramProductDeliveryService;
 use App\Support\CardInstallments;
 use App\Support\EmailLogoImage;
 use App\Support\HtmlSanitizer;
@@ -62,6 +64,7 @@ class ProdutosController extends Controller
             Product::TYPE_AREA_MEMBROS_EXTERNA,
             Product::TYPE_LINK,
             Product::TYPE_LINK_PAGAMENTO,
+            Product::TYPE_TELEGRAM,
             Product::TYPE_PRODUTO_FISICO,
         ];
 
@@ -72,6 +75,20 @@ class ProdutosController extends Controller
             ));
             if ($existing !== null && $existing->isPhysical()) {
                 $types[] = Product::TYPE_PRODUTO_FISICO;
+            }
+        }
+
+        $tenantId = auth()->user()?->tenant_id;
+        $telegramOk = app(TelegramPolicy::class)->moduleAvailable(
+            $tenantId !== null ? (int) $tenantId : null
+        );
+        if (! $telegramOk) {
+            $types = array_values(array_filter(
+                $types,
+                fn (string $t) => $t !== Product::TYPE_TELEGRAM
+            ));
+            if ($existing !== null && $existing->isTelegram()) {
+                $types[] = Product::TYPE_TELEGRAM;
             }
         }
 
@@ -131,7 +148,12 @@ class ProdutosController extends Controller
             return $arr;
         });
 
-        $productTypes = collect(PhysicalProductAccess::filterTypeConfig(Product::typeConfig()))->map(fn ($config, $value) => [
+        $typeConfig = PhysicalProductAccess::filterTypeConfig(Product::typeConfig());
+        $typeConfig = app(TelegramProductDeliveryService::class)->filterTypeConfig(
+            $typeConfig,
+            $tenantId !== null ? (int) $tenantId : null
+        );
+        $productTypes = collect($typeConfig)->map(fn ($config, $value) => [
             'value' => $value,
             'label' => $config['label'],
             'description' => $config['description'],
@@ -139,6 +161,18 @@ class ProdutosController extends Controller
         ])->values()->all();
 
         $billingTypes = collect(Product::billingTypeLabels())->map(fn ($label, $value) => ['value' => $value, 'label' => $label])->values()->all();
+
+        $telegramDelivery = $tenantId !== null
+            ? app(TelegramProductDeliveryService::class)->sellerDeliveryPayload((int) $tenantId)
+            : [
+                'module_available' => false,
+                'bots' => [],
+                'integrations_url' => '/integracoes/telegram',
+                'access_duration_options' => [],
+                'invite_expiration_options' => [],
+                'setting' => null,
+                'readiness' => ['configured' => false, 'ready_for_sale' => false, 'blocking_reasons' => [], 'sales_operational' => false],
+            ];
 
         $data = new \ArrayObject([
             'produtos' => $products,
@@ -150,6 +184,7 @@ class ProdutosController extends Controller
             'plugin_form_sections' => [],
             'checkout_gateway_ui' => $this->checkoutGatewayUiForTenant($tenantId),
             'bundle_candidates' => app(ProductBundleService::class)->candidatesPayload((int) $tenantId),
+            'telegram_delivery' => $telegramDelivery,
         ]);
         event(new ProductIndexLoading($data));
         $payload = $data->getArrayCopy();
@@ -215,6 +250,16 @@ class ProdutosController extends Controller
             'card_installments.max' => ['nullable', 'integer', 'min:1', 'max:'.\App\Services\PlatformCardInstallments::selectableCeiling()],
             'bundle_product_ids' => ['sometimes', 'array', 'max:'.ProductBundleService::MAX_INCLUDED],
             'bundle_product_ids.*' => ['nullable', 'string', 'max:36'],
+            'telegram' => ['nullable', 'array'],
+            'telegram.bot_id' => ['nullable', 'integer'],
+            'telegram.community_ids' => ['nullable', 'array'],
+            'telegram.community_ids.*' => ['integer', 'min:1'],
+            'telegram.access_duration_preset' => ['nullable', 'string', 'max:32'],
+            'telegram.access_duration_days' => ['nullable', 'integer', 'min:1', 'max:3650'],
+            'telegram.is_lifetime' => ['nullable', 'boolean'],
+            'telegram.invite_expiration_hours' => ['nullable', 'integer', 'min:1', 'max:720'],
+            'telegram.welcome_message' => ['nullable', 'string', 'max:4000'],
+            'telegram.auto_remove_on_expiry' => ['nullable', 'boolean'],
         ]);
 
         // Texto puro (evita XSS armazenado em nome/descrição)
@@ -254,10 +299,18 @@ class ProdutosController extends Controller
         $validated['refund_policy_days'] = 7;
         $this->assertPhysicalProductRules($validated['type'] ?? '', $validated['billing_type'] ?? '');
 
+        // Etapa 3.1: produto Telegram só como rascunho (sem venda real).
+        if (($validated['type'] ?? '') === Product::TYPE_TELEGRAM) {
+            $validated['is_active'] = false;
+        }
+
         $approvalService = app(ProductApprovalService::class);
         $approvalAttrs = $approvalService->attributesForNewProduct((bool) $validated['is_active']);
         if ($approvalAttrs !== []) {
             $validated = array_merge($validated, $approvalAttrs);
+        }
+        if (($validated['type'] ?? '') === Product::TYPE_TELEGRAM) {
+            $validated['is_active'] = false;
         }
 
         $product = new Product($validated);
@@ -274,12 +327,14 @@ class ProdutosController extends Controller
         unset($validated['card_installments']);
         $bundleIds = $request->exists('bundle_product_ids') ? array_values($validated['bundle_product_ids'] ?? []) : null;
         unset($validated['bundle_product_ids']);
+        $telegramInput = is_array($validated['telegram'] ?? null) ? $validated['telegram'] : null;
+        unset($validated['telegram']);
         if (($validated['type'] ?? '') === Product::TYPE_PRODUTO_FISICO) {
             $bundleIds = [];
         }
 
         try {
-            $product = DB::transaction(function () use ($request, $validated, $deliverableLink, $cardInstallmentsInput, $bundleIds) {
+            $product = DB::transaction(function () use ($request, $validated, $deliverableLink, $cardInstallmentsInput, $bundleIds, $telegramInput, $tenantId) {
                 $product = $this->createProductRecord($validated);
 
                 if ($request->has('deliverable_link')) {
@@ -299,10 +354,19 @@ class ProdutosController extends Controller
                     app(ProductBundleService::class)->syncIncluded($product, $bundleIds);
                 }
 
+                if ($product->isTelegram() && $telegramInput !== null) {
+                    app(TelegramProductDeliveryService::class)->syncForProduct(
+                        $product,
+                        (int) $tenantId,
+                        $telegramInput,
+                        $request
+                    );
+                }
+
                 return $product;
             });
         } catch (InvalidArgumentException $e) {
-            return back()->withErrors(['bundle_product_ids' => $e->getMessage()])->with('error', $e->getMessage())->withInput();
+            return back()->withErrors(['telegram' => $e->getMessage()])->with('error', $e->getMessage())->withInput();
         } catch (\RuntimeException $e) {
             return back()
                 ->withErrors(['image' => $e->getMessage()])
@@ -312,7 +376,7 @@ class ProdutosController extends Controller
             if ($this->isDuplicateProductSlugException($e)) {
                 $validated['slug'] = Product::uniqueSlugForTenant($tenantId, $baseSlug !== '' ? $baseSlug : 'produto');
                 try {
-                    $product = DB::transaction(function () use ($request, $validated, $deliverableLink, $cardInstallmentsInput, $bundleIds) {
+                    $product = DB::transaction(function () use ($request, $validated, $deliverableLink, $cardInstallmentsInput, $bundleIds, $telegramInput, $tenantId) {
                         $product = $this->createProductRecord($validated);
 
                         if ($request->has('deliverable_link')) {
@@ -332,12 +396,23 @@ class ProdutosController extends Controller
                             app(ProductBundleService::class)->syncIncluded($product, $bundleIds);
                         }
 
+                        if ($product->isTelegram() && $telegramInput !== null) {
+                            app(TelegramProductDeliveryService::class)->syncForProduct(
+                                $product,
+                                (int) $tenantId,
+                                $telegramInput,
+                                $request
+                            );
+                        }
+
                         return $product;
                     });
                 } catch (QueryException) {
                     return back()
                         ->withErrors(['name' => 'Já existe um produto com este nome. Escolha outro nome.'])
                         ->withInput();
+                } catch (InvalidArgumentException $e) {
+                    return back()->withErrors(['telegram' => $e->getMessage()])->with('error', $e->getMessage())->withInput();
                 }
             } else {
                 throw $e;
@@ -366,7 +441,13 @@ class ProdutosController extends Controller
         $produto->load('users:id,name,email', 'offers', 'subscriptionPlans', 'orderBumps');
 
         $rates = config('products.rates', ['brl_eur' => 0.16, 'brl_usd' => 0.18]);
-        $productTypes = collect(PhysicalProductAccess::filterTypeConfig(Product::typeConfig()))->map(fn ($config, $value) => [
+        $editTypeConfig = PhysicalProductAccess::filterTypeConfig(Product::typeConfig());
+        $editTypeConfig = app(TelegramProductDeliveryService::class)->filterTypeConfig(
+            $editTypeConfig,
+            auth()->user()->tenant_id !== null ? (int) auth()->user()->tenant_id : null,
+            $produto
+        );
+        $productTypes = collect($editTypeConfig)->map(fn ($config, $value) => [
             'value' => $value,
             'label' => $config['label'],
             'description' => $config['description'],
@@ -598,6 +679,18 @@ class ProdutosController extends Controller
         $coproductionReadonly = ProductCoproducer::isActiveCoproducerOf((int) auth()->id(), (string) $produto->id)
             && (int) $produto->tenant_id !== (int) $tenantId;
 
+        $telegramDelivery = $tenantId !== null
+            ? app(TelegramProductDeliveryService::class)->sellerDeliveryPayload((int) $tenantId, $produto)
+            : [
+                'module_available' => false,
+                'bots' => [],
+                'integrations_url' => '/integracoes/telegram',
+                'access_duration_options' => [],
+                'invite_expiration_options' => [],
+                'setting' => null,
+                'readiness' => ['configured' => false, 'ready_for_sale' => false, 'blocking_reasons' => [], 'sales_operational' => false],
+            ];
+
         return Inertia::render('Produtos/Edit', [
             'produto' => $produtoArray,
             'coproduction_readonly' => $coproductionReadonly,
@@ -611,6 +704,7 @@ class ProdutosController extends Controller
             'cademi_integrations' => $cademiIntegrations,
             'cademi_available' => $cademiAvailable,
             'shipping_stores' => PhysicalProductAccess::globalEnabled() ? $shippingStores : [],
+            'telegram_delivery' => $telegramDelivery,
             'layoutContentFlushLeft' => true,
             'pageTitleBadge' => $produto->name,
         ]);
@@ -767,6 +861,16 @@ class ProdutosController extends Controller
             'physical_free_shipping' => ['nullable', 'boolean'],
             'bundle_product_ids' => ['sometimes', 'array', 'max:'.ProductBundleService::MAX_INCLUDED],
             'bundle_product_ids.*' => ['nullable', 'string', 'max:36'],
+            'telegram' => ['nullable', 'array'],
+            'telegram.bot_id' => ['nullable', 'integer'],
+            'telegram.community_ids' => ['nullable', 'array'],
+            'telegram.community_ids.*' => ['integer', 'min:1'],
+            'telegram.access_duration_preset' => ['nullable', 'string', 'max:32'],
+            'telegram.access_duration_days' => ['nullable', 'integer', 'min:1', 'max:3650'],
+            'telegram.is_lifetime' => ['nullable', 'boolean'],
+            'telegram.invite_expiration_hours' => ['nullable', 'integer', 'min:1', 'max:720'],
+            'telegram.welcome_message' => ['nullable', 'string', 'max:4000'],
+            'telegram.auto_remove_on_expiry' => ['nullable', 'boolean'],
         ]);
 
         $this->assertPhysicalProductRules($validated['type'] ?? '', $validated['billing_type'] ?? '');
@@ -824,10 +928,24 @@ class ProdutosController extends Controller
             ? (int) $validated['refund_policy_days']
             : null;
 
-        try {
-            app(ProductApprovalService::class)->guardSellerActivation($produto, (bool) $validated['is_active']);
-        } catch (InvalidArgumentException $e) {
-            return back()->with('error', $e->getMessage())->withInput();
+        $effectiveType = (string) ($validated['type'] ?? $produto->type);
+        if ($effectiveType === Product::TYPE_TELEGRAM) {
+            if ($request->boolean('is_active', false)) {
+                return back()->with(
+                    'error',
+                    'Produtos Telegram ainda não podem ser publicados para venda. A entrega automática será liberada nas próximas etapas.'
+                )->withInput();
+            }
+            $validated['is_active'] = false;
+            if (array_key_exists('show_in_marketplace', $validated)) {
+                $validated['show_in_marketplace'] = false;
+            }
+        } else {
+            try {
+                app(ProductApprovalService::class)->guardSellerActivation($produto, (bool) $validated['is_active']);
+            } catch (InvalidArgumentException $e) {
+                return back()->with('error', $e->getMessage())->withInput();
+            }
         }
 
         $beforeEvent = new ProductBeforeSave($produto, $validated, false);
@@ -855,7 +973,11 @@ class ProdutosController extends Controller
         unset($validated['physical_free_shipping'], $validated['shipping_store_id']);
         $bundleIds = $request->exists('bundle_product_ids') ? array_values($validated['bundle_product_ids'] ?? []) : null;
         unset($validated['bundle_product_ids']);
-        if (($validated['type'] ?? $produto->type) === Product::TYPE_PRODUTO_FISICO) {
+        $telegramInput = $request->exists('telegram') && is_array($validated['telegram'] ?? null)
+            ? $validated['telegram']
+            : null;
+        unset($validated['telegram']);
+        if ($effectiveType === Product::TYPE_PRODUTO_FISICO) {
             $bundleIds = [];
         }
 
@@ -903,7 +1025,9 @@ class ProdutosController extends Controller
                 $emailTemplate,
                 $paymentMethodsPm,
                 $oldImage,
-                $bundleIds
+                $bundleIds,
+                $telegramInput,
+                $effectiveType
             ) {
                 $produto->update($validated);
 
@@ -996,9 +1120,23 @@ class ProdutosController extends Controller
                 if ($bundleIds !== null) {
                     app(ProductBundleService::class)->syncIncluded($produto, $bundleIds);
                 }
+
+                $delivery = app(TelegramProductDeliveryService::class);
+                if ($effectiveType === Product::TYPE_TELEGRAM) {
+                    if ($telegramInput !== null) {
+                        $delivery->syncForProduct(
+                            $produto->fresh(),
+                            (int) auth()->user()->tenant_id,
+                            $telegramInput,
+                            $request
+                        );
+                    }
+                } else {
+                    $delivery->clearForProduct($produto);
+                }
             });
         } catch (InvalidArgumentException $e) {
-            return back()->withErrors(['bundle_product_ids' => $e->getMessage()])->with('error', $e->getMessage())->withInput();
+            return back()->withErrors(['telegram' => $e->getMessage()])->with('error', $e->getMessage())->withInput();
         } catch (\RuntimeException $e) {
             return back()
                 ->withErrors(['image' => $e->getMessage()])
