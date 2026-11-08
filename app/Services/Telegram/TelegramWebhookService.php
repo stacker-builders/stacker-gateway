@@ -333,6 +333,14 @@ class TelegramWebhookService
         // /start link_<grantId>_<nonce>_<hmac> — deep link assinado (não enumerável).
         $parsed = TelegramIdentityLink::parse($text);
         if ($parsed === null) {
+            if (preg_match('/^\/start(?:@\w+)?(?:\s|$)/i', $text) === 1) {
+                $this->notifyBuyer(
+                    $bot,
+                    $telegramUserId,
+                    'Para vincular sua compra, volte à página de acesso e toque em “Abrir bot do Telegram” (o Start precisa vir com o link da compra).'
+                );
+            }
+
             return;
         }
 
@@ -343,6 +351,12 @@ class TelegramWebhookService
             ->first();
 
         if (! $grant || ! TelegramIdentityLink::verify($grant, $parsed['nonce'], $parsed['signature'])) {
+            $this->notifyBuyer(
+                $bot,
+                $telegramUserId,
+                'Não foi possível vincular este Start à sua compra. Abra novamente o bot pelo botão da página de acesso.'
+            );
+
             return;
         }
 
@@ -350,6 +364,8 @@ class TelegramWebhookService
             TelegramAccessGrant::STATUS_REVOKED,
             TelegramAccessGrant::STATUS_EXPIRED,
         ], true)) {
+            $this->notifyBuyer($bot, $telegramUserId, 'Este acesso não está mais ativo.');
+
             return;
         }
 
@@ -361,6 +377,30 @@ class TelegramWebhookService
         );
 
         $this->invites->processGrant($grant->fresh(['bot', 'communities.community']));
+
+        $this->notifyBuyer(
+            $bot,
+            $telegramUserId,
+            'Conta vinculada com sucesso. Volte à página da compra: a tela atualiza sozinha e aí você pode entrar no grupo/canal. Se o Telegram pedir aprovação, o bot libera automaticamente (precisa estar como admin com permissão de solicitações).'
+        );
+    }
+
+    private function notifyBuyer(TelegramBot $bot, int $telegramUserId, string $text): void
+    {
+        $token = $bot->plainToken();
+        if ($token === null || $telegramUserId <= 0 || trim($text) === '') {
+            return;
+        }
+
+        try {
+            $this->api->sendMessage($token, $telegramUserId, $text);
+        } catch (TelegramApiException $e) {
+            Log::info('telegram.buyer_notify_failed', [
+                'bot_id' => $bot->id,
+                'telegram_user_id' => $telegramUserId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
