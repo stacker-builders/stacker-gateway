@@ -45,6 +45,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'webhooks/uazapi/*',
             'webhooks/evolution/*',
             'webhooks/platform-whatsapp/*',
+            'webhooks/telegram/*',
             'checkout/pixel/events',
             'checkout/pixel/purchase-ack',
             'api/metrics/collect',
