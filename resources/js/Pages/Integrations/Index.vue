@@ -59,6 +59,12 @@ const APPS_BASE = [
         description: t('integrations.mcp.description', 'Conecte Claude, ChatGPT ou outro cliente MCP para montar produtos, funis, área de membros e alunos desta conta.'),
         image: 'images/integrations/mcp.svg',
     },
+    {
+        id: 'telegram',
+        name: 'Telegram',
+        description: t('integrations.telegram.description', 'Conecte bots, vincule grupos e canais privados e prepare a entrega automática pelo Telegram.'),
+        image: 'images/integrations/telegram.svg',
+    },
 ];
 
 const props = defineProps({
@@ -69,9 +75,10 @@ const props = defineProps({
     cademi_integrations: { type: Array, default: () => [] },
     uazapi: { type: Object, default: null },
     evolution: { type: Object, default: null },
+    telegram: { type: Object, default: null },
     mcp: { type: Object, default: null },
     products: { type: Array, default: () => [] },
-    visible_integrations: { type: Array, default: () => ['webhook', 'utmify', 'spedy', 'cademi', 'uazapi', 'evolution'] },
+    visible_integrations: { type: Array, default: () => ['webhook', 'utmify', 'spedy', 'cademi', 'uazapi', 'evolution', 'telegram'] },
 });
 
 const APPS = computed(() => {
@@ -120,6 +127,12 @@ const APPS = computed(() => {
             return {
                 ...app,
                 status: props.mcp?.connected ? 'active' : undefined,
+            };
+        }
+        if (app.id === 'telegram') {
+            return {
+                ...app,
+                status: props.telegram?.configured && props.telegram?.is_active ? 'active' : undefined,
             };
         }
         return app;
@@ -227,6 +240,8 @@ function onAppClick(app) {
         openEvolutionSidebar();
     } else if (app.id === 'mcp') {
         openMcpSidebar();
+    } else if (app.id === 'telegram') {
+        router.visit('/integracoes/telegram');
     }
 }
 </script>
