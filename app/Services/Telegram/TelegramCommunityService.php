@@ -190,6 +190,108 @@ class TelegramCommunityService
         return $community->fresh(['bot']);
     }
 
+    /**
+     * Persiste chat detectado via my_chat_member (bot entrou no grupo/canal).
+     * Não promove a "linked" automaticamente — o seller confirma na UI.
+     *
+     * @param  array<string, mixed>  $chat
+     */
+    public function rememberMembership(TelegramBot $bot, array $chat, string $memberStatus): ?TelegramCommunity
+    {
+        $chatId = (int) ($chat['id'] ?? 0);
+        $type = (string) ($chat['type'] ?? '');
+        if ($chatId === 0 || ! in_array($type, ['group', 'supergroup', 'channel'], true)) {
+            return null;
+        }
+
+        $existing = TelegramCommunity::query()
+            ->where('telegram_bot_id', $bot->id)
+            ->where('telegram_chat_id', $chatId)
+            ->first();
+
+        if ($existing && in_array($existing->status, [TelegramCommunity::STATUS_LINKED, TelegramCommunity::STATUS_ERROR], true)) {
+            $existing->forceFill([
+                'title' => $chat['title'] ?? $existing->title,
+                'username' => $chat['username'] ?? $existing->username,
+                'type' => $type,
+            ])->save();
+
+            return $existing->fresh(['bot']);
+        }
+
+        $community = $existing ?? new TelegramCommunity([
+            'tenant_id' => $bot->tenant_id,
+            'telegram_bot_id' => $bot->id,
+            'telegram_chat_id' => $chatId,
+        ]);
+
+        $community->fill([
+            'tenant_id' => $bot->tenant_id,
+            'telegram_bot_id' => $bot->id,
+            'telegram_chat_id' => $chatId,
+            'type' => $type,
+            'title' => $chat['title'] ?? null,
+            'username' => $chat['username'] ?? null,
+            'status' => TelegramCommunity::STATUS_DISCOVERED,
+            'ready_for_delivery' => false,
+            'unlinked_at' => null,
+            'last_error' => in_array($memberStatus, ['administrator', 'creator'], true)
+                ? null
+                : 'Bot detectado no chat, mas ainda não é administrador.',
+        ]);
+        $community->save();
+
+        return $community->fresh(['bot']);
+    }
+
+    public function forgetMembership(TelegramBot $bot, int $chatId): void
+    {
+        $community = TelegramCommunity::query()
+            ->where('telegram_bot_id', $bot->id)
+            ->where('telegram_chat_id', $chatId)
+            ->where('status', TelegramCommunity::STATUS_DISCOVERED)
+            ->first();
+
+        if (! $community) {
+            return;
+        }
+
+        $community->forceFill([
+            'status' => TelegramCommunity::STATUS_UNLINKED,
+            'ready_for_delivery' => false,
+            'unlinked_at' => now(),
+            'last_error' => 'Bot removido do chat antes da confirmação.',
+        ])->save();
+    }
+
+    public function confirmDiscovered(int $tenantId, TelegramCommunity $community): TelegramCommunity
+    {
+        $this->assertModuleAvailable($tenantId);
+        $this->assertOwnedCommunity($tenantId, $community);
+
+        if ($community->status !== TelegramCommunity::STATUS_DISCOVERED) {
+            throw ValidationException::withMessages([
+                'community' => 'Esta comunidade não está pendente de confirmação.',
+            ]);
+        }
+
+        $bot = $community->bot;
+        if (! $bot || ! $bot->isConnected()) {
+            throw ValidationException::withMessages([
+                'community' => 'O bot desta comunidade não está conectado.',
+            ]);
+        }
+
+        $activeCount = TelegramCommunity::query()->forTenant($tenantId)->active()->count();
+        if (! $this->policy->canCreateCommunity($tenantId, $activeCount)) {
+            throw ValidationException::withMessages([
+                'community' => 'Limite de comunidades atingido para esta conta.',
+            ]);
+        }
+
+        return $this->refreshPermissions($tenantId, $community->fresh(['bot']));
+    }
+
     private function normalizeChatId(string $value): int|string
     {
         $value = trim($value);

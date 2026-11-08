@@ -1308,6 +1308,9 @@ Route::middleware(['auth', 'admin.tenant', 'seller.panel', 'stacker.license', 'r
             Route::post('/integracoes/telegram/communities', [\App\Http\Controllers\TelegramIntegrationController::class, 'storeCommunity'])
                 ->middleware('throttle:20,1')
                 ->name('integrations.telegram.communities.store');
+            Route::post('/integracoes/telegram/communities/{community}/confirm', [\App\Http\Controllers\TelegramIntegrationController::class, 'confirmDiscoveredCommunity'])
+                ->middleware('throttle:20,1')
+                ->name('integrations.telegram.communities.confirm');
             Route::post('/integracoes/telegram/communities/{community}/refresh', [\App\Http\Controllers\TelegramIntegrationController::class, 'refreshCommunity'])
                 ->middleware('throttle:20,1')
                 ->name('integrations.telegram.communities.refresh');

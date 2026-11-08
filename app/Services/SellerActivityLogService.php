@@ -249,6 +249,14 @@ class SellerActivityLogService
 
     public const INTEGRATION_MCP_REVOKED = 'integration.mcp.revoked';
 
+    public const INTEGRATION_TELEGRAM_BOT_CONNECTED = 'integration.telegram.bot.connected';
+
+    public const INTEGRATION_TELEGRAM_BOT_DISCONNECTED = 'integration.telegram.bot.disconnected';
+
+    public const INTEGRATION_TELEGRAM_COMMUNITY_LINKED = 'integration.telegram.community.linked';
+
+    public const INTEGRATION_TELEGRAM_COMMUNITY_UNLINKED = 'integration.telegram.community.unlinked';
+
     public const DISPUTE_DEFENSE_SUBMITTED = 'dispute.defense.submitted';
 
     public const DISPUTE_DOSSIER_GENERATED = 'dispute.dossier.generated';
@@ -365,6 +373,10 @@ class SellerActivityLogService
         self::INTEGRATION_MCP_ACTIVATED => ['group' => self::GROUP_INTEGRATION, 'label' => 'Ativou MCP'],
         self::INTEGRATION_MCP_ROTATED => ['group' => self::GROUP_INTEGRATION, 'label' => 'Rotacionou token MCP'],
         self::INTEGRATION_MCP_REVOKED => ['group' => self::GROUP_INTEGRATION, 'label' => 'Revogou MCP'],
+        self::INTEGRATION_TELEGRAM_BOT_CONNECTED => ['group' => self::GROUP_INTEGRATION, 'label' => 'Conectou bot Telegram'],
+        self::INTEGRATION_TELEGRAM_BOT_DISCONNECTED => ['group' => self::GROUP_INTEGRATION, 'label' => 'Desconectou bot Telegram'],
+        self::INTEGRATION_TELEGRAM_COMMUNITY_LINKED => ['group' => self::GROUP_INTEGRATION, 'label' => 'Vinculou comunidade Telegram'],
+        self::INTEGRATION_TELEGRAM_COMMUNITY_UNLINKED => ['group' => self::GROUP_INTEGRATION, 'label' => 'Desvinculou comunidade Telegram'],
         self::DISPUTE_DEFENSE_SUBMITTED => ['group' => self::GROUP_DISPUTE, 'label' => 'Enviou defesa de disputa MED'],
         self::DISPUTE_DOSSIER_GENERATED => ['group' => self::GROUP_DISPUTE, 'label' => 'Gerou dossiê de disputa MED'],
         self::SUBSCRIPTION_CANCELLED => ['group' => self::GROUP_SUBSCRIPTION, 'label' => 'Cancelou assinatura'],
@@ -562,6 +574,8 @@ class SellerActivityLogService
             self::INTEGRATION_UAZAPI_CONNECTED, self::INTEGRATION_UAZAPI_DISCONNECTED, self::INTEGRATION_UAZAPI_UPDATED, self::INTEGRATION_UAZAPI_CAMPAIGN,
             self::INTEGRATION_EVOLUTION_CONNECTED, self::INTEGRATION_EVOLUTION_DISCONNECTED, self::INTEGRATION_EVOLUTION_UPDATED,
             self::INTEGRATION_MCP_ACTIVATED, self::INTEGRATION_MCP_ROTATED, self::INTEGRATION_MCP_REVOKED,
+            self::INTEGRATION_TELEGRAM_BOT_CONNECTED, self::INTEGRATION_TELEGRAM_BOT_DISCONNECTED,
+            self::INTEGRATION_TELEGRAM_COMMUNITY_LINKED, self::INTEGRATION_TELEGRAM_COMMUNITY_UNLINKED,
             self::AFFILIATE_SETTINGS_UPDATED => $label.self::namedSuffix($metadata, 'name'),
             self::STUDENT_CREATED, self::STUDENT_UPDATED, self::STUDENT_DELETED => $label.self::namedSuffix($metadata, 'email'),
             self::COPRODUCTION_INVITED, self::COPRODUCTION_REMOVED, self::COPRODUCTION_ACCEPTED => $label.self::namedSuffix($metadata, 'email'),

@@ -53,6 +53,16 @@ class TelegramIntegrationController extends Controller
             ->values()
             ->all();
 
+        $discoveredCommunities = TelegramCommunity::query()
+            ->forTenant($tenantId)
+            ->discovered()
+            ->with('bot')
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn (TelegramCommunity $community) => $community->toPublicArray())
+            ->values()
+            ->all();
+
         $access = app(TelegramLifecycleMetricsService::class)->forTenant(
             $tenantId,
             $request->query('buyer') ? trim((string) $request->query('buyer')) : null,
@@ -63,6 +73,7 @@ class TelegramIntegrationController extends Controller
         return Inertia::render('Integrations/Telegram/Index', [
             'bots' => $bots,
             'communities' => $communities,
+            'discovered_communities' => $discoveredCommunities,
             'wizard' => $this->wizard->forTenant($tenantId),
             'policy' => [
                 'module_available' => $this->policy->moduleAvailable($tenantId),
@@ -197,6 +208,30 @@ class TelegramIntegrationController extends Controller
         return redirect()
             ->route('integrations.telegram.index', ['wizard' => 1, 'step' => $step])
             ->with('success', 'Comunidade vinculada.');
+    }
+
+    public function confirmDiscoveredCommunity(TelegramCommunity $community): RedirectResponse
+    {
+        try {
+            $community = $this->communities->confirmDiscovered($this->tenantId(), $community);
+        } catch (TelegramApiException $e) {
+            throw ValidationException::withMessages([
+                'community' => $e->getMessage(),
+            ]);
+        }
+
+        $this->logSellerActivity(SellerActivityLogService::INTEGRATION_TELEGRAM_COMMUNITY_LINKED, null, [
+            'community_id' => $community->id,
+            'telegram_chat_id' => $community->telegram_chat_id,
+            'bot_id' => $community->telegram_bot_id,
+            'source' => 'discovered',
+        ]);
+
+        $step = $community->ready_for_delivery ? 4 : 3;
+
+        return redirect()
+            ->route('integrations.telegram.index', ['wizard' => 1, 'step' => $step])
+            ->with('success', 'Comunidade vinculada a partir da lista detectada.');
     }
 
     public function refreshCommunity(TelegramCommunity $community): RedirectResponse

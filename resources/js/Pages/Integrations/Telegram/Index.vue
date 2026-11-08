@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { Link, router, useForm, usePage } from '@inertiajs/vue3';
 import axios from 'axios';
 import LayoutInfoprodutor from '@/Layouts/LayoutInfoprodutor.vue';
@@ -11,6 +11,7 @@ defineOptions({ layout: LayoutInfoprodutor });
 const props = defineProps({
     bots: { type: Array, default: () => [] },
     communities: { type: Array, default: () => [] },
+    discovered_communities: { type: Array, default: () => [] },
     wizard: { type: Object, required: true },
     policy: { type: Object, required: true },
     meta: { type: Object, default: () => ({}) },
@@ -44,6 +45,14 @@ const communityForm = useForm({
     telegram_bot_id: props.bots[0]?.id ?? '',
     chat_id: '',
 });
+const communityMode = ref('list');
+const selectedDiscoveredId = ref('');
+let discoveredPoll = null;
+
+const discoveredForBot = computed(() => {
+    const botId = Number(communityForm.telegram_bot_id || 0);
+    return (props.discovered_communities || []).filter((c) => Number(c.telegram_bot_id) === botId);
+});
 
 watch(
     () => props.bots,
@@ -54,6 +63,43 @@ watch(
     },
     { deep: true },
 );
+
+watch(
+    discoveredForBot,
+    (list) => {
+        if (!list.length) {
+            selectedDiscoveredId.value = '';
+            return;
+        }
+        const stillThere = list.some((c) => String(c.id) === String(selectedDiscoveredId.value));
+        if (!stillThere) {
+            selectedDiscoveredId.value = String(list[0].id);
+        }
+    },
+    { immediate: true },
+);
+
+watch(
+    [() => showWizard.value, () => step.value],
+    ([wizardOpen, currentStep]) => {
+        if (discoveredPoll) {
+            clearInterval(discoveredPoll);
+            discoveredPoll = null;
+        }
+        if (wizardOpen && currentStep === 2) {
+            discoveredPoll = setInterval(() => {
+                router.reload({ only: ['discovered_communities'], preserveUrl: true });
+            }, 5000);
+        }
+    },
+    { immediate: true },
+);
+
+onBeforeUnmount(() => {
+    if (discoveredPoll) {
+        clearInterval(discoveredPoll);
+    }
+});
 
 watch(
     () => props.wizard.current_step,
@@ -87,6 +133,7 @@ function statusLabel(status) {
         error: 'Com erro',
         disconnected: 'Desconectado',
         linked: 'Vinculado',
+        discovered: 'Detectado',
         unlinked: 'Desvinculado',
     }[status] || status;
 }
@@ -128,6 +175,13 @@ function linkCommunity() {
         onSuccess: () => {
             communityForm.chat_id = '';
         },
+    });
+}
+
+function confirmDiscoveredCommunity() {
+    if (!selectedDiscoveredId.value) return;
+    router.post(`/integracoes/telegram/communities/${selectedDiscoveredId.value}/confirm`, {}, {
+        preserveScroll: true,
     });
 }
 
@@ -296,7 +350,7 @@ function unlinkCommunity(community) {
             <div v-else-if="step === 2" class="space-y-4">
                 <h3 class="text-lg font-semibold text-zinc-900 dark:text-white">2. Vincular grupo ou canal</h3>
                 <p class="text-sm text-zinc-600 dark:text-zinc-300">
-                    Adicione o bot como administrador do grupo/canal privado e informe o ID (ex.: -100…) ou @username.
+                    Adicione o bot como administrador do grupo/canal. Em alguns segundos ele aparece na lista abaixo (via webhook). Se preferir, informe o ID ou @ manualmente.
                 </p>
                 <div v-if="!bots.length" class="text-sm text-amber-700 dark:text-amber-300">Conecte um bot na etapa 1 antes de continuar.</div>
                 <template v-else>
@@ -308,19 +362,66 @@ function unlinkCommunity(community) {
                             </option>
                         </select>
                     </label>
-                    <label class="block text-sm font-medium">
-                        ID ou @ da comunidade
-                        <input
-                            v-model="communityForm.chat_id"
-                            type="text"
-                            placeholder="-1001234567890 ou @meucanal"
-                            class="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
-                        />
-                    </label>
-                    <p v-if="communityForm.errors.chat_id" class="text-sm text-red-600">{{ communityForm.errors.chat_id }}</p>
-                    <Button type="button" variant="primary" :disabled="communityForm.processing || !policy.can_create_community" @click="linkCommunity">
-                        Vincular comunidade
-                    </Button>
+
+                    <div class="flex flex-wrap gap-2 text-sm">
+                        <button
+                            type="button"
+                            class="rounded-lg px-3 py-1.5"
+                            :class="communityMode === 'list' ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900' : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200'"
+                            @click="communityMode = 'list'"
+                        >
+                            Lista detectada
+                        </button>
+                        <button
+                            type="button"
+                            class="rounded-lg px-3 py-1.5"
+                            :class="communityMode === 'manual' ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900' : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200'"
+                            @click="communityMode = 'manual'"
+                        >
+                            Informar ID / @
+                        </button>
+                    </div>
+
+                    <template v-if="communityMode === 'list'">
+                        <div v-if="!discoveredForBot.length" class="rounded-lg border border-dashed border-zinc-300 p-4 text-sm text-zinc-600 dark:border-zinc-600 dark:text-zinc-300">
+                            Nenhum grupo/canal detectado ainda. Adicione o bot ao chat (como admin) e aguarde — esta lista atualiza sozinha a cada poucos segundos.
+                        </div>
+                        <template v-else>
+                            <label class="block text-sm font-medium">
+                                Grupo ou canal detectado
+                                <select v-model="selectedDiscoveredId" class="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900">
+                                    <option v-for="chat in discoveredForBot" :key="chat.id" :value="String(chat.id)">
+                                        {{ chat.title || chat.telegram_chat_id }}
+                                        ({{ chat.type }}{{ chat.username ? ` · @${chat.username}` : '' }})
+                                    </option>
+                                </select>
+                            </label>
+                            <Button
+                                type="button"
+                                variant="primary"
+                                :disabled="!selectedDiscoveredId || !policy.can_create_community"
+                                @click="confirmDiscoveredCommunity"
+                            >
+                                Vincular selecionado
+                            </Button>
+                        </template>
+                    </template>
+
+                    <template v-else>
+                        <label class="block text-sm font-medium">
+                            ID ou @ da comunidade
+                            <input
+                                v-model="communityForm.chat_id"
+                                type="text"
+                                placeholder="-1001234567890 ou @meucanal"
+                                class="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
+                            />
+                        </label>
+                        <p v-if="communityForm.errors.chat_id" class="text-sm text-red-600">{{ communityForm.errors.chat_id }}</p>
+                        <Button type="button" variant="primary" :disabled="communityForm.processing || !policy.can_create_community" @click="linkCommunity">
+                            Vincular comunidade
+                        </Button>
+                    </template>
                 </template>
             </div>
 
