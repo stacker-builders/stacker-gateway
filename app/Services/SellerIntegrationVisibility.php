@@ -245,7 +245,8 @@ class SellerIntegrationVisibility
             throw new InvalidArgumentException('Modo de integração inválido: '.$mode);
         }
 
-        Setting::set(self::settingKey($id), $mode === self::MODE_ENABLED, $tenantId);
+        // Persistir como '1'/'0' (igual ao global) para FILTER_VALIDATE_BOOLEAN estável.
+        Setting::set(self::settingKey($id), $mode === self::MODE_ENABLED ? '1' : '0', $tenantId);
     }
 
     public static function effectiveForTenant(string $id, ?int $tenantId): bool

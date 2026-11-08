@@ -12,7 +12,9 @@ class EnsureSellerIntegrationEnabled
     public function handle(Request $request, Closure $next, string ...$integrationIds): Response
     {
         $user = $request->user();
-        $tenantId = $user?->tenant_id !== null ? (int) $user->tenant_id : null;
+        // Alinhar com a política por seller (tenant_id ?? user.id), senão override "enabled" não vale.
+        $resolved = (int) ($user?->tenant_id ?? $user?->id ?? 0);
+        $tenantId = $resolved > 0 ? $resolved : null;
 
         foreach ($integrationIds as $integrationId) {
             if (SellerIntegrationVisibility::isKnown($integrationId)
