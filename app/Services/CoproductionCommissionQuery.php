@@ -44,7 +44,7 @@ class CoproductionCommissionQuery
             ->with([
                 'order:id,tenant_id,product_id,status,payment_method,email,user_id,amount,public_reference,created_at',
                 'order.user:id,name,email',
-                'order.product:id,name,image,tenant_id,checkout_slug',
+                'order.product:id,name,image,type,tenant_id,checkout_slug',
                 'order.tenantOwner:id,name',
             ]);
     }
@@ -370,6 +370,8 @@ class CoproductionCommissionQuery
             'product_id' => $product?->id ?? $order?->product_id,
             'product_name' => $product?->name ?? '—',
             'product_display_name' => $product?->name ?? '—',
+            'product_type' => $product?->type,
+            'product_type_label' => Product::typeLabel($product?->type),
             'sale_gross' => $order ? (float) $order->amount : $gross,
             'commission_percent' => $percent,
             'commission_gross' => $gross,

@@ -215,6 +215,9 @@ class UpsellController extends Controller
                         } elseif ($order->product->type === Product::TYPE_AREA_MEMBROS) {
                             $redirectLabel = 'Entrar na área de cursos';
                             $subtitle = 'Seu pedido foi registrado. Entre na área de cursos com o e-mail e a senha enviados.';
+                        } elseif ($order->product->isTelegram()) {
+                            $redirectLabel = 'Abrir acesso Telegram';
+                            $subtitle = 'Pagamento confirmado. Abra a página de acesso para vincular o bot e entrar no grupo ou canal. Enviamos também e-mail com o link e os dados de login.';
                         } else {
                             $redirectLabel = 'Acessar';
                             $subtitle = 'Seu pedido foi registrado. Acesse pelo link abaixo.';

@@ -282,6 +282,10 @@ const shippingDeliveryLabel = computed(() => {
                                     >{{ venda.sale_channel_label || 'PixGO' }}</span>
                                 </p>
                             </div>
+                            <div v-if="venda.product_type_label" class="space-y-1">
+                                <p class="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Tipo</p>
+                                <p class="text-sm text-zinc-900 dark:text-white">{{ venda.product_type_label }}</p>
+                            </div>
                             <div
                                 v-if="hasShipping"
                                 class="space-y-2 rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 py-3 dark:border-emerald-900 dark:bg-emerald-950/30"

@@ -1087,6 +1087,15 @@ class Product extends Model
         ];
     }
 
+    public static function typeLabel(?string $type): string
+    {
+        if ($type === null || $type === '') {
+            return '—';
+        }
+
+        return self::typeConfig()[$type]['label'] ?? $type;
+    }
+
     /**
      * @return array<string, string>
      */

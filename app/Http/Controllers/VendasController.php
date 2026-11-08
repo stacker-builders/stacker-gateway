@@ -390,6 +390,8 @@ class VendasController extends Controller
         $arr = $o->toArray();
         $arr['gateway_label'] = $o->paymentMethodDisplayLabel();
         $arr['product_display_name'] = $this->productDisplayName($o);
+        $arr['product_type'] = $o->product?->type;
+        $arr['product_type_label'] = Product::typeLabel($o->product?->type);
         $arr['checkout_url'] = url('/c/'.$o->getCheckoutSlug());
         $arr['payment_type_label'] = $this->paymentTypeLabel($o);
         $breakdown = OrderFeeBreakdownService::forOrder($o);
@@ -604,12 +606,12 @@ class VendasController extends Controller
             ? $this->paginateUnifiedVendas($request, $filteredQuery, (int) $user->id, $statusFilter, $mergeAffiliate, $mergeCoproduction)
             : $filteredQuery
                 ->with([
-                    'product:id,name,slug,checkout_slug,affiliate_commission_percent,affiliate_enabled,affiliate_hide_customer_data',
+                    'product:id,name,slug,checkout_slug,type,affiliate_commission_percent,affiliate_enabled,affiliate_hide_customer_data',
                     'user:id,name,email',
                     'productOffer:id,name,checkout_slug',
                     'subscriptionPlan:id,name,checkout_slug',
                     'orderItems:id,order_id,product_id,product_offer_id,subscription_plan_id,amount,position',
-                    'orderItems.product:id,name',
+                    'orderItems.product:id,name,type',
                     'orderItems.productOffer:id,name',
                     'orderItems.subscriptionPlan:id,name',
                     'checkoutSession:'.CheckoutSession::eagerSelectForOrderRelation(),
@@ -883,12 +885,12 @@ class VendasController extends Controller
             : Order::query()
                 ->whereIn('id', $orderIds)
                 ->with([
-                    'product:id,name,slug,checkout_slug,affiliate_commission_percent,affiliate_enabled,affiliate_hide_customer_data',
+                    'product:id,name,slug,checkout_slug,type,affiliate_commission_percent,affiliate_enabled,affiliate_hide_customer_data',
                     'user:id,name,email',
                     'productOffer:id,name,checkout_slug',
                     'subscriptionPlan:id,name,checkout_slug',
                     'orderItems:id,order_id,product_id,product_offer_id,subscription_plan_id,amount,position',
-                    'orderItems.product:id,name',
+                    'orderItems.product:id,name,type',
                     'orderItems.productOffer:id,name',
                     'orderItems.subscriptionPlan:id,name',
                     'checkoutSession:'.CheckoutSession::eagerSelectForOrderRelation(),
@@ -904,7 +906,7 @@ class VendasController extends Controller
                 ->with([
                     'order:id,status,payment_method,email,user_id,created_at,public_reference',
                     'order.user:id,name,email',
-                    'product:id,name,image,tenant_id,affiliate_hide_customer_data',
+                    'product:id,name,image,type,tenant_id,affiliate_hide_customer_data',
                     'producer:id,name,email',
                 ])
                 ->get()
