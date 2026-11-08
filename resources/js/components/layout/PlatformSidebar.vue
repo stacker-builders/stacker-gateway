@@ -12,6 +12,7 @@ import {
     Mail,
     MessageCircle,
     MessageSquare,
+    Send,
     Smartphone,
     Wallet,
     Activity,
@@ -128,6 +129,7 @@ const navGroupsCore = [
             { name: 'Central de e-mails', href: '/plataforma/email-marketing', icon: Mail },
             { name: 'IntegraX SMS', href: '/plataforma/integrax', icon: MessageSquare },
             { name: 'WhatsApp', href: '/plataforma/uazapi', icon: MessageCircle },
+            { name: 'Telegram', href: '/plataforma/telegram', icon: Send },
             { name: 'App', href: '/plataforma/app', icon: Smartphone },
         ],
     },
@@ -270,6 +272,9 @@ function isActive(href) {
     }
     if (href === '/plataforma/uazapi') {
         return url === '/plataforma/uazapi' || url.startsWith('/plataforma/uazapi/');
+    }
+    if (href === '/plataforma/telegram') {
+        return url === '/plataforma/telegram' || url.startsWith('/plataforma/telegram/');
     }
     return url === href || url.startsWith(`${href}/`);
 }
