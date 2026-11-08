@@ -66,6 +66,24 @@ function refreshInvites() {
             {{ grant.access_starts_notice }}
         </section>
 
+        <section
+            v-if="!grant.has_identity && grant.identity_bot_url"
+            class="rounded-2xl border border-[var(--color-primary)]/30 bg-[var(--color-primary)]/5 p-5"
+        >
+            <h2 class="text-base font-semibold text-zinc-900 dark:text-white">1. Vincule seu Telegram</h2>
+            <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+                Abra o bot, toque em Start e volte aqui. Depois disso o convite do grupo/canal fica liberado para entrada.
+            </p>
+            <a
+                :href="grant.identity_bot_url"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="mt-4 inline-flex rounded-lg bg-[var(--color-primary)] px-4 py-2 text-sm font-medium text-white"
+            >
+                Abrir bot do Telegram
+            </a>
+        </section>
+
         <section class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
             <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-500">Vigência do acesso</h2>
             <dl class="mt-3 grid gap-3 sm:grid-cols-2">
@@ -82,17 +100,8 @@ function refreshInvites() {
                 <div>
                     <dt class="text-xs text-zinc-500">Identidade Telegram</dt>
                     <dd class="text-sm font-medium text-zinc-900 dark:text-white">
-                        {{ grant.has_identity ? ('@' + (grant.telegram_username || grant.id)) : 'Ainda não vinculada' }}
+                        {{ grant.has_identity ? ('@' + (grant.telegram_username || 'vinculado')) : 'Ainda não vinculada' }}
                     </dd>
-                    <a
-                        v-if="!grant.has_identity && grant.identity_bot_url"
-                        :href="grant.identity_bot_url"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="mt-1 inline-flex text-xs font-medium text-[var(--color-primary)] hover:underline"
-                    >
-                        Abrir bot para vincular identidade
-                    </a>
                 </div>
             </dl>
             <p class="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
@@ -102,11 +111,17 @@ function refreshInvites() {
 
         <section class="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
             <div class="flex flex-wrap items-center justify-between gap-3">
-                <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-500">Comunidades</h2>
+                <h2 class="text-sm font-semibold uppercase tracking-wide text-zinc-500">2. Comunidades</h2>
                 <Button type="button" variant="outline" @click="refreshInvites">Atualizar convites</Button>
             </div>
             <p class="mt-1 text-xs text-zinc-500">
-                Convite disponível não significa entrega concluída. A entrega só fecha quando a entrada for confirmada em todas as comunidades.
+                Use o botão Entrar quando o convite aparecer. A entrega só conclui após a entrada ser confirmada no Telegram.
+            </p>
+            <p
+                v-if="!(grant.communities || []).some((c) => c.invite_link)"
+                class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100"
+            >
+                Ainda sem link de convite. Clique em “Atualizar convites” ou aguarde alguns segundos e recarregue a página.
             </p>
             <ul class="mt-4 space-y-3">
                 <li
