@@ -54,6 +54,33 @@ services:
       timeout: 3s
       retries: 30
 
+  # Filas: AOF + volume + noeviction (isolado do cache).
+  redis-queue:
+    image: redis:7-alpine
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "${LOCALDB_REDIS_QUEUE_PORT:-6380}:6379"
+    command:
+      - "redis-server"
+      - "--appendonly"
+      - "yes"
+      - "--appendfsync"
+      - "everysec"
+      - "--maxmemory"
+      - "${LOCALDB_REDIS_QUEUE_MAXMEMORY:-128mb}"
+      - "--maxmemory-policy"
+      - "${LOCALDB_REDIS_QUEUE_MAXMEMORY_POLICY:-noeviction}"
+    volumes:
+      - localdb_redis_queue_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
 volumes:
   localdb_postgres_data:
+    driver: local
+  localdb_redis_queue_data:
     driver: local

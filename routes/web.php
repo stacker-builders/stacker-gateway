@@ -187,6 +187,11 @@ Route::post('/webhooks/platform-whatsapp/{secret}', [\App\Http\Controllers\Webho
     ->where('secret', '[A-Za-z0-9]{32,64}')
     ->name('webhooks.platform-whatsapp');
 
+Route::post('/webhooks/telegram/{secret}', [\App\Http\Controllers\Webhooks\TelegramWebhookController::class, 'handle'])
+    ->middleware('throttle:120,1')
+    ->where('secret', '[A-Za-z0-9]{32,64}')
+    ->name('webhooks.telegram');
+
 Route::middleware(['throttle:60,1', \App\Http\Middleware\LogInboundGatewayWebhook::class])->group(function () {
     Route::post('/webhooks/gateways/linaopenx', [\App\Http\Controllers\Webhooks\LinaOpenxWebhookController::class, 'handle'])->name('webhooks.linaopenx');
     Route::post('/webhooks/gateways/spacepag', [\App\Http\Controllers\Webhooks\SpacepagWebhookController::class, 'handle'])->name('webhooks.spacepag');
@@ -801,6 +806,14 @@ Route::prefix('plataforma')->name('plataforma.')->group(function () {
 
         Route::get('/uazapi', [\App\Http\Controllers\Platform\UazapiController::class, 'index'])->name('uazapi.index');
 
+        Route::get('/telegram', [\App\Http\Controllers\Platform\TelegramController::class, 'index'])->name('telegram.index');
+        Route::put('/telegram', [\App\Http\Controllers\Platform\TelegramController::class, 'update'])
+            ->middleware('throttle:30,1')
+            ->name('telegram.update');
+        Route::put('/telegram/sellers/{user}', [\App\Http\Controllers\Platform\TelegramController::class, 'updateSeller'])
+            ->middleware('throttle:30,1')
+            ->name('telegram.sellers.update');
+
         Route::put('/whatsapp-canal/channel', [\App\Http\Controllers\Platform\PlatformWhatsappController::class, 'updateChannel'])->name('whatsapp-canal.channel.update');
         Route::post('/whatsapp-canal/channel/connect', [\App\Http\Controllers\Platform\PlatformWhatsappController::class, 'connect'])->name('whatsapp-canal.channel.connect');
         Route::post('/whatsapp-canal/channel/disconnect', [\App\Http\Controllers\Platform\PlatformWhatsappController::class, 'disconnect'])->name('whatsapp-canal.channel.disconnect');
@@ -1274,6 +1287,38 @@ Route::middleware(['auth', 'admin.tenant', 'seller.panel', 'stacker.license', 'r
                 ->name('integrations.mcp.destroy');
         });
 
+        Route::middleware('seller.integration:telegram')->group(function () {
+            Route::get('/integracoes/telegram', [\App\Http\Controllers\TelegramIntegrationController::class, 'index'])
+                ->name('integrations.telegram.index');
+            Route::post('/integracoes/telegram/bots/preview', [\App\Http\Controllers\TelegramIntegrationController::class, 'previewBot'])
+                ->middleware('throttle:20,1')
+                ->name('integrations.telegram.bots.preview');
+            Route::post('/integracoes/telegram/bots', [\App\Http\Controllers\TelegramIntegrationController::class, 'storeBot'])
+                ->middleware('throttle:20,1')
+                ->name('integrations.telegram.bots.store');
+            Route::post('/integracoes/telegram/bots/{bot}/test', [\App\Http\Controllers\TelegramIntegrationController::class, 'testBot'])
+                ->middleware('throttle:20,1')
+                ->name('integrations.telegram.bots.test');
+            Route::put('/integracoes/telegram/bots/{bot}/token', [\App\Http\Controllers\TelegramIntegrationController::class, 'updateBotToken'])
+                ->middleware('throttle:20,1')
+                ->name('integrations.telegram.bots.token');
+            Route::delete('/integracoes/telegram/bots/{bot}', [\App\Http\Controllers\TelegramIntegrationController::class, 'destroyBot'])
+                ->middleware('throttle:20,1')
+                ->name('integrations.telegram.bots.destroy');
+            Route::post('/integracoes/telegram/communities', [\App\Http\Controllers\TelegramIntegrationController::class, 'storeCommunity'])
+                ->middleware('throttle:20,1')
+                ->name('integrations.telegram.communities.store');
+            Route::post('/integracoes/telegram/communities/{community}/refresh', [\App\Http\Controllers\TelegramIntegrationController::class, 'refreshCommunity'])
+                ->middleware('throttle:20,1')
+                ->name('integrations.telegram.communities.refresh');
+            Route::post('/integracoes/telegram/communities/{community}/verify', [\App\Http\Controllers\TelegramIntegrationController::class, 'verifyCommunity'])
+                ->middleware('throttle:20,1')
+                ->name('integrations.telegram.communities.verify');
+            Route::delete('/integracoes/telegram/communities/{community}', [\App\Http\Controllers\TelegramIntegrationController::class, 'destroyCommunity'])
+                ->middleware('throttle:20,1')
+                ->name('integrations.telegram.communities.destroy');
+        });
+
         Route::middleware('seller.integration:webhook')->group(function () {
             Route::get('/integracoes/webhooks', [\App\Http\Controllers\WebhookController::class, 'index'])->name('integrations.webhooks.index');
             Route::post('/integracoes/webhooks', [\App\Http\Controllers\WebhookController::class, 'store'])->name('integrations.webhooks.store');
@@ -1313,6 +1358,13 @@ Route::middleware(['auth', 'customer.panel'])->group(function () {
     Route::get('/area-membros', [\App\Http\Controllers\MemberAreaController::class, 'index'])->name('member-area.index');
     Route::get('/painel-cliente', [\App\Http\Controllers\CustomerPanelController::class, 'index'])->name('painel-cliente.index');
     Route::get('/painel-cliente/marketplace', [\App\Http\Controllers\CustomerMarketplaceController::class, 'index'])->name('painel-cliente.marketplace');
+    Route::get('/painel-cliente/telegram/{grant}', [\App\Http\Controllers\TelegramAccessController::class, 'show'])
+        ->whereNumber('grant')
+        ->name('painel-cliente.telegram.show');
+    Route::post('/painel-cliente/telegram/{grant}/refresh-invites', [\App\Http\Controllers\TelegramAccessController::class, 'refreshInvites'])
+        ->whereNumber('grant')
+        ->middleware('throttle:20,1')
+        ->name('painel-cliente.telegram.refresh');
     Route::post('/painel-cliente/reembolso', [\App\Http\Controllers\CustomerPanelController::class, 'requestRefund'])->name('painel-cliente.refund')->middleware('throttle:20,1');
 });
 

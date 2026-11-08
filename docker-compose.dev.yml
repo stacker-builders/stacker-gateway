@@ -53,6 +53,10 @@ services:
       DB_PASSWORD: ${LOCALDB_POSTGRES_PASSWORD:-getfy}
       REDIS_HOST: ${GETFY_DEV_REDIS_HOST:-redis}
       REDIS_PORT: ${GETFY_DEV_REDIS_PORT:-6379}
+      REDIS_QUEUE_HOST: ${GETFY_DEV_REDIS_QUEUE_HOST:-redis-queue}
+      REDIS_QUEUE_PORT: ${GETFY_DEV_REDIS_QUEUE_PORT:-6379}
+      REDIS_QUEUE_CONNECTION: queue
+      REDIS_QUEUE_RETRY_AFTER: ${GETFY_REDIS_QUEUE_RETRY_AFTER:-180}
       CACHE_STORE: redis
       QUEUE_CONNECTION: redis
       SESSION_DRIVER: redis
@@ -69,6 +73,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      redis-queue:
         condition: service_healthy
       stacker-agent:
         condition: service_started
@@ -122,6 +128,10 @@ services:
       DB_USERNAME: ${LOCALDB_POSTGRES_USER:-getfy}
       DB_PASSWORD: ${LOCALDB_POSTGRES_PASSWORD:-getfy}
       REDIS_HOST: ${GETFY_DEV_REDIS_HOST:-redis}
+      REDIS_QUEUE_HOST: ${GETFY_DEV_REDIS_QUEUE_HOST:-redis-queue}
+      REDIS_QUEUE_PORT: ${GETFY_DEV_REDIS_QUEUE_PORT:-6379}
+      REDIS_QUEUE_CONNECTION: queue
+      REDIS_QUEUE_RETRY_AFTER: ${GETFY_REDIS_QUEUE_RETRY_AFTER:-180}
       REDIS_PORT: ${GETFY_DEV_REDIS_PORT:-6379}
       CACHE_STORE: redis
       QUEUE_CONNECTION: redis
@@ -135,6 +145,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      redis-queue:
         condition: service_healthy
       app:
         condition: service_started
@@ -161,6 +173,10 @@ services:
       DB_USERNAME: ${LOCALDB_POSTGRES_USER:-getfy}
       DB_PASSWORD: ${LOCALDB_POSTGRES_PASSWORD:-getfy}
       REDIS_HOST: ${GETFY_DEV_REDIS_HOST:-redis}
+      REDIS_QUEUE_HOST: ${GETFY_DEV_REDIS_QUEUE_HOST:-redis-queue}
+      REDIS_QUEUE_PORT: ${GETFY_DEV_REDIS_QUEUE_PORT:-6379}
+      REDIS_QUEUE_CONNECTION: queue
+      REDIS_QUEUE_RETRY_AFTER: ${GETFY_REDIS_QUEUE_RETRY_AFTER:-180}
       REDIS_PORT: ${GETFY_DEV_REDIS_PORT:-6379}
       CACHE_STORE: redis
       QUEUE_CONNECTION: redis
@@ -174,6 +190,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      redis-queue:
         condition: service_healthy
       app:
         condition: service_started

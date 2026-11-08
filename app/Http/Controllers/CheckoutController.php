@@ -499,6 +499,9 @@ class CheckoutController extends Controller
         $payload['meta_tracking_debug'] = config('meta_tracking.debug');
         $payload['turnstile'] = CheckoutTurnstileSettings::publicConfig();
         $payload['platform_checkout_notice'] = PlatformCompanySettings::resolvedCheckoutNoticeForTenant($product->tenant_id, $product);
+        $payload['telegram_access_notice'] = $product->isTelegram()
+            ? (string) config('telegram.access_starts_notice', \App\Models\TelegramAccessGrant::accessStartsNotice())
+            : null;
 
         return Inertia::render('Checkout/Show', $payload);
     }
