@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AffiliateCommission;
 use App\Models\CheckoutSession;
 use App\Models\Order;
+use App\Models\Product;
 use App\Models\User;
 use App\Support\SaleOrigin;
 use Carbon\Carbon;
@@ -23,7 +24,7 @@ class AffiliateCommissionQuery
             ->with([
                 'order:id,status,payment_method,email,user_id,created_at,public_reference',
                 'order.user:id,name,email',
-                'product:id,name,image,tenant_id,affiliate_hide_customer_data',
+                'product:id,name,image,type,tenant_id,affiliate_hide_customer_data',
                 'producer:id,name,email',
             ]);
     }
@@ -280,6 +281,8 @@ class AffiliateCommissionQuery
             'sale_origin_label' => SaleOrigin::label($commission->sale_origin),
             'product_id' => $commission->product_id,
             'product_name' => $commission->product?->name,
+            'product_type' => $commission->product?->type,
+            'product_type_label' => Product::typeLabel($commission->product?->type),
             'product_image_url' => $commission->product?->image,
             'sale_gross' => (float) $commission->sale_gross,
             'commission_percent' => (float) $commission->commission_percent,

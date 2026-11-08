@@ -906,6 +906,7 @@ class CheckoutController extends Controller
         $tenantId = $product->tenant_id;
 
         $plainPassword = null;
+        $needsProvisionalPassword = in_array($product->type, [Product::TYPE_AREA_MEMBROS, Product::TYPE_TELEGRAM], true);
         if ($product->type === Product::TYPE_AREA_MEMBROS) {
             $loginConfig = $product->member_area_config['login'] ?? [];
             $passwordMode = $loginConfig['password_mode'] ?? 'auto';
@@ -915,6 +916,8 @@ class CheckoutController extends Controller
             } else {
                 $plainPassword = Str::random(12);
             }
+        } elseif ($product->type === Product::TYPE_TELEGRAM) {
+            $plainPassword = Str::random(12);
         } else {
             $plainPassword = Str::random(32);
         }
@@ -924,11 +927,11 @@ class CheckoutController extends Controller
             $validated['email'],
             (string) ($validated['name'] ?? $validated['email']),
             $passwordHash,
-            $product->type === Product::TYPE_AREA_MEMBROS,
+            $needsProvisionalPassword,
         );
         $user = $buyerAccount['user'];
         $orderMetadata = [];
-        if ($product->type === Product::TYPE_AREA_MEMBROS && $plainPassword !== null) {
+        if ($needsProvisionalPassword && $plainPassword !== null) {
             Cache::put('access_password.'.$user->id.'.'.$product->id, $plainPassword, now()->addHours(2));
             $orderMetadata['access_password_temp'] = encrypt($plainPassword);
         }
@@ -3250,6 +3253,7 @@ class CheckoutController extends Controller
         $tenantId = $product->tenant_id;
 
         $plainPassword = null;
+        $needsProvisionalPassword = in_array($product->type, [Product::TYPE_AREA_MEMBROS, Product::TYPE_TELEGRAM], true);
         if ($product->type === Product::TYPE_AREA_MEMBROS) {
             $loginConfig = $product->member_area_config['login'] ?? [];
             $passwordMode = $loginConfig['password_mode'] ?? 'auto';
@@ -3259,6 +3263,8 @@ class CheckoutController extends Controller
             } else {
                 $plainPassword = Str::random(12);
             }
+        } elseif ($product->type === Product::TYPE_TELEGRAM) {
+            $plainPassword = Str::random(12);
         } else {
             $plainPassword = Str::random(32);
         }
@@ -3268,7 +3274,7 @@ class CheckoutController extends Controller
             $validated['email'],
             (string) ($validated['name'] ?? $validated['email']),
             $passwordHash,
-            $product->type === Product::TYPE_AREA_MEMBROS,
+            $needsProvisionalPassword,
         );
         $user = $buyerAccount['user'];
         if (! $buyerAccount['was_recently_created'] && ! empty($validated['name']) && trim((string) $user->name) !== trim((string) $validated['name'])) {
@@ -3296,7 +3302,7 @@ class CheckoutController extends Controller
                 ! empty($draft['subscription_plan_id'])
             );
         }
-        if ($product->type === Product::TYPE_AREA_MEMBROS && $plainPassword !== null) {
+        if ($needsProvisionalPassword && $plainPassword !== null) {
             Cache::put('access_password.'.$user->id.'.'.$product->id, $plainPassword, now()->addHours(2));
             $orderMetadata['access_password_temp'] = encrypt($plainPassword);
         }

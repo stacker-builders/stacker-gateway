@@ -6,7 +6,9 @@ use App\Mail\AccessGrantedMail;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Setting;
+use App\Models\TelegramAccessGrant;
 use App\Models\User;
+use App\Services\Telegram\TelegramAccessGrantService;
 use App\Support\AccessEmailSendResult;
 use App\Support\EmailLogoHtml;
 use App\Support\PublicAppUrl;
@@ -19,6 +21,7 @@ class AccessEmailService
     public function __construct(
         protected TenantMailConfigService $mailConfig,
         protected DeliverableAccessLinkService $deliverableAccessLinks,
+        protected TelegramAccessGrantService $telegramAccessGrants,
     ) {}
 
     public function sendForOrder(Order $order, bool $force = false): AccessEmailSendResult
@@ -86,8 +89,11 @@ class AccessEmailService
         }
 
         $customerName = $order->user?->name ?? explode('@', $customerEmail)[0] ?? 'Cliente';
-        $linkAcesso = $this->resolveAccessLinkForProduct($product, $order->user);
+        $linkAcesso = $product->isTelegram()
+            ? $this->resolveTelegramAccessLinkForOrder($order, $product)
+            : $this->resolveAccessLinkForProduct($product, $order->user);
         $linkPlataforma = $this->resolvePlatformLoginLink();
+        $linkCompras = $this->resolveCustomerPurchasesLink();
         $linkEsqueciSenha = $this->resolveForgotPasswordLink();
 
         if (config('app.debug') && $product->type === Product::TYPE_AREA_MEMBROS) {
@@ -96,7 +102,8 @@ class AccessEmailService
 
         $senha = '';
         $passwordCacheKey = null;
-        if ($product->type === Product::TYPE_AREA_MEMBROS && $order->user_id && $order->product_id) {
+        $storesProvisionalPassword = in_array($product->type, [Product::TYPE_AREA_MEMBROS, Product::TYPE_TELEGRAM], true);
+        if ($storesProvisionalPassword && $order->user_id && $order->product_id) {
             $passwordCacheKey = 'access_password.'.$order->user_id.'.'.$order->product_id;
             $decrypted = null;
             $meta = $order->metadata ?? [];
@@ -115,8 +122,9 @@ class AccessEmailService
                     $senha = $cached;
                 }
             }
-            Log::info('AccessEmailService: área de membros — senha (metadata ou cache).', [
+            Log::info('AccessEmailService: senha provisória (metadata ou cache).', [
                 'order_id' => $order->id,
+                'product_type' => $productType,
                 'senha_from_metadata' => isset($meta['access_password_temp']),
                 'senha_encontrada' => $senha !== '',
             ]);
@@ -161,6 +169,22 @@ class AccessEmailService
                 $externalLink,
                 $this->resolvePlatformLoginLink(),
                 $customerEmail,
+                $linkEsqueciSenha,
+            );
+            $logoUrl = $this->resolveAccessEmailLogo($tenantIdForMail, $template);
+            if ($logoUrl !== null) {
+                $bodyHtml = $this->prependLogoToBody($logoUrl, $bodyHtml);
+            }
+        } elseif ($product->type === Product::TYPE_TELEGRAM) {
+            $subject = 'Seu acesso Telegram — '.$product->name;
+            $bodyHtml = $this->buildTelegramProductAccessBody(
+                $customerName,
+                $product->name,
+                $linkAcesso,
+                $linkCompras,
+                $linkPlataforma,
+                $customerEmail,
+                $senha,
                 $linkEsqueciSenha,
             );
             $logoUrl = $this->resolveAccessEmailLogo($tenantIdForMail, $template);
@@ -460,12 +484,17 @@ class AccessEmailService
             return '';
         }
 
+        if ($product->isTelegram()) {
+            return $this->resolveTelegramAccessLinkForOrder($order, $product);
+        }
+
         return $this->resolveAccessLinkForProduct($product, $order->user);
     }
 
     /**
      * Link usado no e-mail de acesso e na página de obrigado.
      * Área de membros: URL da área de cursos (/m/{slug}, domínio ou subdomínio).
+     * Telegram: página de acesso do grant (vincular bot / entrar no grupo).
      */
     public function resolveAccessLinkForProduct(Product $product, ?User $user = null): string
     {
@@ -473,11 +502,54 @@ class AccessEmailService
             return $this->resolveMemberAreaUrl($product);
         }
 
+        if ($product->isTelegram() && $user) {
+            return $this->resolveTelegramAccessLinkForUserProduct($user, $product);
+        }
+
         if ($user && $this->deliverableAccessLinks->tracks($product)) {
             return $this->deliverableAccessLinks->trackedUrl($user, $product) ?? '';
         }
 
         return '';
+    }
+
+    public function resolveTelegramAccessLinkForOrder(Order $order, Product $product): string
+    {
+        $grant = $this->telegramAccessGrants->findByOrderProduct((int) $order->id, (string) $product->id);
+        if (! $grant && $order->user_id) {
+            $grant = TelegramAccessGrant::query()
+                ->where('user_id', (int) $order->user_id)
+                ->where('product_id', (string) $product->id)
+                ->where(function ($q) use ($order) {
+                    $q->where('order_id', $order->id)->orWhere('latest_order_id', $order->id);
+                })
+                ->orderByDesc('id')
+                ->first();
+        }
+        if (! $grant && $order->user_id) {
+            $grant = TelegramAccessGrant::query()
+                ->where('user_id', (int) $order->user_id)
+                ->where('product_id', (string) $product->id)
+                ->orderByDesc('id')
+                ->first();
+        }
+
+        return $grant
+            ? route('painel-cliente.telegram.show', ['grant' => $grant->id])
+            : $this->resolveCustomerPurchasesLink();
+    }
+
+    public function resolveTelegramAccessLinkForUserProduct(User $user, Product $product): string
+    {
+        $grant = TelegramAccessGrant::query()
+            ->where('user_id', $user->id)
+            ->where('product_id', (string) $product->id)
+            ->orderByDesc('id')
+            ->first();
+
+        return $grant
+            ? route('painel-cliente.telegram.show', ['grant' => $grant->id])
+            : $this->resolveCustomerPurchasesLink();
     }
 
     public function sendForUserProduct(User $user, Product $product): AccessEmailSendResult
@@ -526,6 +598,18 @@ class AccessEmailService
                 $this->deliverableAccessLinks->trackedUrl($user, $product) ?? '',
                 $this->resolvePlatformLoginLink(),
                 $customerEmail,
+                $linkEsqueciSenha,
+            );
+        } elseif ($product->type === Product::TYPE_TELEGRAM) {
+            $subject = 'Seu acesso Telegram — '.$product->name;
+            $bodyHtml = $this->buildTelegramProductAccessBody(
+                $customerName,
+                $product->name,
+                $linkAcesso,
+                $this->resolveCustomerPurchasesLink(),
+                $linkPlataforma,
+                $customerEmail,
+                '',
                 $linkEsqueciSenha,
             );
         } else {
@@ -596,6 +680,64 @@ class AccessEmailService
     private function resolvePlatformLoginLink(): string
     {
         return PublicAppUrl::to('/login');
+    }
+
+    private function resolveCustomerPurchasesLink(): string
+    {
+        return PublicAppUrl::to('/painel-cliente');
+    }
+
+    /**
+     * E-mail próprio do entregável Telegram: CTA direto à página do bot + login provisório.
+     */
+    private function buildTelegramProductAccessBody(
+        string $customerName,
+        string $productName,
+        string $telegramAccessUrl,
+        string $purchasesUrl,
+        string $platformLoginUrl,
+        string $customerEmail,
+        string $password,
+        string $forgotPasswordUrl,
+    ): string {
+        $accessSection = $telegramAccessUrl !== ''
+            ? '<p style="margin:0 0 12px;font-size:16px;line-height:1.6;color:#334155;"><strong>Acesse seu grupo/canal no Telegram</strong></p>'
+                .'<p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#334155;">Clique no botão abaixo para abrir a página de acesso. Lá você vincula o bot e conclui a entrada no grupo ou canal.</p>'
+                .'<p style="margin:0 0 12px;text-align:center;"><a href="'.e($telegramAccessUrl).'" style="display:inline-block;padding:14px 28px;background:#229ED9;color:#ffffff;text-decoration:none;font-weight:600;font-size:16px;border-radius:8px;">Abrir acesso Telegram</a></p>'
+                .'<p style="margin:0 0 28px;font-size:13px;line-height:1.5;color:#64748b;word-break:break-all;">Ou copie e cole no navegador:<br/><a href="'.e($telegramAccessUrl).'" style="color:#229ED9;">'.e($telegramAccessUrl).'</a></p>'
+            : '<p style="margin:0 0 28px;font-size:15px;line-height:1.6;color:#64748b;">Seu acesso Telegram será liberado em instantes. Entre em Minhas compras para continuar.</p>';
+
+        $credentialsSection = $password !== ''
+            ? '<div style="margin:0 0 8px;padding:20px;background:#fffbeb;border:1px solid #f59e0b;border-radius:8px;">'
+                .'<p style="margin:0 0 10px;font-size:14px;line-height:1.5;color:#92400e;"><strong>Dados provisórios para Minhas compras</strong></p>'
+                .'<p style="margin:0 0 12px;font-size:14px;line-height:1.5;color:#78350f;">Use estes dados para entrar na área de compras da plataforma (caso o link peça login):</p>'
+                .'<p style="margin:0 0 8px;font-size:14px;color:#0f172a;"><strong>E-mail:</strong> '.e($customerEmail).'</p>'
+                .'<p style="margin:0 0 16px;font-size:15px;color:#0f172a;font-family:Consolas,\'Courier New\',monospace;font-weight:600;letter-spacing:0.02em;word-break:break-all;"><strong>Senha provisória:</strong> '.e($password).'</p>'
+                .'<p style="margin:0 0 8px;text-align:center;"><a href="'.e($platformLoginUrl).'" style="display:inline-block;padding:12px 24px;background:#0f172a;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;border-radius:8px;">Fazer login</a></p>'
+                .'<p style="margin:12px 0 0;font-size:13px;line-height:1.5;color:#78350f;">Suas compras: <a href="'.e($purchasesUrl).'" style="color:#2563eb;font-weight:600;word-break:break-all;">'.e($purchasesUrl).'</a></p>'
+                .'</div>'
+            : '<div style="margin:0 0 8px;padding:20px;background:#eff6ff;border:1px solid #3b82f6;border-radius:8px;">'
+                .'<p style="margin:0 0 10px;font-size:14px;line-height:1.5;color:#1e3a8a;"><strong>Acesse Minhas compras</strong></p>'
+                .'<p style="margin:0 0 12px;font-size:14px;line-height:1.5;color:#1e40af;">E-mail da conta: <strong>'.e($customerEmail).'</strong></p>'
+                .'<p style="margin:0 0 16px;font-size:14px;line-height:1.5;color:#1e40af;">Se ainda não tiver senha, use <strong>Esqueci minha senha</strong> para criar uma nova.</p>'
+                .'<p style="margin:0;text-align:center;"><a href="'.e($forgotPasswordUrl).'" style="display:inline-block;padding:12px 24px;background:#2563eb;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;border-radius:8px;">Esqueci minha senha</a></p>'
+                .'</div>';
+
+        return '<table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;margin:0 auto;font-family:\'Segoe UI\',Tahoma,sans-serif;background:#f8fafc;padding:32px 24px;">'
+            .'<tr><td style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">'
+            .'<table width="100%" cellpadding="0" cellspacing="0">'
+            .'<tr><td style="padding:32px 32px 24px;text-align:center;border-bottom:1px solid #e2e8f0;">'
+            .'<h1 style="margin:0;font-size:22px;font-weight:600;color:#0f172a;">Olá, '.e($customerName).'!</h1>'
+            .'</td></tr>'
+            .'<tr><td style="padding:28px 32px;">'
+            .'<p style="margin:0 0 20px;font-size:16px;line-height:1.6;color:#334155;">Obrigado por adquirir <strong>'.e($productName).'</strong>. Seu acesso ao Telegram já está liberado.</p>'
+            .$accessSection
+            .$credentialsSection
+            .'</td></tr>'
+            .'<tr><td style="padding:20px 32px;background:#f1f5f9;border-radius:0 0 12px 12px;">'
+            .'<p style="margin:0;font-size:13px;color:#64748b;">Qualquer dúvida, responda este e-mail.</p>'
+            .'</td></tr>'
+            .'</table></td></tr></table>';
     }
 
     private function resolveMemberAreaUrl(Product $product): string
