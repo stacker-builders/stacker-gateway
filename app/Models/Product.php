@@ -776,9 +776,18 @@ class Product extends Model
             $query->where('approval_status', self::APPROVAL_APPROVED);
         }
 
-        // Etapa 3.1: entrega Telegram ainda não vende no checkout.
-        if (! app(\App\Services\Telegram\TelegramProductDeliveryService::class)->automaticDeliveryOperational()) {
-            $query->where('type', '!=', self::TYPE_TELEGRAM);
+        // Telegram no checkout: flag global ou allowlist de tenant.
+        $delivery = app(\App\Services\Telegram\TelegramProductDeliveryService::class);
+        if (! $delivery->automaticDeliveryOperational()) {
+            $allowlist = config('telegram.product_sales_tenant_ids', []);
+            if (! is_array($allowlist) || $allowlist === []) {
+                $query->where('type', '!=', self::TYPE_TELEGRAM);
+            } else {
+                $query->where(function (Builder $inner) use ($allowlist) {
+                    $inner->where('type', '!=', self::TYPE_TELEGRAM)
+                        ->orWhereIn('tenant_id', array_map('intval', $allowlist));
+                });
+            }
         }
 
         return $query;

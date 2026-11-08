@@ -472,11 +472,16 @@ function unlinkCommunity(community) {
                         Prontas para entrega: {{ wizard.summary.ready_communities_count }}
                     </p>
                     <p class="mt-3 text-sm font-medium text-zinc-900 dark:text-white">
-                        Seu Telegram está configurado! Em breve, você poderá vincular seus grupos e canais diretamente aos seus produtos.
+                        Seu Telegram está configurado. Em Produtos, escolha o tipo Telegram e vincule bot e comunidades na configuração de entrega.
                     </p>
                     <p class="mt-2 text-xs text-zinc-500">
-                        “Pronto para vender” indica apenas a preparação técnica da integração. A criação do produto Telegram ainda não está disponível.
+                        “Pronto para entrega” confirma permissões técnicas do bot/grupo. A publicação no checkout depende da liberação comercial da conta.
                     </p>
+                    <div class="mt-4">
+                        <Link href="/produtos" class="inline-flex rounded-lg bg-[var(--color-primary)] px-3 py-2 text-sm font-medium text-white">
+                            Ir para Produtos
+                        </Link>
+                    </div>
                 </div>
             </div>
         </section>

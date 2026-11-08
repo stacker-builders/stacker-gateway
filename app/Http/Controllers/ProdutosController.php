@@ -299,8 +299,10 @@ class ProdutosController extends Controller
         $validated['refund_policy_days'] = 7;
         $this->assertPhysicalProductRules($validated['type'] ?? '', $validated['billing_type'] ?? '');
 
-        // Etapa 3.1: produto Telegram só como rascunho (sem venda real).
-        if (($validated['type'] ?? '') === Product::TYPE_TELEGRAM) {
+        $telegramDelivery = app(TelegramProductDeliveryService::class);
+        $telegramSalesOn = $telegramDelivery->automaticDeliveryOperational((int) $tenantId);
+        // Sem flag/allowlist: só rascunho. Com liberação: pode ativar se readiness ok (assert após sync).
+        if (($validated['type'] ?? '') === Product::TYPE_TELEGRAM && ! $telegramSalesOn) {
             $validated['is_active'] = false;
         }
 
@@ -309,7 +311,7 @@ class ProdutosController extends Controller
         if ($approvalAttrs !== []) {
             $validated = array_merge($validated, $approvalAttrs);
         }
-        if (($validated['type'] ?? '') === Product::TYPE_TELEGRAM) {
+        if (($validated['type'] ?? '') === Product::TYPE_TELEGRAM && ! $telegramSalesOn) {
             $validated['is_active'] = false;
         }
 
@@ -355,12 +357,16 @@ class ProdutosController extends Controller
                 }
 
                 if ($product->isTelegram() && $telegramInput !== null) {
-                    app(TelegramProductDeliveryService::class)->syncForProduct(
+                    $delivery = app(TelegramProductDeliveryService::class);
+                    $delivery->syncForProduct(
                         $product,
                         (int) $tenantId,
                         $telegramInput,
                         $request
                     );
+                    if ($product->is_active) {
+                        $delivery->assertCanPublish($product->fresh());
+                    }
                 }
 
                 return $product;
@@ -397,12 +403,16 @@ class ProdutosController extends Controller
                         }
 
                         if ($product->isTelegram() && $telegramInput !== null) {
-                            app(TelegramProductDeliveryService::class)->syncForProduct(
+                            $delivery = app(TelegramProductDeliveryService::class);
+                            $delivery->syncForProduct(
                                 $product,
                                 (int) $tenantId,
                                 $telegramInput,
                                 $request
                             );
+                            if ($product->is_active) {
+                                $delivery->assertCanPublish($product->fresh());
+                            }
                         }
 
                         return $product;
@@ -929,11 +939,13 @@ class ProdutosController extends Controller
             : null;
 
         $effectiveType = (string) ($validated['type'] ?? $produto->type);
-        if ($effectiveType === Product::TYPE_TELEGRAM) {
+        $telegramDelivery = app(TelegramProductDeliveryService::class);
+        $telegramSalesOn = $telegramDelivery->automaticDeliveryOperational((int) ($produto->tenant_id ?? auth()->user()->tenant_id ?? 0));
+        if ($effectiveType === Product::TYPE_TELEGRAM && ! $telegramSalesOn) {
             if ($request->boolean('is_active', false)) {
                 return back()->with(
                     'error',
-                    'Produtos Telegram ainda não podem ser publicados para venda. A entrega automática será liberada nas próximas etapas.'
+                    'Produtos Telegram ainda não podem ser publicados para venda nesta conta. Configure a entrega e aguarde a liberação operacional.'
                 )->withInput();
             }
             $validated['is_active'] = false;
@@ -1130,6 +1142,9 @@ class ProdutosController extends Controller
                             $telegramInput,
                             $request
                         );
+                    }
+                    if ($produto->fresh()->is_active) {
+                        $delivery->assertCanPublish($produto->fresh());
                     }
                 } else {
                     $delivery->clearForProduct($produto);
