@@ -243,7 +243,8 @@ class TelegramIntegrationController extends Controller
 
     private function tenantId(): int
     {
-        $tenantId = (int) (auth()->user()?->tenant_id ?? 0);
+        $user = auth()->user();
+        $tenantId = (int) ($user?->tenant_id ?? $user?->id ?? 0);
         if ($tenantId <= 0) {
             abort(403);
         }

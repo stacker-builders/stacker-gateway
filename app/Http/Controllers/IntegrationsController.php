@@ -4,10 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\LogsSellerActivity;
 use App\Models\CademiIntegration;
+use App\Models\EvolutionInstance;
 use App\Models\McpCredential;
 use App\Models\Product;
 use App\Models\SpedyIntegration;
-use App\Models\EvolutionInstance;
+use App\Models\TelegramBot;
+use App\Models\TelegramCommunity;
 use App\Models\UazapiInstance;
 use App\Models\UtmifyIntegration;
 use App\Models\Webhook;
@@ -25,7 +27,10 @@ class IntegrationsController extends Controller
 
     public function index(): Response
     {
-        $tenantId = auth()->user()->tenant_id;
+        // Infoprodutor dono pode ter tenant_id null; o tenant efetivo é o próprio id.
+        $user = auth()->user();
+        $tenantId = (int) ($user?->tenant_id ?? $user?->id ?? 0);
+        $tenantId = $tenantId > 0 ? $tenantId : null;
 
         $webhooks = Webhook::forTenant($tenantId)
             ->with('products:id,name')
@@ -120,6 +125,20 @@ class IntegrationsController extends Controller
             ];
         }
 
+        $telegram = null;
+        if (in_array(SellerIntegrationVisibility::TELEGRAM, $visibleIds, true) && $tenantId !== null) {
+            $bots = TelegramBot::query()->forTenant((int) $tenantId)->active()->get();
+            $communities = TelegramCommunity::query()->forTenant((int) $tenantId)->active()->get();
+            $telegram = [
+                'configured' => $bots->isNotEmpty(),
+                'connected' => $bots->contains(fn (TelegramBot $bot) => $bot->isConnected()),
+                'is_active' => $bots->contains(fn (TelegramBot $bot) => $bot->isConnected()),
+                'bots' => $bots->count(),
+                'communities' => $communities->count(),
+                'ready_communities' => $communities->where('ready_for_delivery', true)->count(),
+            ];
+        }
+
         return Inertia::render('Integrations/Index', [
             'webhooks' => in_array(SellerIntegrationVisibility::WEBHOOK, $visibleIds, true) ? $webhooks : [],
             'webhook_events' => $webhookEvents,
@@ -128,6 +147,7 @@ class IntegrationsController extends Controller
             'cademi_integrations' => in_array(SellerIntegrationVisibility::CADEMI, $visibleIds, true) ? $cademiIntegrations : [],
             'uazapi' => $uazapi,
             'evolution' => $evolution,
+            'telegram' => $telegram,
             'mcp' => $this->mcpPayload($visibleIds, $tenantId !== null ? (int) $tenantId : null),
             'products' => $products,
             'visible_integrations' => $visibleIds,

@@ -328,7 +328,11 @@ class HandleInertiaRequests extends Middleware
                 ? PhysicalProductAccess::globalEnabled()
                 : false,
             'seller_integrations_any_visible' => $user && $user->canAccessSellerPanel()
-                ? SellerIntegrationVisibility::anyVisibleForTenant($tenantId !== null ? (int) $tenantId : null)
+                ? SellerIntegrationVisibility::anyVisibleForTenant(
+                    (int) ($user->tenant_id ?? $user->id) > 0
+                        ? (int) ($user->tenant_id ?? $user->id)
+                        : null
+                )
                 : false,
             'product_approval_required' => $user && $user->canAccessSellerPanel()
                 ? (ProductApprovalService::columnsReady() && ! ProductApprovalSettings::autoApproveEnabled())
