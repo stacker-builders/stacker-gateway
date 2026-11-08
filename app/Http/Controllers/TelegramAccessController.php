@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Jobs\ProcessTelegramDeliveryJob;
 use App\Models\TelegramAccessCommunity;
+use App\Models\TelegramAccessEvent;
 use App\Services\Telegram\TelegramAccessGrantService;
 use App\Services\Telegram\TelegramApiClient;
 use App\Services\Telegram\TelegramApiException;
@@ -78,6 +79,7 @@ class TelegramAccessController extends Controller
                 ->map(fn ($e) => [
                     'id' => $e->id,
                     'event_type' => $e->event_type,
+                    'event_label' => TelegramAccessEvent::labelFor($e->event_type),
                     'occurred_at' => $e->occurred_at?->utc()->toIso8601String(),
                     'occurred_at_label' => $e->occurred_at
                         ?->timezone(config('app.timezone'))

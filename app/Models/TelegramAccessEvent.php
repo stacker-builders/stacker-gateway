@@ -66,4 +66,30 @@ class TelegramAccessEvent extends Model
     {
         return $this->belongsTo(TelegramAccessGrant::class, 'telegram_access_grant_id');
     }
+
+    public static function labelFor(?string $eventType): string
+    {
+        return match ((string) $eventType) {
+            self::PAYMENT_CONFIRMED => 'Pagamento confirmado',
+            self::ACCESS_GRANTED => 'Acesso concedido',
+            self::IDENTITY_LINKED => 'Telegram vinculado',
+            self::INVITE_GENERATED => 'Convite gerado',
+            self::JOIN_REQUEST_APPROVED => 'Solicitação de entrada aprovada',
+            self::ENTRY_CONFIRMED => 'Entrada confirmada',
+            self::DELIVERY_PARTIAL => 'Entrega parcial',
+            self::DELIVERY_COMPLETED => 'Entrega concluída',
+            self::TECHNICAL_FAILURE => 'Falha técnica',
+            self::MANUAL_CORRECTION => 'Correção manual',
+            self::INVITE_REPROCESSED => 'Convite reprocessado',
+            self::ACCESS_RENEWED => 'Acesso renovado',
+            self::ACCESS_EXPIRED => 'Acesso vencido',
+            self::ACCESS_REVOKED => 'Acesso revogado',
+            self::MEMBER_REMOVED => 'Membro removido',
+            self::MEMBER_REMOVAL_SKIPPED => 'Remoção dispensada',
+            self::MEMBER_REMOVAL_FAILED => 'Falha na remoção',
+            self::COMPENSATION_APPLIED => 'Compensação aplicada',
+            self::EXPIRY_NOTICE_SENT => 'Aviso de vencimento enviado',
+            default => $eventType !== null && $eventType !== '' ? $eventType : 'Evento',
+        };
+    }
 }
