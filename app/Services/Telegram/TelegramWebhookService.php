@@ -94,6 +94,26 @@ class TelegramWebhookService
             return ['received' => true, 'duplicate' => true];
         }
 
+        // /start e join request precisam de resposta imediata ao comprador.
+        // Se depender só da fila webhooks-inbound e o worker estiver parado, o bot fica mudo.
+        $processInline = in_array($eventType, ['message', 'chat_join_request'], true);
+        if ($processInline) {
+            try {
+                $this->processEvent($event->fresh() ?? $event);
+
+                return ['received' => true, 'processed' => true];
+            } catch (\Throwable $e) {
+                Log::warning('telegram.webhook.inline_failed', [
+                    'event_id' => $event->id,
+                    'event_type' => $eventType,
+                    'error' => $e->getMessage(),
+                ]);
+                ProcessTelegramWebhookJob::dispatch((int) $event->id);
+
+                return ['received' => true, 'queued' => true, 'inline_failed' => true];
+            }
+        }
+
         ProcessTelegramWebhookJob::dispatch((int) $event->id);
 
         return ['received' => true, 'queued' => true];
@@ -330,34 +350,49 @@ class TelegramWebhookService
             return;
         }
 
-        // /start link_<grantId>_<nonce>_<hmac> — deep link assinado (não enumerável).
+        // Deep link assinado OU código curto da página de acesso.
         $parsed = TelegramIdentityLink::parse($text);
-        if ($parsed === null) {
-            if (preg_match('/^\/start(?:@\w+)?(?:\s|$)/i', $text) === 1) {
+        $grant = null;
+
+        if ($parsed !== null) {
+            $grant = TelegramAccessGrant::query()
+                ->where('tenant_id', $bot->tenant_id)
+                ->where('telegram_bot_id', $bot->id)
+                ->whereKey($parsed['grant_id'])
+                ->first();
+
+            if (! $grant || ! TelegramIdentityLink::verify($grant, $parsed['nonce'], $parsed['signature'])) {
                 $this->notifyBuyer(
                     $bot,
                     $telegramUserId,
-                    'Para vincular sua compra, volte à página de acesso e toque em “Abrir bot do Telegram” (o Start precisa vir com o link da compra).'
+                    'Não foi possível vincular este Start. Envie o código de 8 caracteres que aparece na página de acesso.'
                 );
+
+                return;
+            }
+        } else {
+            $code = TelegramIdentityLink::extractManualCode($text);
+            if ($code !== null) {
+                $grant = TelegramAccessGrant::query()
+                    ->where('tenant_id', $bot->tenant_id)
+                    ->where('telegram_bot_id', $bot->id)
+                    ->where('identity_link_nonce', $code)
+                    ->whereNull('telegram_user_id')
+                    ->orderByDesc('id')
+                    ->first();
             }
 
-            return;
-        }
+            if ($grant === null) {
+                if (preg_match('/^\/start(?:@\w+)?(?:\s|$)/i', $text) === 1 || $code !== null) {
+                    $this->notifyBuyer(
+                        $bot,
+                        $telegramUserId,
+                        'Para vincular sua compra, envie o código de 8 caracteres da página de acesso (ou abra o bot pelo botão “Abrir bot do Telegram”).'
+                    );
+                }
 
-        $grant = TelegramAccessGrant::query()
-            ->where('tenant_id', $bot->tenant_id)
-            ->where('telegram_bot_id', $bot->id)
-            ->whereKey($parsed['grant_id'])
-            ->first();
-
-        if (! $grant || ! TelegramIdentityLink::verify($grant, $parsed['nonce'], $parsed['signature'])) {
-            $this->notifyBuyer(
-                $bot,
-                $telegramUserId,
-                'Não foi possível vincular este Start à sua compra. Abra novamente o bot pelo botão da página de acesso.'
-            );
-
-            return;
+                return;
+            }
         }
 
         if (in_array($grant->status, [
@@ -381,7 +416,7 @@ class TelegramWebhookService
         $this->notifyBuyer(
             $bot,
             $telegramUserId,
-            'Conta vinculada com sucesso. Volte à página da compra: a tela atualiza sozinha e aí você pode entrar no grupo/canal. Se o Telegram pedir aprovação, o bot libera automaticamente (precisa estar como admin com permissão de solicitações).'
+            'Conta vinculada com sucesso. Volte à página da compra: a tela atualiza sozinha e aí você pode entrar no grupo/canal.'
         );
     }
 

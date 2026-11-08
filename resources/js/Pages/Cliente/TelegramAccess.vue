@@ -117,9 +117,23 @@ onBeforeUnmount(() => {
         >
             <h2 class="text-base font-semibold text-zinc-900 dark:text-white">1. Vincule seu Telegram</h2>
             <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
-                Abra o bot pelo botão abaixo e toque em Start. Esta página atualiza sozinha quando a conta for vinculada.
-                Se o bot não responder, o Start precisa vir deste link (não digite /start manualmente).
+                Abra o bot pelo botão abaixo. Se o Telegram mostrar só <code class="text-xs">/start</code> sem resposta, envie o código abaixo na conversa do bot.
             </p>
+            <div
+                v-if="grant.identity_link_code"
+                class="mt-3 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-700 dark:bg-zinc-800/60"
+            >
+                <p class="text-xs font-medium uppercase tracking-wide text-zinc-500">Código de vínculo</p>
+                <p class="mt-1 font-mono text-2xl font-semibold tracking-widest text-zinc-900 dark:text-white">
+                    {{ grant.identity_link_code }}
+                </p>
+                <p class="mt-1 text-xs text-zinc-500">
+                    No bot, envie exatamente esse código (ou <code>/vincular {{ grant.identity_link_code }}</code>).
+                </p>
+                <p v-if="grant.identity_start_payload" class="mt-2 break-all text-[11px] text-zinc-400">
+                    Deep link esperado: /start {{ grant.identity_start_payload }}
+                </p>
+            </div>
             <p v-if="polling" class="mt-2 text-xs text-zinc-500">Aguardando vínculo no Telegram…</p>
             <a
                 :href="grant.identity_bot_url"

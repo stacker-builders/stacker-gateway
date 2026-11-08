@@ -57,7 +57,32 @@ class TelegramIdentityLink
             return null;
         }
 
-        return 'https://t.me/'.$username.'?start='.self::payload($grant);
+        // rawurlencode evita clientes que quebram o querystring; Telegram aceita A-Z a-z 0-9 _ -
+        return 'https://t.me/'.$username.'?start='.rawurlencode(self::payload($grant));
+    }
+
+    /**
+     * Código curto (nonce) para o comprador enviar manualmente se o deep link falhar.
+     */
+    public static function manualCode(TelegramAccessGrant $grant): string
+    {
+        return self::ensureNonce($grant);
+    }
+
+    /**
+     * Extrai código de 8 chars de "/start CODE", "/vincular CODE" ou mensagem só com o código.
+     */
+    public static function extractManualCode(string $text): ?string
+    {
+        $text = trim($text);
+        if (preg_match('/^\/(?:start|vincular)(?:@\w+)?\s+([a-z0-9]{8})$/i', $text, $m) === 1) {
+            return Str::lower($m[1]);
+        }
+        if (preg_match('/^[a-z0-9]{8}$/i', $text) === 1) {
+            return Str::lower($text);
+        }
+
+        return null;
     }
 
     /**
