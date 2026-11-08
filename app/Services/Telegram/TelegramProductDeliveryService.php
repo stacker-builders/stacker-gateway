@@ -36,24 +36,38 @@ class TelegramProductDeliveryService
     public const ACCESS_PRESET_CUSTOM = 'custom';
 
     /**
-     * Venda/checkout Telegram liberados globalmente ou por allowlist de tenant (homologação).
+     * Venda/checkout Telegram controlados pelo painel admin (Plataforma → Telegram).
+     * Global: toggle "Novas vendas". Por seller: política "Novas vendas" = Habilitada/Desabilitada/Herdar.
+     * Env TELEGRAM_PRODUCT_SALES_OPERATIONAL=true permanece como override de emergência (liga global).
      */
     public function automaticDeliveryOperational(?int $tenantId = null): bool
     {
-        if ((bool) config('telegram.product_sales_operational', false)) {
-            return true;
+        $policy = app(TelegramPolicy::class);
+
+        if (! $policy->autoDeliveryEnabled()) {
+            return false;
         }
 
-        if ($tenantId === null || $tenantId <= 0) {
-            return false;
+        // Override legado/emergência via env.
+        if ((bool) config('telegram.product_sales_operational', false)) {
+            if ($tenantId === null || $tenantId <= 0) {
+                return true;
+            }
+
+            return $policy->canStartNewSale($tenantId);
         }
 
         $allowlist = config('telegram.product_sales_tenant_ids', []);
-        if (! is_array($allowlist) || $allowlist === []) {
-            return false;
+        if (is_array($allowlist) && $tenantId !== null && $tenantId > 0
+            && in_array($tenantId, array_map('intval', $allowlist), true)) {
+            return $policy->moduleAvailable($tenantId);
         }
 
-        return in_array($tenantId, array_map('intval', $allowlist), true);
+        if ($tenantId === null || $tenantId <= 0) {
+            return (bool) (TelegramModuleSettings::get()['sales_enabled'] ?? false);
+        }
+
+        return $policy->canStartNewSale($tenantId);
     }
 
     public function tablesReady(): bool
@@ -137,11 +151,14 @@ class TelegramProductDeliveryService
         }
 
         $settingPayload = null;
+        $salesOperational = $this->automaticDeliveryOperational($tenantId);
         $readiness = [
             'configured' => false,
             'ready_for_sale' => false,
-            'blocking_reasons' => ['A entrega automática do Telegram ainda não está operacional nesta etapa.'],
-            'sales_operational' => $this->automaticDeliveryOperational($tenantId),
+            'blocking_reasons' => $salesOperational
+                ? []
+                : ['Novas vendas Telegram estão desabilitadas no painel da plataforma (Plataforma → Telegram).'],
+            'sales_operational' => $salesOperational,
         ];
 
         if ($product !== null && $product->isTelegram() && $this->tablesReady()) {
@@ -151,8 +168,6 @@ class TelegramProductDeliveryService
             }
             $readiness = $this->evaluateReadiness($tenantId, $product, $setting);
         }
-
-        $salesOperational = $this->automaticDeliveryOperational($tenantId);
 
         return [
             'module_available' => $moduleAvailable,
@@ -167,7 +182,7 @@ class TelegramProductDeliveryService
             'sales_operational' => $salesOperational,
             'sales_blocked_message' => $salesOperational
                 ? ''
-                : 'Produtos Telegram podem ser configurados e salvos. Publicação e checkout ficam bloqueados até a entrega automática estar operacional para esta conta.',
+                : 'Produtos Telegram podem ser configurados e salvos. Publicação e checkout liberam quando o admin ativar Novas vendas em Plataforma → Telegram (global ou só a sua conta).',
         ];
     }
 
@@ -325,19 +340,11 @@ class TelegramProductDeliveryService
         $operational = $this->automaticDeliveryOperational($tenantId);
 
         if (! $operational) {
-            $reasons[] = 'A entrega automática do Telegram ainda não está operacional para esta conta.';
+            $reasons[] = 'Novas vendas Telegram estão desabilitadas no painel da plataforma (Plataforma → Telegram). Peça ao admin para liberar globalmente ou só a sua conta.';
         }
 
         if (! $policy->moduleAvailable($tenantId)) {
             $reasons[] = 'O módulo Telegram não está habilitado para esta conta.';
-        }
-
-        if (! $policy->canStartNewSale($tenantId)) {
-            $reasons[] = 'Novas vendas Telegram estão desabilitadas para esta conta.';
-        }
-
-        if (! $policy->autoDeliveryEnabled()) {
-            $reasons[] = 'A entrega automática está desabilitada na política global do Telegram.';
         }
 
         $setting = $setting ?? ($this->tablesReady()

@@ -37,7 +37,8 @@ class TelegramModuleSettings
             'auto_delivery_enabled' => true,
             'expiry_control_enabled' => true,
             'expiry_removal_enabled' => true,
-            'sales_enabled' => true,
+            // Novas vendas/checkout desligados por padrão; admin libera no painel (global ou por seller).
+            'sales_enabled' => false,
             // Compensação automática desabilitada até validação administrativa.
             'auto_compensation_enabled' => false,
         ];

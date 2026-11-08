@@ -5,7 +5,7 @@ namespace App\Services\Telegram;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Checklist técnico para liberação comercial. Não altera a flag automaticamente.
+ * Checklist técnico para liberação comercial. Não altera a política automaticamente.
  */
 class TelegramCommercialReadiness
 {
@@ -14,7 +14,9 @@ class TelegramCommercialReadiness
      */
     public function checklist(): array
     {
-        $sales = (bool) config('telegram.product_sales_operational', false);
+        $settings = TelegramModuleSettings::get();
+        $sales = (bool) ($settings['sales_enabled'] ?? false);
+        $autoDelivery = (bool) ($settings['auto_delivery_enabled'] ?? false);
         $items = [
             $this->item('payment_creates_grant', 'Pagamento aprovado cria direito', Schema::hasTable('telegram_access_grants')),
             $this->item('identity_link', 'Identidade Telegram vinculável', Schema::hasTable('telegram_buyer_identities')),
@@ -27,16 +29,31 @@ class TelegramCommercialReadiness
             $this->item('multi_tenant', 'Isolamento multi-tenant (tenant_id em grants)', Schema::hasColumn('telegram_access_grants', 'tenant_id')),
             $this->item('tests', 'Suite de testes Telegram presente', file_exists(base_path('tests/Feature/TelegramAccessLifecycleTest.php'))),
             $this->item('frontend_build', 'Build frontend (validar manualmente no CI/local)', true, 'Executar npm run build / Vite no ambiente.'),
-            $this->item('flag_held', 'Flag comercial ainda desligada até aprovação', ! $sales, 'Manter TELEGRAM_PRODUCT_SALES_OPERATIONAL=false até autorização expressa.'),
+            $this->item(
+                'auto_delivery',
+                'Entrega automática ligada no painel',
+                $autoDelivery,
+                'Toggle “Entrega automática” em Plataforma → Telegram.'
+            ),
+            $this->item(
+                'sales_panel',
+                'Novas vendas controladas pelo painel',
+                true,
+                $sales
+                    ? 'Vendas globais ligadas. Para homologar um seller sem abrir para todos, desligue o global e use política por infoprodutor = Habilitada.'
+                    : 'Vendas globais desligadas. Libere globalmente ou só um infoprodutor em “Política por infoprodutor” → Novas vendas = Habilitada.'
+            ),
         ];
 
-        $blocking = collect($items)->filter(fn ($i) => ! $i['ok'] && $i['key'] !== 'flag_held')->values();
+        $blocking = collect($items)->filter(fn ($i) => ! $i['ok'])->values();
         $recommendation = $blocking->isEmpty()
-            ? 'Checklist técnico ok. Recomenda-se homologação ponta a ponta com bot/grupo real e, só então, autorização expressa para TELEGRAM_PRODUCT_SALES_OPERATIONAL=true.'
+            ? ($sales
+                ? 'Checklist técnico ok e vendas globais ligadas no painel.'
+                : 'Checklist técnico ok. Libere vendas no painel (global ou por seller) quando for homologar/comercializar.')
             : 'Ainda há itens técnicos pendentes. Não habilitar vendas.';
 
         return [
-            'sales_operational' => $sales,
+            'sales_operational' => $sales && $autoDelivery,
             'recommendation' => $recommendation,
             'items' => $items,
         ];

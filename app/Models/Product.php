@@ -776,16 +776,24 @@ class Product extends Model
             $query->where('approval_status', self::APPROVAL_APPROVED);
         }
 
-        // Telegram no checkout: flag global ou allowlist de tenant.
+        // Telegram no checkout: política do painel (global ou seller com vendas "Habilitada").
         $delivery = app(\App\Services\Telegram\TelegramProductDeliveryService::class);
         if (! $delivery->automaticDeliveryOperational()) {
-            $allowlist = config('telegram.product_sales_tenant_ids', []);
-            if (! is_array($allowlist) || $allowlist === []) {
+            $allowedTenants = \App\Services\Telegram\TelegramSellerPolicy::tenantIdsWithSalesForcedEnabled();
+            $envAllowlist = config('telegram.product_sales_tenant_ids', []);
+            if (is_array($envAllowlist) && $envAllowlist !== []) {
+                $allowedTenants = array_values(array_unique(array_merge(
+                    $allowedTenants,
+                    array_map('intval', $envAllowlist)
+                )));
+            }
+
+            if ($allowedTenants === []) {
                 $query->where('type', '!=', self::TYPE_TELEGRAM);
             } else {
-                $query->where(function (Builder $inner) use ($allowlist) {
+                $query->where(function (Builder $inner) use ($allowedTenants) {
                     $inner->where('type', '!=', self::TYPE_TELEGRAM)
-                        ->orWhereIn('tenant_id', array_map('intval', $allowlist));
+                        ->orWhereIn('tenant_id', $allowedTenants);
                 });
             }
         }
