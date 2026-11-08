@@ -374,7 +374,7 @@ class TelegramIntegrationTest extends TestCase
             'message' => ['text' => 'hi'],
         ], [
             'X-Telegram-Bot-Api-Secret-Token' => $bot->webhook_secret_token,
-        ])->assertOk()->assertJson(['queued' => true]);
+        ])->assertOk()->assertJson(['processed' => true]);
 
         $this->postJson(route('webhooks.telegram', ['secret' => $bot->webhook_path_secret]), [
             'update_id' => 50,
@@ -384,7 +384,32 @@ class TelegramIntegrationTest extends TestCase
         ])->assertOk()->assertJson(['duplicate' => true]);
 
         $this->assertSame(1, TelegramWebhookEvent::query()->count());
-        Queue::assertPushed(ProcessTelegramWebhookJob::class);
+    }
+
+    public function test_telegram_webhook_is_csrf_exempt(): void
+    {
+        Queue::fake();
+        $this->fakeGetMe();
+        $seller = $this->makeSeller();
+        $this->actingAs($seller)
+            ->post(route('integrations.telegram.bots.store'), ['token' => '991122:AAHsecret'])
+            ->assertRedirect();
+
+        $bot = TelegramBot::query()->first();
+
+        // POST web (com sessão) sem _token — deve aceitar (antes caía em 419 e o bot ficava mudo).
+        $this->actingAs($seller)
+            ->post(route('webhooks.telegram', ['secret' => $bot->webhook_path_secret]), [
+                'update_id' => 77,
+                'message' => [
+                    'text' => '/start',
+                    'from' => ['id' => 4242, 'username' => 'buyer'],
+                ],
+            ], [
+                'X-Telegram-Bot-Api-Secret-Token' => $bot->webhook_secret_token,
+            ])
+            ->assertOk()
+            ->assertJson(['received' => true]);
     }
 
     public function test_safe_disconnect_and_token_update(): void
