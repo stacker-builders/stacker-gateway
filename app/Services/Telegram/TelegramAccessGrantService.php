@@ -392,7 +392,12 @@ class TelegramAccessGrantService
         return TelegramAccessGrant::query()
             ->where('user_id', $userId)
             ->whereKey($grantId)
-            ->with(['communities.community', 'product', 'events' => fn ($q) => $q->orderByDesc('occurred_at')])
+            ->with([
+                'bot',
+                'communities.community',
+                'product',
+                'events' => fn ($q) => $q->orderByDesc('occurred_at'),
+            ])
             ->first();
     }
 
