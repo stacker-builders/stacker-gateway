@@ -213,6 +213,12 @@ class TelegramAccessGrant extends Model
             'identity_bot_url' => $this->hasIdentity()
                 ? null
                 : \App\Services\Telegram\TelegramIdentityLink::botUrl($this, $this->relationLoaded('bot') ? $this->bot : $this->bot()->first()),
+            'identity_link_code' => $this->hasIdentity()
+                ? null
+                : \App\Services\Telegram\TelegramIdentityLink::manualCode($this),
+            'identity_start_payload' => $this->hasIdentity()
+                ? null
+                : \App\Services\Telegram\TelegramIdentityLink::payload($this),
             'product' => $this->relationLoaded('product') && $this->product
                 ? ['id' => $this->product->id, 'name' => $this->product->name]
                 : null,
