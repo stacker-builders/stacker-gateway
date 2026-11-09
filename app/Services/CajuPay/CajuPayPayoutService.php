@@ -65,11 +65,16 @@ class CajuPayPayoutService
             return ['ok' => false, 'error' => $msg];
         }
 
-        $apiAmount = GatewayPayoutEconomics::transferAmountBrlForApi(
-            $net,
-            $economics['admin_fee_payout_brl'],
-            $economics['admin_fee_payout_percent'] ?? 0.0,
-        );
+        // Desligado (padrão): valor líquido exato. Ligado: soma a taxa de saque
+        // da conta para o infoprodutor receber o líquido depois do desconto da Caju.
+        $grossUp = CajuPayPayoutGrossUp::enabled();
+        $apiAmount = $grossUp
+            ? GatewayPayoutEconomics::transferAmountBrlForApi(
+                $net,
+                (float) ($economics['admin_fee_payout_brl'] ?? 0),
+                (float) ($economics['admin_fee_payout_percent'] ?? 0),
+            )
+            : round($net, 2);
         $amountCents = (int) round($apiAmount * 100);
 
         $http = $this->httpForCredentials($credentials);
@@ -137,6 +142,8 @@ class CajuPayPayoutService
                 'withdrawal_id' => $withdrawal->id,
                 'http_status' => $response->status(),
                 'external_ref' => $ext,
+                'amount_cents' => $amountCents,
+                'gross_up_payout_fee' => $grossUp,
             ]);
 
             app(WithdrawalPixReceiptService::class)->snapshotDestination($withdrawal->fresh(), null, [

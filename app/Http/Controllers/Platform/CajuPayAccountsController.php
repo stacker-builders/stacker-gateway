@@ -8,6 +8,7 @@ use App\Http\Controllers\Concerns\RequiresPlatformStepUp;
 use App\Http\Controllers\Controller;
 use App\Models\CajuPayAccount;
 use App\Models\User;
+use App\Services\CajuPay\CajuPayPayoutGrossUp;
 use App\Services\CajuPay\CajuPayWebhookBootstrapService;
 use App\Services\PlatformAuditService;
 use Illuminate\Http\JsonResponse;
@@ -67,6 +68,25 @@ class CajuPayAccountsController extends Controller
             'webhook_url' => $bootstrap->webhookUrl(),
             'webhook_help' => 'O webhook é registrado automaticamente ao salvar as credenciais (checkout + PIX).',
             'webhook_setup_status' => $cajuPayAccount->webhook_setup_status ?? [],
+        ]);
+    }
+
+    public function updateGrossUp(Request $request): JsonResponse
+    {
+        $request->validate([
+            'enabled' => ['required', 'boolean'],
+        ]);
+
+        $enabled = $request->boolean('enabled');
+        CajuPayPayoutGrossUp::setEnabled($enabled);
+
+        PlatformAuditService::log('platform.cajupay.gross_up_payout_fee', [
+            'enabled' => $enabled,
+        ], $request);
+
+        return response()->json([
+            'success' => true,
+            'enabled' => CajuPayPayoutGrossUp::enabled(),
         ]);
     }
 

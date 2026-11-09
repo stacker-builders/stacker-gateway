@@ -3,6 +3,7 @@ import { ref, watch, computed } from 'vue';
 import axios from 'axios';
 import { usePage } from '@inertiajs/vue3';
 import Button from '@/components/ui/Button.vue';
+import Toggle from '@/components/ui/Toggle.vue';
 import PlatformStepUpModal from '@/components/platform/PlatformStepUpModal.vue';
 import PixInOutBadges from '@/components/settings/PixInOutBadges.vue';
 import { X, Copy, Check, RefreshCw, ChevronLeft, Plus, ExternalLink, MessageCircle } from 'lucide-vue-next';
@@ -14,6 +15,7 @@ const props = defineProps({
     accounts: { type: Array, default: () => [] },
     credentialKeysProp: { type: Array, default: () => [] },
     platformTotpEnabled: { type: Boolean, default: false },
+    grossUpPayoutFee: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['close', 'saved']);
@@ -51,6 +53,43 @@ const testSuccess = ref(null);
 const webhookCopied = ref(false);
 const accountName = ref('');
 const isEnabled = ref(true);
+const grossUpPayoutFee = ref(Boolean(props.grossUpPayoutFee));
+const savingGrossUp = ref(false);
+const grossUpMessage = ref(null);
+const grossUpSuccess = ref(null);
+
+watch(
+    () => props.grossUpPayoutFee,
+    (value) => {
+        grossUpPayoutFee.value = Boolean(value);
+    }
+);
+
+async function saveGrossUp(enabled) {
+    const previous = grossUpPayoutFee.value;
+    grossUpPayoutFee.value = Boolean(enabled);
+    savingGrossUp.value = true;
+    grossUpMessage.value = null;
+    grossUpSuccess.value = null;
+    try {
+        const { data } = await axios.put(
+            '/plataforma/financeiro/cajupay/gross-up-payout-fee',
+            { enabled: Boolean(enabled) },
+            { headers: { 'X-CSRF-TOKEN': getCsrfToken() } }
+        );
+        grossUpPayoutFee.value = Boolean(data?.enabled);
+        grossUpSuccess.value = true;
+        grossUpMessage.value = grossUpPayoutFee.value
+            ? 'Ligado: o saque vai com valor a mais para cobrir a taxa.'
+            : 'Desligado: o saque envia o valor líquido exato.';
+    } catch (e) {
+        grossUpPayoutFee.value = previous;
+        grossUpSuccess.value = false;
+        grossUpMessage.value = e.response?.data?.message || 'Não foi possível salvar o interruptor.';
+    } finally {
+        savingGrossUp.value = false;
+    }
+}
 
 const stepUpOpen = ref(false);
 const stepUpLoading = ref(false);
@@ -371,6 +410,29 @@ function close() {
 
                 <!-- Lista de contas -->
                 <div v-if="view === 'list'" class="flex flex-1 flex-col overflow-y-auto p-4">
+                    <div class="mb-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-600 dark:bg-zinc-800/50">
+                        <p class="mb-3 text-sm font-semibold text-zinc-900 dark:text-white">
+                            Taxa de saque da Caju
+                        </p>
+                        <Toggle
+                            :model-value="grossUpPayoutFee"
+                            :disabled="savingGrossUp"
+                            label="Enviar valor a mais para cobrir a taxa"
+                            @update:model-value="saveGrossUp"
+                        />
+                        <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                            Desligado, a Caju recebe o valor líquido exato e a taxa sai do saldo da carteira.
+                            Ligado, o saque inclui a taxa fixa e o percentual configurados na conta.
+                        </p>
+                        <p
+                            v-if="grossUpMessage"
+                            class="mt-2 text-xs"
+                            :class="grossUpSuccess ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'"
+                        >
+                            {{ grossUpMessage }}
+                        </p>
+                    </div>
+
                     <div
                         v-if="gateway?.signup_url || supportContacts.length"
                         class="mb-4 space-y-2"

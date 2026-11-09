@@ -619,6 +619,7 @@ Route::prefix('plataforma')->name('plataforma.')->group(function () {
         Route::post('/financeiro/gateways/{slug}/test', [\App\Http\Controllers\GatewaysController::class, 'test'])->name('financeiro.gateways.test');
         Route::post('/financeiro/gateways/{slug}/certificate', [\App\Http\Controllers\GatewaysController::class, 'updateCertificate'])->name('financeiro.gateways.certificate');
         Route::put('/financeiro/gateways/{slug}/certificate', [\App\Http\Controllers\GatewaysController::class, 'updateCertificate']);
+        Route::put('/financeiro/cajupay/gross-up-payout-fee', [\App\Http\Controllers\Platform\CajuPayAccountsController::class, 'updateGrossUp'])->name('financeiro.cajupay.gross-up');
         Route::post('/financeiro/cajupay-contas', [\App\Http\Controllers\Platform\CajuPayAccountsController::class, 'store'])->name('financeiro.cajupay-contas.store');
         Route::get('/financeiro/cajupay-contas/{cajuPayAccount}', [\App\Http\Controllers\Platform\CajuPayAccountsController::class, 'show'])->name('financeiro.cajupay-contas.show');
         Route::put('/financeiro/cajupay-contas/{cajuPayAccount}', [\App\Http\Controllers\Platform\CajuPayAccountsController::class, 'update'])->name('financeiro.cajupay-contas.update');

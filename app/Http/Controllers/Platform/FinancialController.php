@@ -21,6 +21,7 @@ use App\Models\User;
 use App\Models\Withdrawal;
 use App\Services\Bspay\BspayPayoutService;
 use App\Services\CajuPay\CajuPayAccountResolver;
+use App\Services\CajuPay\CajuPayPayoutGrossUp;
 use App\Services\CajuPay\CajuPayPayoutService;
 use App\Services\CajuPay\CajuPayWithdrawalReconcileService;
 use App\Services\Spacepag\SpacepagPayoutService;
@@ -78,6 +79,7 @@ class FinancialController extends Controller
             'cajupay_method_accounts' => app(CajuPayAccountResolver::class)->methodAccountMap($tenantId),
             'cajupay_accounts' => CajuPayAccountsController::listForAdmin(),
             'cajupay_credential_keys' => config('gateways.gateways.cajupay.credential_keys', []),
+            'cajupay_gross_up_payout_fee' => CajuPayPayoutGrossUp::enabled(),
             'merchant_fee_rules' => $feeDefaults,
             'low_ticket_fees' => $lowTicket,
             'card_installment_rules' => $cardInstallmentRules,
