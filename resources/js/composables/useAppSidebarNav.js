@@ -26,6 +26,7 @@ import {
     Zap,
     Activity,
     Code2,
+    Send,
 } from 'lucide-vue-next';
 import { useI18n } from '@/composables/useI18n';
 
@@ -141,6 +142,13 @@ export function useAppSidebarNav() {
             }
             items.push({ name: t('sidebar.coupons', 'Cupons'), href: '/produtos/cupons', icon: TicketPercent });
             items.push({ name: t('sidebar.students', 'Alunos'), href: '/produtos/alunos', icon: GraduationCap });
+            if (page.props.telegram_subscribers_menu_visible) {
+                items.push({
+                    name: t('sidebar.telegram_subscribers', 'Assinantes Telegram'),
+                    href: '/produtos/telegram/assinantes',
+                    icon: Send,
+                });
+            }
             items.push({ name: t('sidebar.affiliates_menu', 'Afiliados'), href: '/afiliados', icon: UserPlus });
             items.push({ name: t('sidebar.coproduction', 'Co-produção'), href: '/coproducao', icon: Handshake });
         }
@@ -208,6 +216,9 @@ export function useAppSidebarNav() {
         if (href === '/produtos/alunos') {
             return url.startsWith('/produtos/alunos');
         }
+        if (href === '/produtos/telegram/assinantes') {
+            return url === '/produtos/telegram/assinantes' || url.startsWith('/produtos/telegram/assinantes/');
+        }
         if (href === '/afiliados') {
             return url === '/afiliados' || url.startsWith('/afiliados/');
         }
@@ -218,6 +229,7 @@ export function useAppSidebarNav() {
             if (
                 url.startsWith('/produtos/cupons') ||
                 url.startsWith('/produtos/alunos') ||
+                url.startsWith('/produtos/telegram/') ||
                 url.startsWith('/produtos/coproducao') ||
                 url.startsWith('/produtos/vitrine-afiliacao') ||
                 url.startsWith('/produtos/afiliados') ||

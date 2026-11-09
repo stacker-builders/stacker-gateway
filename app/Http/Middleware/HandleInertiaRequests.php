@@ -17,6 +17,7 @@ use App\Services\MemberProgressService;
 use App\Services\MemberAreaResolver;
 use App\Services\PhysicalProductAccess;
 use App\Services\SellerIntegrationVisibility;
+use App\Services\Telegram\TelegramSellerSubscribersService;
 use App\Support\BrandingAssetUrls;
 use App\Support\DemoMode;
 use App\Support\InfoproducerRegistrationSettings;
@@ -354,6 +355,12 @@ class HandleInertiaRequests extends Middleware
             'pixgo_sidebar_label' => $user && $user->canAccessSellerPanel()
                 ? \App\Services\PixGoAccess::sidebarLabel()
                 : \App\Services\PixGoAccess::DEFAULT_SIDEBAR_LABEL,
+            'telegram_subscribers_menu_visible' => $user && $user->canAccessSellerPanel()
+                ? app(TelegramSellerSubscribersService::class)->tenantHasActiveTelegramProduct(
+                    (int) ($user->tenant_id ?? $user->id),
+                    $user
+                )
+                : false,
             'legal' => $sharedCache->legalPublicLinks(),
             'platform_ga4' => PlatformGa4Settings::inertiaConfig(),
         ];
