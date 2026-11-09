@@ -93,6 +93,41 @@ class LinaOpenxPixAutoTest extends TestCase
         $this->assertSame('Banco Exemplo App', $list[0]['name']);
     }
 
+    public function test_list_registered_participants_parses_documented_pascal_case(): void
+    {
+        Http::fake([
+            'iam.linaob.com.br/*' => Http::response(['access_token' => 'tok', 'expires_in' => 900], 200),
+            'embedded-payment-manager.linaob.com.br/api/v1/open-integration/participants/registered' => Http::response([
+                'data' => [[
+                    'OrganisationId' => '12345',
+                    'Status' => 'active',
+                    'OrganisationName' => 'ACME Corp',
+                    'AuthorisationServers' => [[
+                        'AuthorisationServerId' => 'server123',
+                        'CustomerFriendlyName' => 'ACME Bank',
+                    ]],
+                ], [
+                    'OrganisationId' => '999',
+                    'Status' => 'inactive',
+                    'OrganisationName' => 'Banco Inativo',
+                    'AuthorisationServers' => [[
+                        'AuthorisationServerId' => 'server-off',
+                        'CustomerFriendlyName' => 'Banco Inativo',
+                    ]],
+                ]],
+                'message' => 'OK',
+                'type' => 'success',
+                'statusCode' => 200,
+            ], 200),
+        ]);
+
+        $list = (new LinaOpenxClient)->listRegisteredParticipants($this->sampleCredentials());
+        $this->assertCount(1, $list);
+        $this->assertSame('12345', $list[0]['organisation_id']);
+        $this->assertSame('server123', $list[0]['authorisation_server_id']);
+        $this->assertSame('ACME Bank', $list[0]['name']);
+    }
+
     public function test_create_recurring_consent_posts_collection_body(): void
     {
         Http::fake([

@@ -52,19 +52,31 @@ class LinaOpenxPixAutoService
 
         $organisationId = trim((string) ($validated['lina_organisation_id'] ?? ''));
         $authorisationServerId = trim((string) ($validated['lina_authorisation_server_id'] ?? ''));
+        $participants = [];
         if ($organisationId === '' || $authorisationServerId === '') {
-            $picked = $this->autoPickParticipant($credentials);
-            $organisationId = $organisationId !== '' ? $organisationId : ($picked['organisation_id'] ?? '');
-            $authorisationServerId = $authorisationServerId !== '' ? $authorisationServerId : ($picked['authorisation_server_id'] ?? '');
+            try {
+                $participants = $this->client->listRegisteredParticipants($credentials);
+            } catch (\Throwable) {
+                $participants = [];
+            }
+            if (count($participants) === 1) {
+                $organisationId = $organisationId !== '' ? $organisationId : $participants[0]['organisation_id'];
+                $authorisationServerId = $authorisationServerId !== '' ? $authorisationServerId : $participants[0]['authorisation_server_id'];
+            }
         }
         if ($organisationId === '' || $authorisationServerId === '') {
-            throw new \RuntimeException('Selecione o banco para autorizar o PIX automático.');
+            throw new \RuntimeException(
+                $participants === []
+                    ? 'Não foi possível carregar os bancos para o PIX automático. Recarregue a página e tente novamente.'
+                    : 'Selecione o banco para autorizar o PIX automático.'
+            );
         }
 
         $plan = $order->subscriptionPlan;
         $interval = self::intervalFromPlan($plan?->interval);
         $amount = $this->formatAmount((float) $order->amount);
         $firstDate = now()->addDay()->toDateString();
+        $referenceStartDate = now()->addDay()->utc()->startOfDay()->format('Y-m-d\TH:i:s\Z');
         $payerName = trim((string) ($consumer['name'] ?? '')) ?: 'Cliente';
         $returnUrl = $this->signedReturnUrl($order);
         $info = $description !== '' ? $description : ('Assinatura PIX automático - Pedido #'.($order->public_reference ?: $order->id));
@@ -84,7 +96,6 @@ class LinaOpenxPixAutoService
                 'cpfCnpj' => $creditor['cpfCnpj'],
                 'name' => $creditor['name'],
             ]],
-            'startDateTime' => $firstDate,
             'redirectUri' => $returnUrl,
             'expirationDateTime' => now()->addYears(10)->utc()->format('Y-m-d\TH:i:s\Z'),
             'additionalInformation' => mb_substr($info, 0, 140),
@@ -106,7 +117,7 @@ class LinaOpenxPixAutoService
                         'creditorAccount' => $creditorAccount,
                     ],
                     'isRetryAccepted' => true,
-                    'referenceStartDate' => $firstDate,
+                    'referenceStartDate' => $referenceStartDate,
                 ],
             ],
         ];
@@ -256,9 +267,9 @@ class LinaOpenxPixAutoService
             return [];
         }
 
-        $cacheKey = 'linaopenx_pix_auto_participants:'.hash('sha256', (string) $tenantId.'|'.($credentials['client_id'] ?? ''));
+        $cacheKey = 'linaopenx_pix_auto_participants:v2:'.hash('sha256', (string) $tenantId.'|'.($credentials['client_id'] ?? ''));
         $cached = Cache::get($cacheKey);
-        if (is_array($cached)) {
+        if (is_array($cached) && $cached !== []) {
             return $cached;
         }
 
@@ -272,7 +283,9 @@ class LinaOpenxPixAutoService
 
             return [];
         }
-        Cache::put($cacheKey, $list, now()->addMinutes(5));
+        if ($list !== []) {
+            Cache::put($cacheKey, $list, now()->addMinutes(5));
+        }
 
         return $list;
     }
@@ -465,27 +478,6 @@ class LinaOpenxPixAutoService
         }
 
         return '';
-    }
-
-    /**
-     * @param  array<string, mixed>  $credentials
-     * @return array{organisation_id: string, authorisation_server_id: string}|null
-     */
-    private function autoPickParticipant(array $credentials): ?array
-    {
-        try {
-            $list = $this->client->listRegisteredParticipants($credentials);
-        } catch (\Throwable) {
-            return null;
-        }
-        if (count($list) !== 1) {
-            return null;
-        }
-
-        return [
-            'organisation_id' => $list[0]['organisation_id'],
-            'authorisation_server_id' => $list[0]['authorisation_server_id'],
-        ];
     }
 
     private function contractIdForOrder(Order $order): string

@@ -720,6 +720,7 @@ class LinaOpenxClient
             'Authorization' => 'Bearer '.$token,
             'Accept' => 'application/json',
             'Content-Type' => 'application/json',
+            'User-Agent' => 'StackerGateway/1.0',
         ];
         $subTenantId = trim((string) ($credentials['sub_tenant_id'] ?? ''));
         if ($subTenantId === '') {
@@ -809,8 +810,7 @@ class LinaOpenxClient
      */
     private function firstString(array $data, array $keys): string
     {
-        foreach ($keys as $key) {
-            $v = $data[$key] ?? null;
+        foreach ($this->candidateValues($data, $keys) as $v) {
             if (is_string($v) && trim($v) !== '') {
                 return trim($v);
             }
@@ -820,6 +820,58 @@ class LinaOpenxClient
         }
 
         return '';
+    }
+
+    /**
+     * A API documentada devolve PascalCase (OrganisationId, AuthorisationServers).
+     * A busca exata vem primeiro; o fallback ignora maiúsculas.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  list<string>  $keys
+     * @return list<mixed>
+     */
+    private function candidateValues(array $data, array $keys): array
+    {
+        $values = [];
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $data)) {
+                $values[] = $data[$key];
+            }
+        }
+        if ($values !== []) {
+            return $values;
+        }
+
+        $lower = [];
+        foreach ($data as $k => $v) {
+            if (is_string($k)) {
+                $lower[strtolower($k)] = $v;
+            }
+        }
+        foreach ($keys as $key) {
+            $lk = strtolower($key);
+            if (array_key_exists($lk, $lower)) {
+                $values[] = $lower[$lk];
+            }
+        }
+
+        return $values;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @param  list<string>  $keys
+     */
+    private function arrayValue(array $data, array $keys): mixed
+    {
+        $values = $this->candidateValues($data, $keys);
+        foreach ($values as $value) {
+            if (is_array($value)) {
+                return $value;
+            }
+        }
+
+        return $values[0] ?? null;
     }
 
     /**
@@ -963,12 +1015,34 @@ class LinaOpenxClient
             return [];
         }
         foreach (['data', 'content', 'participants', 'items'] as $key) {
-            if (isset($json[$key]) && is_array($json[$key]) && array_is_list($json[$key])) {
-                return $json[$key];
+            $rows = $this->participantList($this->arrayValue($json, [$key]));
+            if ($rows !== []) {
+                return $rows;
             }
         }
         if (array_is_list($json)) {
             return $json;
+        }
+
+        return [];
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    private function participantList(mixed $block): array
+    {
+        if (! is_array($block)) {
+            return [];
+        }
+        if (array_is_list($block)) {
+            return $block;
+        }
+        foreach (['data', 'content', 'participants', 'items'] as $key) {
+            $inner = $this->arrayValue($block, [$key]);
+            if (is_array($inner) && array_is_list($inner)) {
+                return $inner;
+            }
         }
 
         return [];
@@ -980,26 +1054,29 @@ class LinaOpenxClient
      */
     private function expandParticipantRow(array $row): array
     {
-        $orgId = $this->firstString($row, ['organisationId', 'organisation_id', 'orgId', 'org_id']);
-        if ($orgId === '' && is_array($row['organisation'] ?? null)) {
-            $orgId = $this->firstString($row['organisation'], ['organisationId', 'id', 'orgId']);
+        $status = strtolower($this->firstString($row, ['status']));
+        if (in_array($status, ['inactive', 'disabled', 'inativo', 'blocked', 'suspended'], true)) {
+            return [];
         }
 
-        $servers = $row['authorisationServers'] ?? $row['authorisation_servers'] ?? null;
+        $orgId = $this->firstString($row, ['organisationId', 'organisation_id', 'orgId', 'org_id']);
+        $organisation = $this->arrayValue($row, ['organisation']);
+        if ($orgId === '' && is_array($organisation)) {
+            $orgId = $this->firstString($organisation, ['organisationId', 'id', 'orgId']);
+        }
+
+        $servers = $this->arrayValue($row, ['authorisationServers', 'authorisation_servers', 'authorizationServers']);
         if (is_array($servers) && $servers !== []) {
             $items = [];
             foreach ($servers as $server) {
                 if (! is_array($server)) {
                     continue;
                 }
-                $asId = $this->firstString($server, ['authorisationServerId', 'authorisation_server_id', 'asId', 'id']);
+                $asId = $this->firstString($server, ['authorisationServerId', 'authorisation_server_id', 'authorizationServerId', 'asId', 'id']);
                 if ($orgId === '' || $asId === '') {
                     continue;
                 }
-                $name = $this->firstString($server, ['customerFriendlyName', 'customer_friendly_name', 'name']);
-                if ($name === '') {
-                    $name = $this->firstString($row, ['customerFriendlyName', 'organisationName', 'organisation_name', 'name', 'tradeName']);
-                }
+                $name = $this->participantName($server, $row);
                 $items[] = [
                     'organisation_id' => $orgId,
                     'authorisation_server_id' => $asId,
@@ -1010,27 +1087,52 @@ class LinaOpenxClient
             return $items;
         }
 
-        $asId = $this->firstString($row, ['authorisationServerId', 'authorisation_server_id', 'asId', 'as_id']);
-        if ($asId === '' && is_array($row['authorisationServer'] ?? null)) {
-            $asId = $this->firstString($row['authorisationServer'], ['authorisationServerId', 'id', 'asId']);
+        $asId = $this->firstString($row, ['authorisationServerId', 'authorisation_server_id', 'authorizationServerId', 'asId', 'as_id']);
+        $authorisationServer = $this->arrayValue($row, ['authorisationServer', 'authorizationServer']);
+        if ($asId === '' && is_array($authorisationServer)) {
+            $asId = $this->firstString($authorisationServer, ['authorisationServerId', 'id', 'asId']);
         }
         if ($orgId === '' || $asId === '') {
             return [];
         }
-        $name = $this->firstString($row, [
-            'customerFriendlyName',
-            'customer_friendly_name',
-            'organisationName',
-            'organisation_name',
-            'name',
-            'tradeName',
-        ]);
+        $name = $this->participantName($row, $row);
 
         return [[
             'organisation_id' => $orgId,
             'authorisation_server_id' => $asId,
             'name' => $name !== '' ? $name : $orgId,
         ]];
+    }
+
+    /**
+     * @param  array<string, mixed>  $primary
+     * @param  array<string, mixed>  $fallback
+     */
+    private function participantName(array $primary, array $fallback): string
+    {
+        $name = $this->firstString($primary, [
+            'customerFriendlyName',
+            'customer_friendly_name',
+            'organisationName',
+            'organisation_name',
+            'registeredName',
+            'legalEntityName',
+            'name',
+            'tradeName',
+        ]);
+        if ($name !== '' || $primary === $fallback) {
+            return $name;
+        }
+
+        return $this->firstString($fallback, [
+            'customerFriendlyName',
+            'organisationName',
+            'organisation_name',
+            'registeredName',
+            'legalEntityName',
+            'name',
+            'tradeName',
+        ]);
     }
 
     /**
