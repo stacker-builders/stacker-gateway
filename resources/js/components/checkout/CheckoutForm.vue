@@ -2812,7 +2812,12 @@ function submit() {
             return;
         }
         if (isLinaOpenxPixAuto.value) {
-            if (linaPixAutoParticipants.value.length > 1 && (!linaOrganisationId.value || !linaAuthorisationServerId.value)) {
+            if (linaPixAutoParticipants.value.length === 0) {
+                checkoutSubmitting.value = false;
+                form.setError('payment_method', 'Não foi possível carregar os bancos para o PIX automático. Recarregue a página e tente novamente.');
+                return;
+            }
+            if (!linaOrganisationId.value || !linaAuthorisationServerId.value) {
                 checkoutSubmitting.value = false;
                 form.setError('payment_method', 'Selecione o banco para autorizar o PIX automático.');
                 return;
@@ -3336,7 +3341,7 @@ function submit() {
                 v-if="isLinaOpenxPixAuto && linaPixAutoParticipants.length > 1"
                 class="mt-3 space-y-2"
             >
-                <label for="lina-pix-auto-bank" class="block text-sm font-medium text-gray-700">Banco para o débito</label>
+                <label for="lina-pix-auto-bank" class="block text-sm font-medium text-gray-700">Banco para autorizar o PIX automático</label>
                 <select
                     id="lina-pix-auto-bank"
                     v-model="linaBankKey"
@@ -3352,6 +3357,12 @@ function submit() {
                     </option>
                 </select>
             </div>
+            <p
+                v-else-if="isLinaOpenxPixAuto && linaPixAutoParticipants.length === 0"
+                class="mt-3 text-sm font-medium text-amber-700"
+            >
+                Não foi possível carregar os bancos para o PIX automático. Recarregue a página e tente novamente.
+            </p>
             <p v-if="form.errors.payment_method" class="text-sm font-medium text-red-600">{{ form.errors.payment_method }}</p>
 
             <!-- Formulário de cartão (Stripe Elements ou campos Efí) -->
