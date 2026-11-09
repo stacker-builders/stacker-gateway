@@ -119,6 +119,7 @@ const props = defineProps({
         default: () => ({ pix: null, card: null, boleto: null, pix_auto: null }),
     },
     cajupay_credential_keys: { type: Array, default: () => [] },
+    cajupay_gross_up_payout_fee: { type: Boolean, default: false },
 });
 
 const cajupayGateway = computed(() => (props.gateways || []).find((g) => g.slug === 'cajupay') ?? null);
@@ -2355,6 +2356,7 @@ function submitSettlement() {
             :gateway="cajupayGateway"
             :accounts="props.cajupay_accounts"
             :credential-keys-prop="props.cajupay_credential_keys"
+            :gross-up-payout-fee="props.cajupay_gross_up_payout_fee"
             :platform-totp-enabled="platformTotpEnabled"
             @close="closeCajuPaySidebar"
             @saved="onCajuPayAccountSaved"
