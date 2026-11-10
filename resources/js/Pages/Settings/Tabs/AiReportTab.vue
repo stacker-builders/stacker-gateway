@@ -4,7 +4,7 @@ defineProps({
 });
 
 const providers = [
-    { id: 'gemini', label: 'Gemini', hint: 'Chave do Google AI Studio' },
+    { id: 'gemini', label: 'Gemini', hint: 'Gemini 3.5 Flash Lite · chave do Google AI Studio' },
     { id: 'openai', label: 'OpenAI', hint: 'Chave da platform.openai.com' },
 ];
 </script>

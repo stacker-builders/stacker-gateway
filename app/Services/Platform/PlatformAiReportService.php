@@ -13,7 +13,7 @@ class PlatformAiReportService
 {
     public const OPENAI_MODEL = 'gpt-4o-mini';
 
-    public const GEMINI_MODEL = 'gemini-2.5-flash';
+    public const GEMINI_MODEL = 'gemini-3.5-flash-lite';
 
     public function analyze(string $period, ?string $from, ?string $to): string
     {
@@ -254,6 +254,9 @@ class PlatformAiReportService
                     'generationConfig' => [
                         'temperature' => 0.3,
                         'maxOutputTokens' => 1400,
+                        'thinkingConfig' => [
+                            'thinkingLevel' => 'minimal',
+                        ],
                     ],
                 ]);
         } catch (\Throwable) {
@@ -274,9 +277,10 @@ class PlatformAiReportService
         $text = '';
         if (is_array($parts)) {
             foreach ($parts as $part) {
-                if (is_array($part)) {
-                    $text .= (string) ($part['text'] ?? '');
+                if (! is_array($part) || ! empty($part['thought'])) {
+                    continue;
                 }
+                $text .= (string) ($part['text'] ?? '');
             }
         }
         $text = trim($text);
