@@ -121,9 +121,11 @@ class LinaOpenxPixAutoService
                 ],
             ],
         ];
-        if ($creditor['personType'] === 'PESSOA_JURIDICA') {
+        // businessEntity é a empresa do pagador. Conta PF não envia o campo.
+        // O CNPJ da plataforma fica só em creditors.
+        if (strlen($payerDocument) === 14) {
             $recurringConsent['businessEntity'] = [
-                'document' => $this->documentBlock($creditor['cpfCnpj']),
+                'document' => $this->documentBlock($payerDocument),
             ];
         }
 
