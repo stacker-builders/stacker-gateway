@@ -23,6 +23,7 @@ import {
     Filter,
     AlertTriangle,
     ExternalLink,
+    Sparkles,
 } from 'lucide-vue-next';
 
 defineOptions({ layout: LayoutPlatform });
@@ -81,6 +82,7 @@ const props = defineProps({
         default: () => ({ granularity: 'hour', compare: false, points: [] }),
     },
     grafico_vendas: { type: Array, default: () => [] },
+    ai_report_available: { type: Boolean, default: false },
     ultimas_transacoes: { type: Array, default: () => [] },
 });
 
@@ -88,6 +90,11 @@ const valuesVisible = ref(true);
 const isDarkMode = ref(false);
 const chartMetric = ref('volume');
 const showPreviousSeries = ref(true);
+const reportOpen = ref(false);
+const reportLoading = ref(false);
+const reportText = ref('');
+const reportError = ref('');
+const reportProviderLabel = ref('');
 const sellerSort = ref('volume');
 const productSort = ref('volume');
 
@@ -149,6 +156,36 @@ function setPeriod(value) {
         return;
     }
     router.get('/plataforma/dashboard', { period: value }, { preserveState: false });
+}
+
+watch(() => [props.period, props.from, props.to], () => {
+    reportOpen.value = false;
+    reportText.value = '';
+    reportError.value = '';
+    reportProviderLabel.value = '';
+});
+
+async function generateAiReport() {
+    reportOpen.value = true;
+    reportLoading.value = true;
+    reportError.value = '';
+    reportText.value = '';
+    try {
+        const res = await window.axios.post('/plataforma/dashboard/relatorio-ia', {
+            period: props.period,
+            from: props.from,
+            to: props.to,
+        }, { timeout: 60000 });
+        reportText.value = res?.data?.analysis || '';
+        reportProviderLabel.value = res?.data?.provider_label || '';
+        if (!reportText.value) {
+            reportError.value = 'A análise voltou vazia. Tente de novo.';
+        }
+    } catch (e) {
+        reportError.value = e?.response?.data?.message || 'Não foi possível gerar o relatório.';
+    } finally {
+        reportLoading.value = false;
+    }
 }
 
 function applyCustomPeriod() {
@@ -347,6 +384,16 @@ const paymentMax = computed(() => Math.max(1, ...props.payment_methods.map((m) =
             </div>
             <div class="flex flex-wrap items-center gap-2">
                 <button
+                    v-if="ai_report_available"
+                    type="button"
+                    class="inline-flex h-9 items-center gap-2 rounded-lg bg-[var(--color-primary)] px-3 text-sm font-medium text-white disabled:opacity-60"
+                    :disabled="reportLoading"
+                    @click="generateAiReport"
+                >
+                    <Sparkles class="h-4 w-4" />
+                    {{ reportLoading ? 'Gerando...' : 'Relatório com IA' }}
+                </button>
+                <button
                     type="button"
                     :aria-label="valuesVisible ? 'Ocultar valores' : 'Mostrar valores'"
                     class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-white text-zinc-500 dark:border-zinc-600 dark:bg-zinc-800"
@@ -401,6 +448,19 @@ const paymentMax = computed(() => Math.max(1, ...props.payment_methods.map((m) =
                 </button>
             </form>
         </div>
+
+        <section
+            v-if="reportOpen"
+            class="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900/40"
+        >
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">Relatório com IA</h3>
+                <span v-if="reportProviderLabel" class="text-xs text-zinc-500">{{ reportProviderLabel }} · período da tela</span>
+            </div>
+            <p v-if="reportLoading" class="mt-3 text-sm text-zinc-500">Lendo os números do período e escrevendo a análise...</p>
+            <p v-else-if="reportError" class="mt-3 text-sm text-red-600 dark:text-red-400">{{ reportError }}</p>
+            <div v-else class="mt-3 whitespace-pre-wrap text-sm leading-6 text-zinc-800 dark:text-zinc-200">{{ reportText }}</div>
+        </section>
 
         <section class="space-y-3">
             <h3 class="text-xs font-semibold uppercase tracking-wide text-zinc-500">Financeiro</h3>

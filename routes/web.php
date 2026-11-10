@@ -407,6 +407,9 @@ Route::prefix('plataforma')->name('plataforma.')->group(function () {
     });
     Route::middleware(['auth', 'platform.admin', 'stacker.license'])->group(function () {
         Route::get('/dashboard', [\App\Http\Controllers\Platform\DashboardController::class, '__invoke'])->name('dashboard');
+        Route::post('/dashboard/relatorio-ia', [\App\Http\Controllers\Platform\DashboardController::class, 'aiReport'])
+            ->middleware('throttle:6,1')
+            ->name('dashboard.ai-report');
         Route::get('/meu-perfil', [\App\Http\Controllers\Platform\ProfileController::class, 'index'])->name('profile.index');
         Route::post('/meu-perfil', [\App\Http\Controllers\Platform\ProfileController::class, 'update'])->name('profile.update');
         Route::put('/meu-perfil/senha', [\App\Http\Controllers\Platform\ProfileController::class, 'updatePassword'])->name('profile.update-password');
