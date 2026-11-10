@@ -293,6 +293,10 @@ class LinaOpenxPixAutoTest extends TestCase
         }
         $this->seedCredential();
         $ctx = $this->makePixAutoContext();
+        $due = now()->addDays(5)->startOfDay();
+        $ctx['subscription']->update([
+            'current_period_end' => $due,
+        ]);
 
         Http::fake([
             'iam.linaob.com.br/*' => Http::response(['access_token' => 'tok', 'expires_in' => 900], 200),
@@ -301,21 +305,40 @@ class LinaOpenxPixAutoTest extends TestCase
             ], 201),
         ]);
 
-        $created = app(LinaOpenxPixAutoRenewalService::class)->ensureNextPayment($ctx['subscription'], $ctx['order']);
+        $created = app(LinaOpenxPixAutoRenewalService::class)->ensureNextPayment($ctx['subscription']->fresh(), $ctx['order']);
         $this->assertNotNull($created);
         $this->assertTrue((bool) $created->is_renewal);
         $this->assertSame('pay-renew', $created->gateway_id);
         $this->assertSame('urn:banco:consent:abc', $created->metadata['linaopenx_pix_auto_consent_id'] ?? null);
-        Http::assertSent(function ($r) {
+        Http::assertSent(function ($r) use ($due) {
             if ($r->method() !== 'POST' || ! str_ends_with(parse_url($r->url(), PHP_URL_PATH) ?? '', '/recurring-payments')) {
                 return false;
             }
             $data = $r->data();
 
             return ($data['recurringConsentId'] ?? null) === 'urn:banco:consent:abc'
+                && ($data['date'] ?? null) === $due->toDateString()
                 && ($data['localInstrument'] ?? null) === 'AUTO'
                 && ($data['authorisationFlow'] ?? null) === 'HYBRID_FLOW';
         });
+    }
+
+    public function test_ensure_next_payment_waits_until_two_to_ten_days_before_due(): void
+    {
+        if (! Schema::hasTable('orders') || ! Schema::hasTable('subscriptions')) {
+            $this->markTestSkipped('tables');
+        }
+        $this->seedCredential();
+        $ctx = $this->makePixAutoContext();
+
+        Http::fake([
+            'iam.linaob.com.br/*' => Http::response(['access_token' => 'tok', 'expires_in' => 900], 200),
+            'embedded-payment-manager.linaob.com.br/*' => Http::response(['data' => ['recurringPaymentId' => 'pay-early']], 201),
+        ]);
+
+        $created = app(LinaOpenxPixAutoRenewalService::class)->ensureNextPayment($ctx['subscription'], $ctx['order']);
+        $this->assertNull($created);
+        Http::assertNothingSent();
     }
 
     public function test_cancel_remote_patches_consent_revoked(): void
