@@ -75,8 +75,9 @@ class LinaOpenxPixAutoService
         $plan = $order->subscriptionPlan;
         $interval = self::intervalFromPlan($plan?->interval);
         $amount = $this->formatAmount((float) $order->amount);
-        $firstDate = now()->addDay()->toDateString();
-        $referenceStartDate = now()->addDay()->utc()->startOfDay()->format('Y-m-d\TH:i:s\Z');
+        // Primeiro débito vai no contrato e pode liquidar no dia da autorização.
+        $firstDate = now()->toDateString();
+        $referenceStartDate = now()->utc()->startOfDay()->format('Y-m-d\TH:i:s\Z');
         $payerName = trim((string) ($consumer['name'] ?? '')) ?: 'Cliente';
         $returnUrl = $this->signedReturnUrl($order);
         $info = $description !== '' ? $description : ('Assinatura PIX automático - Pedido #'.($order->public_reference ?: $order->id));
@@ -407,7 +408,13 @@ class LinaOpenxPixAutoService
         }
 
         try {
-            $posted = $this->postRecurringPaymentForOrder($order, $credentials, $consentId !== '' ? $consentId : (string) ($meta['linaopenx_pix_auto_consent_id'] ?? ''));
+            $posted = $this->postRecurringPaymentForOrder(
+                $order,
+                $credentials,
+                $consentId !== '' ? $consentId : (string) ($meta['linaopenx_pix_auto_consent_id'] ?? ''),
+                now()->toDateString(),
+                true
+            );
             $meta['linaopenx_pix_auto_first_payment_posted'] = true;
             $meta['linaopenx_pix_auto_first_payment_posted_at'] = now()->toIso8601String();
             if ($posted !== '') {
@@ -426,7 +433,7 @@ class LinaOpenxPixAutoService
     /**
      * @param  array<string, mixed>  $credentials
      */
-    public function postRecurringPaymentForOrder(Order $order, array $credentials, string $consentId, ?string $date = null): string
+    public function postRecurringPaymentForOrder(Order $order, array $credentials, string $consentId, ?string $date = null, bool $keepDate = false): string
     {
         $consentId = trim($consentId);
         if ($consentId === '') {
@@ -437,8 +444,11 @@ class LinaOpenxPixAutoService
             throw new \RuntimeException('Lina OpenX: credor incompleto para o débito.');
         }
 
-        $payDate = $date ?: now()->addDay()->toDateString();
-        if ($payDate <= now()->toDateString()) {
+        $payDate = trim((string) $date);
+        if ($payDate === '') {
+            $payDate = $keepDate ? now()->toDateString() : now()->addDay()->toDateString();
+        }
+        if (! $keepDate && $payDate <= now()->toDateString()) {
             $payDate = now()->addDay()->toDateString();
         }
 

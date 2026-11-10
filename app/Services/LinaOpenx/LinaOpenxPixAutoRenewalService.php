@@ -11,9 +11,14 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * Agenda o próximo débito OpenX (POST recurring-payments) no ciclo da assinatura.
+ * A cobrança seguinte só é criada entre 2 e 10 dias antes do vencimento, com a data original.
  */
 class LinaOpenxPixAutoRenewalService
 {
+    public const MIN_DAYS_BEFORE_DUE = 2;
+
+    public const MAX_DAYS_BEFORE_DUE = 10;
+
     public function __construct(
         private readonly LinaOpenxPixAutoService $pixAuto = new LinaOpenxPixAutoService()
     ) {}
@@ -32,6 +37,19 @@ class LinaOpenxPixAutoRenewalService
 
         [$periodStart, $periodEnd] = $this->nextPeriod($subscription, $plan);
         $periodEndStr = $periodEnd->toDateString();
+        $existingEarly = $this->findPendingRenewal($subscription, $periodEndStr);
+        if ($existingEarly !== null && trim((string) ($existingEarly->metadata['linaopenx_pix_auto_recurring_payment_id'] ?? '')) !== '') {
+            return $existingEarly;
+        }
+        if (! $this->withinAdvanceWindow($periodStart)) {
+            Log::debug('LinaOpenxPixAutoRenewalService: fora da janela de 2 a 10 dias', [
+                'subscription_id' => $subscription->id,
+                'due_date' => $periodStart->toDateString(),
+            ]);
+
+            return null;
+        }
+
         $lockKey = 'linaopenx_pix_auto_pay:'.$subscription->id.':'.$periodEndStr;
         if (! Cache::add($lockKey, 1, now()->addHours(12))) {
             return $this->findPendingRenewal($subscription, $periodEndStr);
@@ -63,7 +81,7 @@ class LinaOpenxPixAutoRenewalService
             }
 
             $payDate = $periodStart->toDateString();
-            $paymentId = $this->pixAuto->postRecurringPaymentForOrder($order, $credentials, $consentId, $payDate);
+            $paymentId = $this->pixAuto->postRecurringPaymentForOrder($order, $credentials, $consentId, $payDate, true);
 
             $meta = is_array($order->metadata) ? $order->metadata : [];
             $meta['checkout_payment_method'] = 'pix_auto';
@@ -130,6 +148,18 @@ class LinaOpenxPixAutoRenewalService
         };
 
         return [$start, $end];
+    }
+
+    public function withinAdvanceWindow(\DateTimeInterface $dueDate): bool
+    {
+        $today = now()->startOfDay();
+        $due = \Carbon\Carbon::parse($dueDate)->startOfDay();
+        if ($due->lt($today)) {
+            return false;
+        }
+        $daysUntil = (int) $today->diffInDays($due);
+
+        return $daysUntil >= self::MIN_DAYS_BEFORE_DUE && $daysUntil <= self::MAX_DAYS_BEFORE_DUE;
     }
 
     private function hasCompletedRenewalForPeriod(Subscription $subscription, string $periodEnd): bool
