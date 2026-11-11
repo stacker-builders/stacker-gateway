@@ -517,6 +517,7 @@ function onConversionPixelsReady() {
                             :logo-url="platformLogoUrl"
                             :app-name="appName"
                             :notice="platformNoticeForLocale"
+                            :t="t"
                             :secure-purchase-text="t('checkout.secure_purchase')"
                         />
                     </div>
