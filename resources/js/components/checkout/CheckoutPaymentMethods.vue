@@ -20,6 +20,25 @@ function getComponent(method) {
     return getMethodCardComponent(method);
 }
 
+function translate(key, fallback) {
+    const fn = props.t;
+    const value = typeof fn === 'function' ? fn(key) : '';
+    if (!value || value === key) return fallback;
+    return value;
+}
+
+function localizedMethod(method) {
+    if (!method || method.id !== 'card') return method;
+    const next = {
+        ...method,
+        label: translate('checkout.method_card', 'Cartão'),
+    };
+    if (method.hint) {
+        next.hint = translate('checkout.method_card_hint', method.hint);
+    }
+    return next;
+}
+
 const count = computed(() => (props.availablePaymentMethods || []).length);
 const gridClass = computed(() => {
     if (count.value <= 1) return 'grid-cols-1';
@@ -58,7 +77,7 @@ const isFirstOfThree = (index) => count.value === 3 && index === 0;
             >
                 <component
                     :is="getComponent(method)"
-                    :method="method"
+                    :method="localizedMethod(method)"
                     :selected="modelValue === method.id"
                     :primary-color="primaryColor"
                 />

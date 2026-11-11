@@ -1320,10 +1320,10 @@ watch(
 );
 
 watch(
-    () => [form.payment_method, isCardGatewayStripe.value, props.cardStripePublishableKey, props.cardStripeLinkEnabled],
+    () => [form.payment_method, isCardGatewayStripe.value, props.cardStripePublishableKey, props.cardStripeLinkEnabled, props.checkoutLocale],
     async ([method, isStripe]) => {
+        destroyStripeCardElement();
         if (method !== 'card' || !isStripe) {
-            destroyStripeCardElement();
             return;
         }
         await nextTick();
@@ -1333,8 +1333,8 @@ watch(
 );
 
 watch(
-    () => [form.payment_method, isCardGatewayMercadopago.value, props.cardMercadopagoPublicKey, props.checkoutTotalBrl, effectiveCardMaxInstallments.value],
-    async ([method, isMP, , totalBrl, maxInst], previous) => {
+    () => [form.payment_method, isCardGatewayMercadopago.value, props.cardMercadopagoPublicKey, props.checkoutTotalBrl, effectiveCardMaxInstallments.value, props.checkoutLocale],
+    async ([method, isMP, , totalBrl, maxInst, locale], previous) => {
         if (method !== 'card' || !isMP) {
             destroyMercadopagoBrick();
             return;
@@ -1342,10 +1342,12 @@ watch(
         await nextTick();
         const amount = Math.max(0.01, Number(totalBrl) || 0);
         const prevMax = Array.isArray(previous) ? previous[4] : undefined;
+        const prevLocale = Array.isArray(previous) ? previous[5] : undefined;
+        const localeChanged = Array.isArray(previous) && prevLocale !== locale;
         const ctrl = mercadopagoBrickController.value
             ?? (typeof window !== 'undefined' ? window.cardPaymentBrickController : null);
         // Preferir update() (doc Brick) em vez de remount quando só o valor muda.
-        if (ctrl && typeof ctrl.update === 'function' && mercadopagoBrickReady.value && prevMax === maxInst) {
+        if (!localeChanged && ctrl && typeof ctrl.update === 'function' && mercadopagoBrickReady.value && prevMax === maxInst) {
             try {
                 await ctrl.update({ amount });
                 return;
@@ -1854,11 +1856,31 @@ function onRefusedOtherPaymentMethod(e) {
     if (other) form.payment_method = other.id;
 }
 
+function checkoutLocaleTag() {
+    return String(props.checkoutLocale || 'pt_BR').replace('_', '-');
+}
+
+function stripeLocale() {
+    const tag = checkoutLocaleTag().toLowerCase();
+    if (tag.startsWith('en')) return 'en';
+    if (tag.startsWith('es')) return 'es';
+    if (tag.startsWith('it')) return 'it';
+    return 'pt-BR';
+}
+
+function mercadoPagoLocale() {
+    const tag = checkoutLocaleTag().toLowerCase();
+    if (tag.startsWith('en')) return 'en-US';
+    if (tag.startsWith('es')) return 'es-AR';
+    if (tag.startsWith('it')) return 'en-US';
+    return 'pt-BR';
+}
+
 async function initStripeCardElement() {
     if (!props.cardStripePublishableKey?.trim() || !stripeCardRef.value) return;
     try {
         const { loadStripe } = await import('@stripe/stripe-js');
-        const stripe = await loadStripe(props.cardStripePublishableKey.trim());
+        const stripe = await loadStripe(props.cardStripePublishableKey.trim(), { locale: stripeLocale() });
         if (!stripe) return;
         stripeInstance.value = stripe;
         const elements = stripe.elements();
@@ -2093,7 +2115,7 @@ async function loadMercadopagoBrick() {
 }
 
 async function initMercadopagoBrick() {
-    const mp = new window.MercadoPago(props.cardMercadopagoPublicKey.trim(), { locale: 'pt-BR' });
+    const mp = new window.MercadoPago(props.cardMercadopagoPublicKey.trim(), { locale: mercadoPagoLocale() });
     const bricksBuilder = mp.bricks();
     const amount = Math.max(0.01, Number(props.checkoutTotalBrl) || 0);
     const email = (form.email || '').trim() || undefined;
@@ -2228,7 +2250,7 @@ async function getMercadoPagoCardToken() {
     if (!publicKey) throw new Error('Mercado Pago não configurado (Public Key).');
 
     await loadMercadoPagoScript();
-    const mp = new window.MercadoPago(publicKey, { locale: 'pt-BR' });
+    const mp = new window.MercadoPago(publicKey, { locale: mercadoPagoLocale() });
 
     const cardNumber = cardNumberDigits.value.replace(/\D/g, '');
     const month = cardExpMonth.value.padStart(2, '0');
@@ -3430,7 +3452,7 @@ function submit() {
                 <!-- Asaas: 2 etapas (cartão + endereço com CEP) -->
                 <div v-else-if="isCardGatewayAsaas" class="space-y-4">
                     <AsaasCard
-                        :method="checkoutPaymentMethodsForDevice.find((m) => m.id === 'card') || { id: 'card', label: 'Cartão' }"
+                        :method="checkoutPaymentMethodsForDevice.find((m) => m.id === 'card') || { id: 'card', label: t('checkout.method_card') || 'Cartão' }"
                         :selected="true"
                         :primary-color="primaryColor"
                         :card-data="asaasCardData"
@@ -3494,7 +3516,7 @@ function submit() {
                             </div>
                         </div>
                         <div class="relative sm:col-span-2">
-                            <label for="card-number-pagarme" class="mb-2 block text-sm font-medium text-gray-700">{{ t('checkout.card_number') || 'Número do cartão' }}</label>
+                            <label for="card-number-pagarme" class="mb-2 block text-sm font-medium text-gray-700">{{ t('checkout.card_pan_placeholder') || t('checkout.card_number') || 'Número do cartão' }}</label>
                             <div class="flex flex-nowrap items-stretch overflow-hidden rounded-xl border-2 border-gray-100 bg-gray-50/80 transition focus-within:border-gray-200 focus-within:bg-white focus-within:ring-2 focus-within:ring-offset-0">
                                 <span class="pointer-events-none flex h-full min-h-[3.25rem] w-10 shrink-0 items-center justify-center text-gray-400">
                                     <img
@@ -3515,7 +3537,7 @@ function submit() {
                                         autocomplete="cc-number"
                                         maxlength="23"
                                         class="min-w-0 flex-1 border-0 bg-transparent py-3.5 pr-4 pl-2 text-base font-medium text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0"
-                                        :placeholder="t('checkout.card_number_placeholder') || '0000 0000 0000 0000'"
+                                        :placeholder="t('checkout.card_pan_placeholder') || t('checkout.card_number') || 'Número do cartão'"
                                         @input="onCardNumberInput"
                                         @blur="onCardNumberBlur"
                                     />
@@ -3668,7 +3690,7 @@ function submit() {
                         </div>
                     </div>
                     <div class="relative sm:col-span-2">
-                        <label for="card-number" class="mb-2 block text-sm font-medium text-gray-700">{{ t('checkout.card_number') || 'Número do cartão' }}</label>
+                        <label for="card-number" class="mb-2 block text-sm font-medium text-gray-700">{{ t('checkout.card_pan_placeholder') || t('checkout.card_number') || 'Número do cartão' }}</label>
                         <div class="flex flex-nowrap items-stretch overflow-hidden rounded-xl border-2 border-gray-100 bg-gray-50/80 transition focus-within:border-gray-200 focus-within:bg-white focus-within:ring-2 focus-within:ring-offset-0">
                             <span class="pointer-events-none flex h-full min-h-[3.25rem] w-10 shrink-0 items-center justify-center text-gray-400">
                                 <img
@@ -3689,7 +3711,7 @@ function submit() {
                                     autocomplete="cc-number"
                                     maxlength="19"
                                     class="min-w-0 flex-1 border-0 bg-transparent py-3.5 pr-4 pl-2 text-base font-medium text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0"
-                                    :placeholder="t('checkout.card_number_placeholder') || '0000 0000 0000 0000'"
+                                    :placeholder="t('checkout.card_pan_placeholder') || t('checkout.card_number') || 'Número do cartão'"
                                     @input="onCardNumberInput"
                                     @blur="onCardNumberBlur"
                                 />
@@ -3961,6 +3983,7 @@ function submit() {
                 :logo-url="platformLogoUrl"
                 :app-name="appName"
                 :notice="platformCheckoutNotice"
+                :t="t"
                 :secure-purchase-text="t('checkout.secure_purchase')"
             />
         </footer>

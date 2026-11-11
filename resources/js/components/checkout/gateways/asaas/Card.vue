@@ -183,7 +183,7 @@ function goToStep2() {
 
 <template>
     <div class="min-w-0 flex-1 space-y-4">
-        <span v-if="selected" class="block font-medium text-gray-900">{{ method?.label || 'Cartão de crédito' }}</span>
+        <span v-if="selected" class="block font-medium text-gray-900">{{ t('checkout.method_card') || method?.label || 'Cartão' }}</span>
 
         <!-- Etapa 1: Dados do cartão (layout igual à Efí: número + validade + CVV no mesmo bloco) -->
         <div v-show="step === 1" class="space-y-4">
@@ -204,7 +204,7 @@ function goToStep2() {
                 </div>
             </div>
             <div>
-                <label for="asaas-card-number" class="mb-2 block text-sm font-medium text-gray-700">{{ t('checkout.card_number') || 'Número do cartão' }}</label>
+                <label for="asaas-card-number" class="mb-2 block text-sm font-medium text-gray-700">{{ t('checkout.card_pan_placeholder') || t('checkout.card_number') || 'Número do cartão' }}</label>
                 <div class="flex flex-nowrap items-stretch overflow-hidden rounded-xl border-2 border-gray-100 bg-gray-50/80 transition focus-within:border-gray-200 focus-within:bg-white focus-within:ring-2 focus-within:ring-offset-0">
                     <span class="pointer-events-none flex h-full min-h-[3.25rem] w-10 shrink-0 items-center justify-center text-gray-400">
                         <img
@@ -225,7 +225,7 @@ function goToStep2() {
                             autocomplete="cc-number"
                             maxlength="19"
                             class="min-w-0 flex-1 border-0 bg-transparent py-3.5 pr-4 pl-2 text-base font-medium text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0"
-                            :placeholder="t('checkout.card_number_placeholder') || '0000 0000 0000 0000'"
+                            :placeholder="t('checkout.card_pan_placeholder') || t('checkout.card_number') || 'Número do cartão'"
                             @input="onCardNumberInput"
                             @blur="onCardNumberBlur"
                         />
