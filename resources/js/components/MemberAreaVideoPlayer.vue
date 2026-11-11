@@ -14,7 +14,7 @@ import {
     providerUsesUnifiedEmbedControls,
 } from '@/lib/memberVideoPlayback';
 import { ensureVidstackLoaded } from '@/lib/vidstackLoader';
-import { Maximize2, Minimize2, Play, Pause, Monitor, Gauge, RotateCcw, RotateCw } from 'lucide-vue-next';
+import { Maximize2, Minimize2, Play, Pause, Monitor, Gauge, RotateCcw, RotateCw, Captions } from 'lucide-vue-next';
 
 const props = defineProps({
     src: { type: String, default: '' },
@@ -114,6 +114,8 @@ let ytApiPromise = null;
 let ytApplyQualityTimer = null;
 let ytProgressTimer = null;
 let ytControlsHideTimer = null;
+let ytCaptionTimers = [];
+let ytCaptionPoll = 0;
 
 const QUALITY_STORAGE_KEY = 'member-area-youtube-quality';
 const SPEED_STORAGE_KEY = 'member-area-youtube-speed';
@@ -136,6 +138,8 @@ const ytScrubbing = ref(false);
 const ytMaskActive = ref(false);
 let ytMaskTimer = null;
 const ytReady = ref(false);
+/** Legenda começa desligada em cada vídeo. O aluno liga só se quiser. */
+const captionsOn = ref(false);
 const ytLoading = ref(false);
 const ytLoadError = ref(false);
 let ytFallbackTimer = null;
@@ -267,6 +271,79 @@ function closeYtMenus() {
     speedMenuOpen.value = false;
 }
 
+function clearCaptionTimers() {
+    ytCaptionTimers.forEach((id) => clearTimeout(id));
+    ytCaptionTimers = [];
+}
+
+function youtubeCaptionTracks() {
+    try {
+        const tracks = ytPlayer?.getOption?.('captions', 'tracklist');
+        return Array.isArray(tracks) ? tracks : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+function preferredCaptionTrack(tracks) {
+    const list = tracks.filter((track) => track && track.languageCode);
+    if (!list.length) return null;
+    const rank = (track) => {
+        const lang = String(track.languageCode || '').toLowerCase();
+        const auto = String(track.kind || '').toLowerCase() === 'asr' ? 1 : 0;
+        if (lang.startsWith('pt')) return auto;
+        return 10 + auto;
+    };
+    return [...list].sort((a, b) => rank(a) - rank(b))[0];
+}
+
+function applyYoutubeCaptions() {
+    if (!ytPlayer) return;
+    try {
+        if (!captionsOn.value) {
+            if (typeof ytPlayer.setOption === 'function') {
+                ytPlayer.setOption('captions', 'track', {});
+            }
+            return;
+        }
+        if (typeof ytPlayer.loadModule === 'function') {
+            ytPlayer.loadModule('captions');
+        }
+        const track = preferredCaptionTrack(youtubeCaptionTracks());
+        if (!track || typeof ytPlayer.setOption !== 'function') return;
+        const option = { languageCode: track.languageCode };
+        if (track.kind) option.kind = track.kind;
+        ytPlayer.setOption('captions', 'track', option);
+    } catch (_) {}
+}
+
+function enforceCaptionsOff() {
+    if (captionsOn.value) return;
+    applyYoutubeCaptions();
+    clearCaptionTimers();
+    for (const ms of [200, 700, 1500]) {
+        ytCaptionTimers.push(setTimeout(() => {
+            if (!captionsOn.value) applyYoutubeCaptions();
+        }, ms));
+    }
+}
+
+function toggleCaptions() {
+    captionsOn.value = !captionsOn.value;
+    closeYtMenus();
+    showControls();
+    clearCaptionTimers();
+    if (!captionsOn.value) {
+        try {
+            ytPlayer?.unloadModule?.('captions');
+        } catch (_) {}
+    }
+    applyYoutubeCaptions();
+    if (captionsOn.value) {
+        ytCaptionTimers.push(setTimeout(() => applyYoutubeCaptions(), 400));
+    }
+}
+
 function toggleQualityMenu() {
     const next = !qualityMenuOpen.value;
     closeYtMenus();
@@ -312,6 +389,9 @@ function destroyYoutubePlayer() {
         clearTimeout(ytControlsHideTimer);
         ytControlsHideTimer = null;
     }
+    clearCaptionTimers();
+    ytCaptionPoll = 0;
+    captionsOn.value = false;
     try {
         if (ytPlayer && typeof ytPlayer.destroy === 'function') ytPlayer.destroy();
     } catch (_) {}
@@ -409,6 +489,7 @@ async function initYoutubePlayer() {
             playsinline: 1,
             rel: 0,
             modestbranding: 1,
+            cc_load_policy: 0,
             iv_load_policy: 3,
             disablekb: 1,
             fs: 0,
@@ -426,6 +507,7 @@ async function initYoutubePlayer() {
                 selectedSpeed.value = speedToApply;
                 saveSpeed(speedToApply);
                 applyYoutubeSpeed(speedToApply);
+                enforceCaptionsOff();
                 // Aplicar qualidade em diferentes momentos melhora a chance de pegar (como na antiga).
                 applyYoutubeQuality(selectedQuality.value);
                 ytApplyQualityTimer = setTimeout(() => applyYoutubeQuality(selectedQuality.value), 800);
@@ -438,8 +520,16 @@ async function initYoutubePlayer() {
                         if (typeof d === 'number' && d > 0) ytDuration.value = d;
                         const t = ytPlayer.getCurrentTime?.();
                         if (typeof t === 'number' && t >= 0) ytCurrentTime.value = t;
+                        ytCaptionPoll += 1;
+                        if (!captionsOn.value && ytCaptionPoll % 4 === 0) {
+                            applyYoutubeCaptions();
+                        }
                     } catch (_) {}
                 }, 350);
+            },
+            onApiChange: () => {
+                if (captionsOn.value) applyYoutubeCaptions();
+                else enforceCaptionsOff();
             },
             onStateChange: (e) => {
                 // PLAYING
@@ -448,6 +538,8 @@ async function initYoutubePlayer() {
                     ytPosterVisible.value = false;
                     scheduleHideControls();
                     applyYoutubeSpeed(selectedSpeed.value);
+                    if (captionsOn.value) applyYoutubeCaptions();
+                    else enforceCaptionsOff();
                     if (ytApplyQualityTimer) clearTimeout(ytApplyQualityTimer);
                     ytApplyQualityTimer = setTimeout(() => applyYoutubeQuality(selectedQuality.value), 500);
                     markUserPlayed();
@@ -1197,6 +1289,17 @@ function onContextMenu(e) {
                         <Minimize2 v-else class="h-4 w-4" aria-hidden="true" />
                     </button>
 
+                    <button
+                        type="button"
+                        class="yt-icon-btn"
+                        :class="{ 'is-on': captionsOn }"
+                        :aria-pressed="captionsOn"
+                        :aria-label="captionsOn ? 'Desligar legendas' : 'Ligar legendas'"
+                        @click="toggleCaptions"
+                    >
+                        <Captions class="h-4 w-4" aria-hidden="true" />
+                    </button>
+
                     <div class="yt-menu-wrap">
                         <button
                             type="button"
@@ -1648,6 +1751,11 @@ function onContextMenu(e) {
 }
 .yt-icon-btn:active {
     transform: scale(0.98);
+}
+.yt-icon-btn.is-on {
+    background: rgba(255, 255, 255, 0.28);
+    border-color: rgba(255, 255, 255, 0.4);
+    color: #fff;
 }
 .yt-time {
     font-size: 12px;
