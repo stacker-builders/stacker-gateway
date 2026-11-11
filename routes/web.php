@@ -774,6 +774,7 @@ Route::prefix('plataforma')->name('plataforma.')->group(function () {
         Route::get('/verificacoes-kyc/usuario/{user}', [\App\Http\Controllers\Platform\KycVerificationsController::class, 'show'])->name('kyc.show');
         Route::post('/verificacoes-kyc/usuario/{user}/aprovar', [\App\Http\Controllers\Platform\KycVerificationsController::class, 'approve'])->name('kyc.approve')->middleware('throttle:30,1');
         Route::post('/verificacoes-kyc/usuario/{user}/rejeitar', [\App\Http\Controllers\Platform\KycVerificationsController::class, 'reject'])->name('kyc.reject')->middleware('throttle:30,1');
+        Route::post('/verificacoes-kyc/usuario/{user}/rejeitar-bloquear', [\App\Http\Controllers\Platform\KycVerificationsController::class, 'rejectAndBlock'])->name('kyc.reject-block')->middleware('throttle:30,1');
         Route::post('/verificacoes-kyc/usuario/{user}/aprovar-migracao-pj', [\App\Http\Controllers\Platform\KycVerificationsController::class, 'approvePjConversion'])->name('kyc.approve-pj-conversion')->middleware('throttle:30,1');
         Route::post('/verificacoes-kyc/usuario/{user}/rejeitar-migracao-pj', [\App\Http\Controllers\Platform\KycVerificationsController::class, 'rejectPjConversion'])->name('kyc.reject-pj-conversion')->middleware('throttle:30,1');
         Route::post('/verificacoes-kyc/usuario/{user}/consultar-cnpj', [\App\Http\Controllers\Platform\KycVerificationsController::class, 'refreshCnpj'])->name('kyc.refresh-cnpj')->middleware('throttle:20,1');

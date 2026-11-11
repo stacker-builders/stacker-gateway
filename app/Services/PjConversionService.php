@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Support\BlockedDocuments;
 use App\Support\BrazilianDocuments;
 use App\Support\CnpjLookup;
 use App\Support\KycRequiredDocuments;
@@ -38,6 +39,12 @@ class PjConversionService
         if ($nature === null) {
             throw ValidationException::withMessages([
                 'company_legal_nature' => 'Informe se a empresa é MEI ou demais naturezas.',
+            ]);
+        }
+
+        if ($blocked = BlockedDocuments::messageFor($cnpj)) {
+            throw ValidationException::withMessages([
+                'cnpj' => $blocked,
             ]);
         }
 
@@ -185,6 +192,12 @@ class PjConversionService
                 'pj_conversion' => 'CNPJ da migração inválido.',
             ]);
         }
+        if ($blocked = BlockedDocuments::messageFor($cnpj)) {
+            throw ValidationException::withMessages([
+                'pj_conversion' => $blocked,
+            ]);
+        }
+
         if (PjConversion::cnpjTakenByAnotherUser($cnpj, (int) $subject->id)) {
             throw ValidationException::withMessages([
                 'pj_conversion' => 'Este CNPJ já está cadastrado em outra conta.',

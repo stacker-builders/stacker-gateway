@@ -207,6 +207,13 @@ function submitRejectDirect() {
     });
 }
 
+function submitRejectAndBlockDirect() {
+    rejectForm.post(`${kycActionBase()}/rejeitar-bloquear`, {
+        preserveScroll: true,
+        onSuccess: () => rejectForm.reset('reason'),
+    });
+}
+
 function submitRejectPjDirect() {
     conversionRejectForm.post(`${kycActionBase()}/rejeitar-migracao-pj`, {
         preserveScroll: true,
@@ -242,6 +249,20 @@ function submitReject() {
         return;
     }
     submitRejectDirect();
+}
+
+function submitRejectAndBlock() {
+    if (!rejectForm.reason?.trim()) {
+        rejectForm.setError('reason', 'Informe o motivo para recusar e bloquear.');
+        return;
+    }
+    if (!confirm('Recusar esta verificação e bloquear o CPF/CNPJ? Essa pessoa não poderá cadastrar de novo com o mesmo documento.')) return;
+    if (props.platform_totp_enabled) {
+        pendingAction.value = 'reject-block';
+        stepUpOpen.value = true;
+        return;
+    }
+    submitRejectAndBlockDirect();
 }
 
 function submitRejectPjConversion() {
@@ -295,12 +316,16 @@ function onStepUpConfirm(payload) {
         return;
     }
 
+    const rejectUrl = pendingAction.value === 'reject-block'
+        ? `${kycActionBase()}/rejeitar-bloquear`
+        : `${kycActionBase()}/rejeitar`;
+
     rejectForm
         .transform((data) => ({
             ...data,
             totp_code: payload.totp_code,
         }))
-        .post(`${kycActionBase()}/rejeitar`, {
+        .post(rejectUrl, {
             preserveScroll: true,
             onSuccess: () => rejectForm.reset('reason'),
             onFinish: closeStepUp,
@@ -698,6 +723,11 @@ function onStepUpConfirm(payload) {
             <p v-if="!documents.length" class="mt-2 text-sm text-zinc-500">Nenhum arquivo enviado.</p>
         </div>
 
+        <div v-if="merchant.kyc_status === 'blocked'" class="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-950 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">
+            <strong>CPF/CNPJ bloqueados.</strong>
+            Novo cadastro com estes documentos será recusado com a mensagem de que já existem na plataforma e estão bloqueados.
+        </div>
+
         <div v-if="merchant.kyc_rejection_reason" class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
             <strong>Motivo da última rejeição:</strong>
             {{ merchant.kyc_rejection_reason }}
@@ -740,7 +770,7 @@ function onStepUpConfirm(payload) {
                 </Button>
             </div>
             <form class="space-y-2 border-t border-amber-200 pt-4 dark:border-amber-800" @submit.prevent="submitReject">
-                <label class="block text-sm font-medium text-zinc-800 dark:text-zinc-200">Rejeitar (informe o motivo)</label>
+                <label class="block text-sm font-medium text-zinc-800 dark:text-zinc-200">Motivo (obrigatório para rejeitar ou bloquear)</label>
                 <textarea
                     v-model="rejectForm.reason"
                     required
@@ -749,14 +779,27 @@ function onStepUpConfirm(payload) {
                 />
                 <p v-if="rejectForm.errors.reason" class="text-sm text-red-600">{{ rejectForm.errors.reason }}</p>
                 <p v-if="rejectForm.errors.totp_code" class="text-sm text-red-600">{{ rejectForm.errors.totp_code }}</p>
-                <Button
-                    type="submit"
-                    variant="outline"
-                    class="w-full border-red-300 text-red-800 hover:bg-red-50 sm:w-auto dark:border-red-800 dark:text-red-200"
-                    :disabled="rejectForm.processing"
-                >
-                    Rejeitar
-                </Button>
+                <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                    <Button
+                        type="submit"
+                        variant="outline"
+                        class="w-full border-red-300 text-red-800 hover:bg-red-50 sm:w-auto dark:border-red-800 dark:text-red-200"
+                        :disabled="rejectForm.processing"
+                    >
+                        Rejeitar
+                    </Button>
+                    <Button
+                        type="button"
+                        class="w-full bg-red-700 text-white hover:bg-red-800 sm:w-auto"
+                        :disabled="rejectForm.processing"
+                        @click="submitRejectAndBlock"
+                    >
+                        Recusar e Bloquear
+                    </Button>
+                </div>
+                <p class="text-xs text-zinc-600 dark:text-zinc-400">
+                    Recusar e bloquear impede novo cadastro com o mesmo CPF ou CNPJ. Se tentarem de novo, a mensagem será que o documento já existe na plataforma e está bloqueado. Rejeitar apenas permite reenviar os documentos.
+                </p>
             </form>
         </div>
 
@@ -765,16 +808,18 @@ function onStepUpConfirm(payload) {
             :open="stepUpOpen"
             :loading="stepUpLoading"
             :title="
-                pendingAction === 'reject' || pendingAction === 'reject-pj'
-                    ? pendingAction === 'reject-pj'
-                        ? 'Rejeitar migração para CNPJ'
-                        : 'Rejeitar verificação KYC'
-                    : pendingAction === 'approve-pj'
-                      ? 'Aprovar migração para CNPJ'
-                      : 'Aprovar verificação KYC'
+                pendingAction === 'reject-block'
+                    ? 'Recusar e bloquear CPF/CNPJ'
+                    : pendingAction === 'reject' || pendingAction === 'reject-pj'
+                      ? pendingAction === 'reject-pj'
+                          ? 'Rejeitar migração para CNPJ'
+                          : 'Rejeitar verificação KYC'
+                      : pendingAction === 'approve-pj'
+                        ? 'Aprovar migração para CNPJ'
+                        : 'Aprovar verificação KYC'
             "
             description="Informe o código 2FA do seu perfil de operador."
-            :confirm-label="pendingAction === 'reject' ? 'Rejeitar' : 'Aprovar'"
+            :confirm-label="pendingAction === 'reject-block' ? 'Recusar e bloquear' : pendingAction === 'reject' || pendingAction === 'reject-pj' ? 'Rejeitar' : 'Aprovar'"
             @close="closeStepUp"
             @confirm="onStepUpConfirm"
         />

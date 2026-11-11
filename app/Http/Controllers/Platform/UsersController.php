@@ -1519,6 +1519,12 @@ class UsersController extends Controller
 
     private function assertMerchantDocumentAvailable(User $user, string $digits, string $field): void
     {
+        if ($blocked = \App\Support\BlockedDocuments::messageFor($digits)) {
+            throw ValidationException::withMessages([
+                $field => $blocked,
+            ]);
+        }
+
         $taken = User::query()
             ->where('id', '!=', $user->id)
             ->where(function ($q) use ($digits) {
