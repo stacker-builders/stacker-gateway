@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\Models\Order;
 use App\Models\Withdrawal;
+use App\Services\OrderFeeBreakdownService;
 
 final class ApiWebhookPayloadBuilder
 {
@@ -18,6 +19,7 @@ final class ApiWebhookPayloadBuilder
             'event' => $eventName,
             'order_id' => $order->id,
             'amount' => (float) $order->amount,
+            'amount_net' => OrderFeeBreakdownService::forOrder($order)['net'],
             'status' => $order->status,
             'email' => $order->email,
             'metadata' => $order->metadata ?? [],
