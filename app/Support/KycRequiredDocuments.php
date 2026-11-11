@@ -36,9 +36,27 @@ class KycRequiredDocuments
     ];
 
     /**
+     * Conta aprovada antes das regras atuais: pode reenviar o conjunto vigente
+     * para voltar à análise e, depois da aprovação, solicitar saque.
+     */
+    public static function mayUpgradeLegacyDocuments(User $user): bool
+    {
+        if ((string) ($user->kyc_status ?? '') !== User::KYC_APPROVED) {
+            return false;
+        }
+
+        if (PjConversion::isCollectingOrPending($user)) {
+            return false;
+        }
+
+        return self::effectiveVersion($user) < self::VERSION_CURRENT;
+    }
+
+    /**
      * Versão efetiva das regras de documentos.
      * Contas já em análise/aprovadas mantêm a versão gravada (legado = 1).
      * Novos envios (not_submitted / rejected) usam a versão atual.
+     * Aprovadas no legado podem reenviar pela versão atual (mayUpgradeLegacyDocuments).
      */
     public static function effectiveVersion(User $user): int
     {
@@ -65,7 +83,7 @@ class KycRequiredDocuments
             return self::conversionKindsForUser($user);
         }
 
-        if (self::effectiveVersion($user) === self::VERSION_LEGACY) {
+        if (self::effectiveVersion($user) === self::VERSION_LEGACY && ! self::mayUpgradeLegacyDocuments($user)) {
             return self::legacyKindsForUser($user);
         }
 
@@ -239,7 +257,7 @@ class KycRequiredDocuments
             return self::hasAllRequiredForPjConversion($user);
         }
 
-        if (self::effectiveVersion($user) === self::VERSION_CURRENT) {
+        if (self::usesCurrentCompleteness($user)) {
             $cfg = KycRequirementSettings::resolved();
             $identityType = self::normalizeIdentityType($user->identity_document_type ?? null);
             if ($identityType === null || ! in_array($identityType, $cfg['allowed_identity_types'], true)) {
@@ -279,7 +297,7 @@ class KycRequiredDocuments
                 && self::normalizeCompanyNature(PjConversion::companyLegalNature($user) ?? $user->company_legal_nature ?? null) === null) {
                 $labels[] = 'natureza jurídica da empresa (MEI ou demais)';
             }
-        } elseif (self::effectiveVersion($user) === self::VERSION_CURRENT) {
+        } elseif (self::usesCurrentCompleteness($user)) {
             $cfg = KycRequirementSettings::resolved();
             $identityType = self::normalizeIdentityType($user->identity_document_type ?? null);
             if ($identityType === null || ! in_array($identityType, $cfg['allowed_identity_types'], true)) {
@@ -297,6 +315,12 @@ class KycRequiredDocuments
         }
 
         return array_values(array_unique($labels));
+    }
+
+    private static function usesCurrentCompleteness(User $user): bool
+    {
+        return self::effectiveVersion($user) === self::VERSION_CURRENT
+            || self::mayUpgradeLegacyDocuments($user);
     }
 
     public static function labelForKind(string $kind, ?User $user = null): string

@@ -194,7 +194,10 @@ class SellerFinancialController extends Controller
         }
 
         $kycFinanceLocked = Schema::hasColumn('users', 'kyc_status')
-            && ! $subject->isMerchantOperationallyApproved();
+            && (
+                ! $subject->isMerchantOperationallyApproved()
+                || \App\Support\KycRequiredDocuments::mayUpgradeLegacyDocuments($subject)
+            );
 
         $requiredWithdrawalNet = WithdrawalMinimumService::effectiveRequiredMinNet();
         $withdrawalMinimumGross = $requiredWithdrawalNet > 0
@@ -211,6 +214,8 @@ class SellerFinancialController extends Controller
                 'document' => $user->document !== null && $user->document !== '' ? (string) $user->document : null,
             ],
             'kyc_status' => Schema::hasColumn('users', 'kyc_status') ? ($subject->kyc_status ?? User::KYC_NOT_SUBMITTED) : null,
+            'kyc_document_upgrade' => Schema::hasColumn('users', 'kyc_status')
+                && \App\Support\KycRequiredDocuments::mayUpgradeLegacyDocuments($subject),
             'kyc_person_type' => Schema::hasColumn('users', 'person_type') ? ($subject->person_type ?? 'pf') : 'pf',
             'kyc_rejection_reason' => Schema::hasColumn('users', 'kyc_rejection_reason')
                 ? ($subject->kyc_rejection_reason ?? null)
@@ -416,6 +421,10 @@ class SellerFinancialController extends Controller
         if (Schema::hasColumn('users', 'kyc_status') && ! $user->kycSubjectUser()->isMerchantOperationallyApproved()) {
             return redirect()->route('financeiro.seller.index')
                 ->with('error', 'Conclua a verificação de identidade (KYC) e aguarde aprovação da plataforma para solicitar saques.');
+        }
+        if (Schema::hasColumn('users', 'kyc_status') && \App\Support\KycRequiredDocuments::mayUpgradeLegacyDocuments($user->kycSubjectUser())) {
+            return redirect()->route('financeiro.seller.index')
+                ->with('error', 'Envie os documentos de verificação atualizados e aguarde a aprovação da plataforma para solicitar saques.');
         }
 
         if (! \App\Services\Withdrawal\WithdrawalPolicyService::allowsRequestAt()) {

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Support\KycRequiredDocuments;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -94,6 +95,12 @@ class MerchantOperationalGuard
         if (Schema::hasColumn('users', 'kyc_status') && ! $subject->hasApprovedKyc()) {
             throw ValidationException::withMessages([
                 'amount' => 'Conclua a verificação de identidade (KYC) para solicitar saques.',
+            ]);
+        }
+
+        if (Schema::hasColumn('users', 'kyc_status') && KycRequiredDocuments::mayUpgradeLegacyDocuments($subject)) {
+            throw ValidationException::withMessages([
+                'amount' => 'Envie os documentos de verificação atualizados e aguarde a aprovação da plataforma para solicitar saques.',
             ]);
         }
 
