@@ -27,6 +27,7 @@ use App\Support\PublicAppUrl;
 use App\Support\SellerDashboardTemplate;
 use App\Support\PlatformGa4Settings;
 use App\Support\SellerPanelSupportSettings;
+use App\Support\KycRequiredDocuments;
 use App\Support\ReferralProgramSettings;
 use App\Support\ProductApprovalSettings;
 use App\Services\ProductApprovalService;
@@ -226,8 +227,11 @@ class HandleInertiaRequests extends Middleware
         }
 
         $kycSubject = null;
+        $needsDocumentUpgrade = false;
         if ($user && $user->canAccessSellerPanel() && Schema::hasColumn('users', 'kyc_status')) {
             $kycSubject = $user->kycSubjectUser();
+            $needsDocumentUpgrade = $kycSubject !== null
+                && KycRequiredDocuments::mayUpgradeLegacyDocuments($kycSubject);
         }
 
         // UI do “painel aluno” só nas URLs de comprador; não misturar com sessão panel_context
@@ -258,14 +262,16 @@ class HandleInertiaRequests extends Middleware
                     'is_merchant_operationally_approved' => $kycSubject !== null
                         && $user->isMerchantOperationallyApproved(),
                     'needs_kyc_attention' => $kycSubject !== null
-                        && ! $user->isMerchantOperationallyApproved(),
+                        && ($needsDocumentUpgrade || ! $user->isMerchantOperationallyApproved()),
                     'kyc_onboarding_state' => $kycSubject === null
                         ? null
-                        : ($user->mustCompleteKycOnboarding()
+                        : ($needsDocumentUpgrade
+                            ? 'needs_document_upgrade'
+                            : ($user->mustCompleteKycOnboarding()
                             ? 'needs_upload'
                             : ($user->isAwaitingKycReview()
                                 ? 'awaiting_review'
-                                : (! $user->isMerchantOperationallyApproved() ? 'pending_account' : null))),
+                                : (! $user->isMerchantOperationallyApproved() ? 'pending_account' : null)))),
                     'panel_switch' => [
                         'customer' => $user->canAccessCustomerPanel(),
                         'seller' => $user->canSwitchToSellerPanel() || $user->needsOnboardingAsSeller(),

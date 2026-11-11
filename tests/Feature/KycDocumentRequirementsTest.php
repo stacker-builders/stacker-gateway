@@ -6,7 +6,9 @@ use App\Http\Middleware\EnsureInstalled;
 use App\Http\Middleware\EnsureStackerLicense;
 use App\Models\KycDocument;
 use App\Models\User;
+use App\Services\MerchantOperationalGuard;
 use App\Support\KycRequiredDocuments;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
@@ -147,6 +149,73 @@ class KycDocumentRequirementsTest extends TestCase
 
         $this->assertTrue($seller->isMerchantOperationallyApproved());
         $this->assertSame(KycRequiredDocuments::VERSION_LEGACY, KycRequiredDocuments::effectiveVersion($seller));
+        $this->assertTrue(KycRequiredDocuments::mayUpgradeLegacyDocuments($seller));
+        $this->assertContains(KycDocument::KIND_SELFIE_WITH_DOCUMENT, KycRequiredDocuments::kindsForUser($seller));
+
+        try {
+            MerchantOperationalGuard::assertCanRequestWithdrawal($seller);
+            $this->fail('Saque de conta legada deveria exigir os documentos atuais.');
+        } catch (ValidationException $e) {
+            $this->assertArrayHasKey('amount', $e->errors());
+        }
+    }
+
+    public function test_approved_legacy_merchant_can_submit_current_documents_and_then_withdraw(): void
+    {
+        Storage::fake('local');
+        $admin = $this->seedPlatformAdmin();
+        $seller = $this->createSeller([
+            'kyc_status' => User::KYC_APPROVED,
+            'account_status' => 'approved',
+            'kyc_requirements_version' => 1,
+            'identity_document_type' => 'rg',
+        ]);
+
+        $this->actingAs($seller)
+            ->postJson(route('kyc.document'), [
+                'field' => 'rg_front',
+                'identity_document_type' => 'rg',
+                'rg_front' => $this->img('rg_front.jpg'),
+            ])
+            ->assertOk();
+
+        $this->actingAs($seller)
+            ->post(route('kyc.finalize'), ['identity_document_type' => 'rg'])
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        $seller->refresh();
+        $this->assertSame(User::KYC_APPROVED, $seller->kyc_status);
+
+        foreach (['rg_back', 'address_proof', 'selfie_with_document'] as $field) {
+            $this->actingAs($seller)
+                ->postJson(route('kyc.document'), [
+                    'field' => $field,
+                    'identity_document_type' => 'rg',
+                    $field => $this->img($field.'.jpg'),
+                ])
+                ->assertOk();
+        }
+
+        $this->actingAs($seller)
+            ->post(route('kyc.finalize'), ['identity_document_type' => 'rg'])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $seller->refresh();
+        $this->assertSame(User::KYC_PENDING_REVIEW, $seller->kyc_status);
+        $this->assertSame(2, (int) $seller->kyc_requirements_version);
+        $this->assertFalse($seller->isMerchantOperationallyApproved());
+
+        $this->actingAs($admin)
+            ->post(route('plataforma.kyc.approve', $seller))
+            ->assertRedirect(route('plataforma.kyc.show', $seller));
+
+        $seller->refresh();
+        $this->assertSame(User::KYC_APPROVED, $seller->kyc_status);
+        $this->assertSame('approved', $seller->account_status);
+        $this->assertFalse(KycRequiredDocuments::mayUpgradeLegacyDocuments($seller));
+        MerchantOperationalGuard::assertCanRequestWithdrawal($seller);
     }
 
     public function test_reupload_supersedes_previous_file_instead_of_deleting(): void

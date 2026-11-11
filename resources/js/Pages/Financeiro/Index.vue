@@ -42,6 +42,7 @@ const props = defineProps({
     },
     kyc_finance_locked: { type: Boolean, default: false },
     kyc_status: { type: String, default: null },
+    kyc_document_upgrade: { type: Boolean, default: false },
     kyc_person_type: { type: String, default: 'pf' },
     kyc_rejection_reason: { type: String, default: null },
     kyc_identity_document_type: { type: String, default: null },
@@ -101,8 +102,11 @@ function setFinanceTab(tab) {
     window.history.replaceState({}, '', url);
 }
 
-/** Precisa enviar/reenviar documentos (ainda não está em análise nem aprovado). */
+/** Precisa enviar/reenviar documentos (conta nova, rejeitada ou antiga na regra anterior). */
 const needsKycDocuments = computed(() => {
+    if (props.kyc_document_upgrade) {
+        return true;
+    }
     const s = props.kyc_status || 'not_submitted';
     return s === 'not_submitted' || s === 'rejected';
 });
@@ -1052,8 +1056,14 @@ const inputClass =
                                     Verificação de identidade pendente
                                 </h3>
                                 <p class="mt-1 text-xs leading-relaxed text-amber-900/90 dark:text-amber-200/90">
-                                    Envie seus documentos para liberar saques e o uso completo do painel. Em celulares, use o
-                                    formulário em tela cheia para não perder o envio no fim da página.
+                                    <template v-if="kyc_document_upgrade">
+                                        Sua conta é anterior à verificação atual. Envie os mesmos documentos das contas novas.
+                                        O saque libera depois que a plataforma aceitar a análise.
+                                    </template>
+                                    <template v-else>
+                                        Envie seus documentos para liberar saques e o uso completo do painel. Em celulares, use o
+                                        formulário em tela cheia para não perder o envio no fim da página.
+                                    </template>
                                 </p>
                                 <Button type="button" class="mt-4 inline-flex items-center gap-2" @click="openKycModal">
                                     <Shield class="h-4 w-4" aria-hidden="true" />
@@ -1756,6 +1766,7 @@ const inputClass =
                         <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
                             <KycDocumentsForm
                                 embedded
+                                :document_upgrade="kyc_document_upgrade"
                                 :person_type="kyc_person_type"
                                 :kyc_status="kyc_status || 'not_submitted'"
                                 :rejection_reason="kyc_rejection_reason"

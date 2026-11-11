@@ -27,11 +27,14 @@ const props = defineProps({
     embedded: { type: Boolean, default: false },
     /** Migração PF→PJ: mostra só docs da empresa, mesmo com KYC já aprovado. */
     conversion_mode: { type: Boolean, default: false },
+    /** Conta antiga aprovada na regra anterior: reenvia o conjunto atual. */
+    document_upgrade: { type: Boolean, default: false },
     conversion_status: { type: String, default: null },
     conversion_rejection_reason: { type: String, default: null },
 });
 
 const conversionMode = computed(() => !!props.conversion_mode);
+const documentUpgrade = computed(() => !!props.document_upgrade);
 const isPj = computed(() => props.person_type === 'pj' || conversionMode.value);
 
 const req = computed(() => {
@@ -64,6 +67,7 @@ const isApproved = computed(
     () =>
         props.kyc_status === 'approved' &&
         !conversionMode.value &&
+        !documentUpgrade.value &&
         props.conversion_status !== 'pending_review' &&
         props.conversion_status !== 'collecting_docs'
 );

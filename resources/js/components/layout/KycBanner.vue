@@ -15,6 +15,9 @@ const message = computed(() => {
     if (kycOnboardingState.value === 'awaiting_review' || kycStatus.value === 'pending_review') {
         return 'Seus documentos estão em análise. O painel completo, vendas e saques serão liberados após aprovação da plataforma.';
     }
+    if (kycOnboardingState.value === 'needs_document_upgrade') {
+        return 'Sua conta foi criada antes da verificação atual. Envie os documentos na aba Seus dados para liberar o saque depois da aprovação.';
+    }
     if (kycStatus.value === 'rejected') {
         return 'Sua verificação precisa de ajustes. Reenvie os documentos na aba Seus dados (Financeiro).';
     }
