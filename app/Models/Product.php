@@ -1125,6 +1125,7 @@ class Product extends Model
             'lifestyle_e_hobbies' => 'Lifestyle e Hobbies',
             'conteudo_e_recursos_digitais' => 'Conteúdo e Recursos Digitais',
             'automotivos' => 'Automotivos',
+            'religiao' => 'Religião',
             'outros' => 'Outros',
         ];
     }
