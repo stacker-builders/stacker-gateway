@@ -16,6 +16,7 @@ const filters = [
     { value: 'needs_document_review', label: 'Revisão de docs' },
     { value: 'all', label: 'Todos' },
     { value: 'rejected', label: 'Rejeitados' },
+    { value: 'blocked', label: 'Bloqueados' },
     { value: 'not_submitted', label: 'Sem envio' },
 ];
 
@@ -25,6 +26,7 @@ function statusLabel(s) {
         pending_review: 'Em análise',
         approved: 'Aprovado',
         rejected: 'Rejeitado',
+        blocked: 'Bloqueado',
     };
     return m[s] || s || '—';
 }
@@ -74,9 +76,11 @@ function statusLabel(s) {
                     <span
                         class="shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium"
                         :class="
-                            u.kyc_status === 'pending_review'
-                                ? 'bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200'
-                                : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
+                            u.kyc_status === 'blocked'
+                                ? 'bg-red-100 text-red-900 dark:bg-red-950/50 dark:text-red-200'
+                                : u.kyc_status === 'pending_review'
+                                  ? 'bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-200'
+                                  : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300'
                         "
                     >
                         {{ statusLabel(u.kyc_status) }}

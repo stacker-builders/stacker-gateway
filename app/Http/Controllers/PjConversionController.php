@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\LogsSellerActivity;
 use App\Services\PjConversionService;
 use App\Services\SellerActivityLogService;
+use App\Support\BlockedDocuments;
 use App\Support\BrazilianDocuments;
 use App\Support\CnpjLookup;
 use App\Support\KycRequiredDocuments;
@@ -40,6 +41,14 @@ class PjConversionController extends Controller
                 'ok' => false,
                 'status' => 'invalid',
                 'message' => 'CNPJ inválido.',
+            ], 422);
+        }
+
+        if ($blocked = BlockedDocuments::messageFor($cnpj)) {
+            return response()->json([
+                'ok' => false,
+                'status' => 'blocked',
+                'message' => $blocked,
             ], 422);
         }
 

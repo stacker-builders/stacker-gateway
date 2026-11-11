@@ -12,6 +12,7 @@ use App\Services\PjConversionService;
 use App\Services\Platform\PlatformTotpService;
 use App\Services\PlatformAuditService;
 use App\Services\PlatformEmailNotifications;
+use App\Support\BlockedDocuments;
 use App\Support\CnpjLookup;
 use App\Support\KycRequiredDocuments;
 use App\Support\KycUpload;
@@ -19,6 +20,7 @@ use App\Support\MerchantProfileSnapshot;
 use App\Support\PjConversion;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -41,6 +43,8 @@ class KycVerificationsController extends Controller
             $q->where('kyc_status', User::KYC_PENDING_REVIEW);
         } elseif ($filter === 'rejected') {
             $q->where('kyc_status', User::KYC_REJECTED);
+        } elseif ($filter === 'blocked') {
+            $q->where('kyc_status', User::KYC_BLOCKED);
         } elseif ($filter === 'not_submitted') {
             $q->where('kyc_status', User::KYC_NOT_SUBMITTED);
         } elseif ($filter === 'needs_document_review' && Schema::hasColumn('users', 'kyc_needs_document_review')) {
@@ -189,6 +193,46 @@ class KycVerificationsController extends Controller
         KycRejected::dispatch($user->fresh(), $validated['reason']);
 
         return redirect()->route('plataforma.kyc.show', ['user' => $user->id])->with('success', 'Verificação rejeitada. O infoprodutor pode reenviar documentos.');
+    }
+
+    public function rejectAndBlock(Request $request, User $user): RedirectResponse
+    {
+        abort_unless($user->role === User::ROLE_INFOPRODUTOR, 404);
+        abort_unless($user->kyc_status === User::KYC_PENDING_REVIEW, 422);
+
+        $this->validatePlatformStepUp($request, redirectRoute: 'plataforma.kyc.show');
+
+        $validated = $request->validate([
+            'reason' => ['required', 'string', 'max:2000'],
+        ]);
+
+        $blockedDocuments = [];
+        DB::transaction(function () use ($request, $user, $validated, &$blockedDocuments) {
+            $blockedDocuments = BlockedDocuments::blockMerchant($user, $validated['reason'], $request->user()?->id);
+
+            $attrs = [
+                'kyc_status' => User::KYC_BLOCKED,
+                'account_status' => 'blocked',
+                'kyc_rejection_reason' => $validated['reason'],
+                'kyc_reviewed_at' => now(),
+                'kyc_reviewed_by' => $request->user()?->id,
+            ];
+            if (Schema::hasColumn('users', 'kyc_needs_document_review')) {
+                $attrs['kyc_needs_document_review'] = false;
+            }
+
+            $user->forceFill($attrs)->save();
+        });
+
+        PlatformAuditService::log('platform.kyc.rejected_and_blocked', [
+            'merchant_id' => $user->id,
+            'reason' => $validated['reason'],
+            'documents' => $blockedDocuments,
+        ], $request);
+
+        return redirect()
+            ->route('plataforma.kyc.show', ['user' => $user->id])
+            ->with('success', 'Verificação recusada. Os documentos desta conta foram bloqueados e não poderão ser usados em um novo cadastro.');
     }
 
     public function approvePjConversion(Request $request, User $user): RedirectResponse

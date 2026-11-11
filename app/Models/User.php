@@ -30,6 +30,9 @@ class User extends Authenticatable
 
     public const KYC_REJECTED = 'rejected';
 
+    /** Recusado no KYC com CPF/CNPJ impedidos de novo cadastro. */
+    public const KYC_BLOCKED = 'blocked';
+
     /** @var list<string> */
     public const MONTHLY_REVENUE_RANGES = [
         'up_to_10k',

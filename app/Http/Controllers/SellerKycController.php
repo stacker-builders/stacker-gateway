@@ -387,6 +387,9 @@ class SellerKycController extends Controller
 
     private function kycMutationBlockedMessage(User $subject): ?string
     {
+        if ($subject->kyc_status === User::KYC_BLOCKED) {
+            return 'Esta conta está bloqueada e não pode enviar documentos.';
+        }
         if ($subject->kyc_status === User::KYC_PENDING_REVIEW) {
             return 'Documentos em análise. Aguarde a conclusão.';
         }

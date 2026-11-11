@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\Checkout\TurnstileVerifier;
 use App\Services\LegalDocumentsService;
 use App\Services\PlatformEmailNotifications;
+use App\Support\BlockedDocuments;
 use App\Support\BrazilianDocuments;
 use App\Support\CnpjLookup;
 use App\Support\DockerSetupState;
@@ -156,6 +157,13 @@ class InfoprodutorRegistrationController extends Controller
                     'message' => 'CPF inválido.',
                 ], 422);
             }
+            if ($blocked = BlockedDocuments::messageFor($docDigits)) {
+                return response()->json([
+                    'available' => false,
+                    'field' => 'document',
+                    'message' => $blocked,
+                ]);
+            }
             $docQ = User::query()->where('document', $docDigits);
             if (Auth::check()) {
                 $docQ->where('id', '!=', Auth::id());
@@ -178,6 +186,14 @@ class InfoprodutorRegistrationController extends Controller
             ], 422);
         }
 
+        if ($blocked = BlockedDocuments::messageFor($docDigits)) {
+            return response()->json([
+                'available' => false,
+                'field' => 'document',
+                'message' => $blocked,
+            ]);
+        }
+
         $docQ2 = User::query()->where('document', $docDigits);
         if (Auth::check()) {
             $docQ2->where('id', '!=', Auth::id());
@@ -196,6 +212,14 @@ class InfoprodutorRegistrationController extends Controller
                 'available' => false,
                 'message' => 'CPF do representante legal inválido.',
             ], 422);
+        }
+
+        if ($blocked = BlockedDocuments::messageFor($rep)) {
+            return response()->json([
+                'available' => false,
+                'field' => 'legal_representative_cpf',
+                'message' => $blocked,
+            ]);
         }
 
         $lrQ = User::query()->where('legal_representative_cpf', $rep);
@@ -363,6 +387,10 @@ class InfoprodutorRegistrationController extends Controller
             }
         }
 
+        if ($blocked = BlockedDocuments::messageFor($docDigits)) {
+            return back()->withErrors(['document' => $blocked])->withInput();
+        }
+
         if (User::query()->where('document', $docDigits)->exists()) {
             return back()->withErrors([
                 'document' => $validated['person_type'] === 'pf'
@@ -373,6 +401,9 @@ class InfoprodutorRegistrationController extends Controller
 
         if ($validated['person_type'] === 'pj') {
             $repDigits = BrazilianDocuments::digits((string) $validated['legal_representative_cpf']);
+            if ($blocked = BlockedDocuments::messageFor($repDigits)) {
+                return back()->withErrors(['legal_representative_cpf' => $blocked])->withInput();
+            }
             if (User::query()->where('legal_representative_cpf', $repDigits)->exists()) {
                 return back()->withErrors(['legal_representative_cpf' => 'Este CPF já está vinculado a outra conta.'])->withInput();
             }
@@ -565,6 +596,10 @@ class InfoprodutorRegistrationController extends Controller
             }
         }
 
+        if ($blocked = BlockedDocuments::messageFor($docDigits)) {
+            return back()->withErrors(['document' => $blocked])->withInput();
+        }
+
         if (User::query()->where('document', $docDigits)->where('id', '!=', $user->id)->exists()) {
             return back()->withErrors([
                 'document' => $validated['person_type'] === 'pf'
@@ -575,6 +610,9 @@ class InfoprodutorRegistrationController extends Controller
 
         if ($validated['person_type'] === 'pj') {
             $repDigits = BrazilianDocuments::digits((string) $validated['legal_representative_cpf']);
+            if ($blocked = BlockedDocuments::messageFor($repDigits)) {
+                return back()->withErrors(['legal_representative_cpf' => $blocked])->withInput();
+            }
             if (User::query()->where('legal_representative_cpf', $repDigits)->where('id', '!=', $user->id)->exists()) {
                 return back()->withErrors(['legal_representative_cpf' => 'Este CPF já está vinculado a outra conta.'])->withInput();
             }
