@@ -241,6 +241,7 @@ export const webhookPayloadExample = `{
   "event_id": "550e8400-e29b-41d4-a716-446655440000",
   "order_id": 456,
   "amount": 97.90,
+  "amount_net": 92.01,
   "status": "completed",
   "transaction_id": "tx-abc123",
   "payment_method": "pix",

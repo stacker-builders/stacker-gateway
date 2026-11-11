@@ -93,6 +93,8 @@ class ApiBackwardCompatibilityTest extends TestCase
         $this->assertArrayHasKey('event', $expected);
         $this->assertArrayHasKey('order_id', $expected);
         $this->assertArrayHasKey('amount', $expected);
+        $this->assertArrayHasKey('amount_net', $expected);
+        $this->assertIsFloat($expected['amount_net']);
         $this->assertArrayHasKey('status', $expected);
         $this->assertSame('order.completed', $expected['event']);
 

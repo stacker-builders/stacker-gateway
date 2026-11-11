@@ -20,6 +20,7 @@ use App\Services\SellerIntegrationVisibility;
 use App\Models\Order;
 use App\Models\CheckoutSession;
 use App\Models\Subscription;
+use App\Services\OrderFeeBreakdownService;
 use App\Support\WebhookCustomerPayload;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
@@ -350,6 +351,13 @@ class WebhookEventSubscriber
             $order = $event->order;
             $order->loadMissing(['user', 'product', 'productOffer', 'subscriptionPlan']);
             $extra['customer'] = WebhookCustomerPayload::fromOrder($order);
+            if ($event instanceof OrderCompleted) {
+                $net = OrderFeeBreakdownService::forOrder($order)['net'];
+                $extra['amount_net'] = $net;
+                if (isset($payload['order']) && is_array($payload['order'])) {
+                    $payload['order']['amount_net'] = $net;
+                }
+            }
             $slug = $order->getCheckoutSlug();
             $extra['checkout_link'] = $slug ? URL::route('checkout.show', ['slug' => $slug]) : '';
         }

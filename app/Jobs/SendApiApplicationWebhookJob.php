@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\ApiApplication;
 use App\Models\Order;
+use App\Services\OrderFeeBreakdownService;
 use App\Support\WebhookCustomerPayload;
 use App\Support\WebhookUrlValidator;
 use InvalidArgumentException;
@@ -58,6 +59,7 @@ class SendApiApplicationWebhookJob implements ShouldQueue
             'event' => $this->eventName,
             'order_id' => $order->id,
             'amount' => (float) $order->amount,
+            'amount_net' => OrderFeeBreakdownService::forOrder($order)['net'],
             'status' => $order->status,
             'email' => $order->email,
             'metadata' => $order->metadata ?? [],

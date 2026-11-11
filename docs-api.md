@@ -366,6 +366,7 @@ Em caso de falha na entrega (endpoint offline ou não-2xx), reenviamos automatic
   "event_id": "550e8400-e29b-41d4-a716-446655440000",
   "order_id": 456,
   "amount": 97.90,
+  "amount_net": 92.01,
   "status": "completed",
   "transaction_id": "tx-abc123",
   "payment_method": "pix",
@@ -377,6 +378,8 @@ Em caso de falha na entrega (endpoint offline ou não-2xx), reenviamos automatic
   "updated_at": "2026-06-13T14:05:12.000000Z"
 }
 ```
+
+`amount` continua o valor bruto cobrado. `amount_net` é o valor líquido da tela de vendas, já com as taxas da plataforma.
 
 ### Eventos de saque
 
