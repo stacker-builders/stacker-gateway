@@ -99,6 +99,7 @@ return [
         'customer.category.lifestyle_e_hobbies' => 'Lifestyle e Hobbies',
         'customer.category.conteudo_e_recursos_digitais' => 'Conteúdo e Recursos Digitais',
         'customer.category.automotivos' => 'Automotivos',
+        'customer.category.religiao' => 'Religião',
         'customer.category.outros' => 'Outros',
     ],
     'en' => [
@@ -199,6 +200,7 @@ return [
         'customer.category.lifestyle_e_hobbies' => 'Lifestyle and Hobbies',
         'customer.category.conteudo_e_recursos_digitais' => 'Content and Digital Resources',
         'customer.category.automotivos' => 'Automotive',
+        'customer.category.religiao' => 'Religion',
         'customer.category.outros' => 'Other',
     ],
     'es' => [
@@ -299,6 +301,7 @@ return [
         'customer.category.lifestyle_e_hobbies' => 'Estilo de vida y Hobbies',
         'customer.category.conteudo_e_recursos_digitais' => 'Contenido y Recursos Digitales',
         'customer.category.automotivos' => 'Automotriz',
+        'customer.category.religiao' => 'Religión',
         'customer.category.outros' => 'Otros',
     ],
     'it' => [
@@ -399,6 +402,7 @@ return [
         'customer.category.lifestyle_e_hobbies' => 'Lifestyle e Hobby',
         'customer.category.conteudo_e_recursos_digitais' => 'Contenuti e Risorse Digitali',
         'customer.category.automotivos' => 'Automotive',
+        'customer.category.religiao' => 'Religione',
         'customer.category.outros' => 'Altro',
     ],
 ];
