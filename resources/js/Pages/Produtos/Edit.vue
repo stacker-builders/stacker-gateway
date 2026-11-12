@@ -112,7 +112,58 @@ const props = defineProps({
     shipping_stores: { type: Array, default: () => [] },
     coproduction_readonly: { type: Boolean, default: false },
     telegram_delivery: { type: Object, default: () => ({}) },
+    reusable_meta_pixels: { type: Array, default: () => [] },
 });
+
+const reusableMetaPixels = computed(() =>
+    (props.reusable_meta_pixels || []).filter((pixel) => pixel && pixel.pixel_id && pixel.key)
+);
+const metaPixelReuseHint = ref({});
+
+function reusableMetaPixelLabel(opt) {
+    const product = String(opt.product_name || 'produto').trim() || 'produto';
+    const named = String(opt.name || '').trim();
+    if (named) {
+        return `Usar "${named}" do produto "${product}"`;
+    }
+    const id = String(opt.pixel_id || '');
+    const tail = id.length > 4 ? id.slice(-4) : id;
+    return tail ? `Usar pixel do produto "${product}" (…${tail})` : `Usar pixel do produto "${product}"`;
+}
+
+function applyReusableMetaPixel(item, event) {
+    const select = event?.target;
+    const key = select?.value ?? '';
+    if (select) {
+        select.value = '';
+    }
+    if (!key) {
+        return;
+    }
+    const opt = reusableMetaPixels.value.find((pixel) => pixel.key === key);
+    if (!opt) {
+        return;
+    }
+    item.pixel_id = opt.pixel_id || '';
+    item.access_token = opt.access_token || '';
+    if (!String(item.name || '').trim() && opt.name) {
+        item.name = opt.name;
+    }
+    metaPixelReuseHint.value = {
+        ...metaPixelReuseHint.value,
+        [item.id]: `Pixel ID e token copiados do produto "${opt.product_name || 'produto'}".`,
+    };
+}
+
+function addReusableMetaPixel(event) {
+    const key = event?.target?.value ?? '';
+    if (!key) {
+        return;
+    }
+    const entry = newMetaEntry();
+    form.conversion_pixels.meta.entries.push(entry);
+    applyReusableMetaPixel(entry, event);
+}
 
 const page = usePage();
 const visibleProductTypes = computed(() => (props.productTypes || []).filter((type) => type.available));
@@ -2491,11 +2542,22 @@ function submit() {
                             </div>
                             <template v-if="form.conversion_pixels.meta.enabled">
                                 <div v-for="(item, idx) in form.conversion_pixels.meta.entries" :key="item.id" class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800 space-y-3">
-                                    <div class="flex items-center justify-between gap-2">
-                                        <span class="text-xs font-medium text-zinc-500 dark:text-zinc-400">Pixel {{ idx + 1 }}</span>
-                                        <button type="button" class="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-300" @click="form.conversion_pixels.meta.entries.splice(idx, 1)">
+                                    <div class="flex items-start justify-between gap-2">
+                                        <div class="min-w-0 flex-1">
+                                            <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Nome do pixel</label>
+                                            <input v-model="item.name" type="text" maxlength="80" :placeholder="`Pixel ${idx + 1}`" :class="inputClass" />
+                                        </div>
+                                        <button type="button" class="mt-7 rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-700 dark:hover:text-zinc-300" @click="form.conversion_pixels.meta.entries.splice(idx, 1)">
                                             <Trash2 class="h-4 w-4" />
                                         </button>
+                                    </div>
+                                    <div v-if="reusableMetaPixels.length">
+                                        <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Reutilizar pixel</label>
+                                        <select :class="inputClass" @change="applyReusableMetaPixel(item, $event)">
+                                            <option value="">Usar pixel de outro produto…</option>
+                                            <option v-for="opt in reusableMetaPixels" :key="opt.key" :value="opt.key">{{ reusableMetaPixelLabel(opt) }}</option>
+                                        </select>
+                                        <p v-if="metaPixelReuseHint[item.id]" class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">{{ metaPixelReuseHint[item.id] }}</p>
                                     </div>
                                     <div>
                                         <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Pixel ID</label>
@@ -2514,7 +2576,16 @@ function submit() {
                                         <Checkbox v-model="item.disable_order_bump_events" label="Desativar eventos de order bumps?" />
                                     </div>
                                 </div>
-                                <p v-if="form.conversion_pixels.meta.entries.length === 0" class="text-sm text-zinc-500 dark:text-zinc-400">{{ t('products.edit.no_pixels', 'Nenhum pixel. Clique em «Adicionar pixel» ou desative a integração.') }}</p>
+                                <div v-if="form.conversion_pixels.meta.entries.length === 0" class="space-y-3">
+                                    <p class="text-sm text-zinc-500 dark:text-zinc-400">{{ t('products.edit.no_pixels', 'Nenhum pixel. Clique em «Adicionar pixel» ou desative a integração.') }}</p>
+                                    <div v-if="reusableMetaPixels.length">
+                                        <label class="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">Reutilizar pixel</label>
+                                        <select :class="inputClass" @change="addReusableMetaPixel($event)">
+                                            <option value="">Usar pixel de outro produto…</option>
+                                            <option v-for="opt in reusableMetaPixels" :key="opt.key" :value="opt.key">{{ reusableMetaPixelLabel(opt) }}</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </template>
                         </div>
 

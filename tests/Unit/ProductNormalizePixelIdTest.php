@@ -22,5 +22,19 @@ class ProductNormalizePixelIdTest extends TestCase
         ], 'meta');
 
         $this->assertSame('9876543210987', $block['entries'][0]['pixel_id'] ?? null);
+        $this->assertSame('', $block['entries'][0]['name'] ?? null);
+    }
+
+    public function test_normalize_conversion_pixel_block_keeps_meta_pixel_name(): void
+    {
+        $block = Product::normalizeConversionPixelBlock([
+            'enabled' => true,
+            'entries' => [
+                ['id' => 'x', 'name' => '  Campanha principal  ', 'pixel_id' => '1234567890', 'access_token' => 'tok'],
+            ],
+        ], 'meta');
+
+        $this->assertSame('Campanha principal', $block['entries'][0]['name'] ?? null);
+        $this->assertSame('1234567890', $block['entries'][0]['pixel_id'] ?? null);
     }
 }

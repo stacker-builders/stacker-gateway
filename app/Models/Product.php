@@ -482,6 +482,21 @@ class Product extends Model
     }
 
     /**
+     * Nome opcional do pixel Meta (rótulo na tela do infoprodutor).
+     */
+    public static function normalizePixelEntryName(mixed $raw): string
+    {
+        $name = trim((string) $raw);
+        $name = preg_replace('/[\x00-\x1F\x7F]/u', '', $name) ?? '';
+        $name = trim($name);
+        if (mb_strlen($name) > 80) {
+            $name = mb_substr($name, 0, 80);
+        }
+
+        return $name;
+    }
+
+    /**
      * Meta/TikTok pixel IDs: apenas dígitos (aceita colar "ID: 1234567890").
      */
     public static function normalizePixelIdString(string $raw): string
@@ -527,11 +542,15 @@ class Product extends Model
                     if ($pixelId === '') {
                         continue;
                     }
-                    $entries[] = [
+                    $row = [
                         'id' => $id,
                         'pixel_id' => $pixelId,
                         'access_token' => trim((string) ($e['access_token'] ?? '')),
-                    ] + $flags;
+                    ];
+                    if ($platform === 'meta') {
+                        $row['name'] = static::normalizePixelEntryName($e['name'] ?? '');
+                    }
+                    $entries[] = $row + $flags;
                 } elseif ($platform === 'google_ads') {
                     $convId = trim((string) ($e['conversion_id'] ?? ''));
                     if ($convId === '') {
@@ -566,11 +585,15 @@ class Product extends Model
                 $pixelId = static::normalizePixelIdString(trim((string) ($block['pixel_id'] ?? '')));
                 $accessToken = trim((string) ($block['access_token'] ?? ''));
                 if ($pixelId !== '' || $accessToken !== '') {
-                    $entries[] = [
+                    $row = [
                         'id' => $id,
                         'pixel_id' => $pixelId,
                         'access_token' => $accessToken,
-                    ] + $flags;
+                    ];
+                    if ($platform === 'meta') {
+                        $row['name'] = static::normalizePixelEntryName($block['name'] ?? '');
+                    }
+                    $entries[] = $row + $flags;
                 }
             } elseif ($platform === 'google_ads') {
                 $convId = trim((string) ($block['conversion_id'] ?? ''));
