@@ -1,7 +1,9 @@
 <script setup>
 import { computed, inject } from 'vue';
+import { useSellerDashboardTemplate } from '@/composables/useSellerDashboardTemplate';
 
 const custom = inject('dashboardCustomPeriod', null);
+const { isNoir } = useSellerDashboardTemplate();
 
 const visible = computed(() => custom?.period?.value === 'personalizado');
 const startLabel = computed(() => custom?.startLabel?.value ?? 'Data inicial');
@@ -37,20 +39,20 @@ function apply() {
         class="flex flex-wrap items-end gap-2"
         @submit.prevent="apply"
     >
-        <label class="text-sm text-zinc-600 dark:text-zinc-400">
+        <label :class="isNoir ? 'noir-fg-muted text-sm' : 'text-sm text-zinc-600 dark:text-zinc-400'">
             {{ startLabel }}
             <input
                 v-model="fromDate"
                 type="date"
-                class="mt-1 block rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
+                :class="isNoir ? 'noir-field' : 'mt-1 block rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white'"
             />
         </label>
-        <label class="text-sm text-zinc-600 dark:text-zinc-400">
+        <label :class="isNoir ? 'noir-fg-muted text-sm' : 'text-sm text-zinc-600 dark:text-zinc-400'">
             {{ endLabel }}
             <input
                 v-model="toDate"
                 type="date"
-                class="mt-1 block rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
+                :class="isNoir ? 'noir-field' : 'mt-1 block rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white'"
             />
         </label>
         <button type="submit" class="h-10 rounded-xl bg-[var(--color-primary)] px-4 text-sm font-medium text-white">

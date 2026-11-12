@@ -38,6 +38,11 @@ const options = [
         label: 'Kawaii',
         description: 'Visual fofo com cores pastéis, cards arredondados e mascote na sidebar.',
     },
+    {
+        id: 'noir',
+        label: 'Noir',
+        description: 'Painel financeiro moderno com visual premium e minimalista.',
+    },
 ];
 
 const loginOptions = [
@@ -80,7 +85,7 @@ const schemeOptions = [
 ];
 
 function normalizeTemplate(value) {
-    if (value === 'aurora' || value === 'kawaii') return value;
+    if (value === 'aurora' || value === 'kawaii' || value === 'noir') return value;
     return 'default';
 }
 
@@ -242,7 +247,7 @@ onMounted(() => {
                 {{ success }}
             </p>
 
-            <div v-if="!loading" class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div v-if="!loading" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <button
                     v-for="opt in options"
                     :key="opt.id"
@@ -269,6 +274,7 @@ onMounted(() => {
                         class="border-t border-zinc-200/80 p-3 dark:border-zinc-700/80"
                         :class="{
                             'bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900': opt.id === 'aurora',
+                            'bg-[#070707]': opt.id === 'noir',
                             'bg-gradient-to-br from-violet-50 via-pink-50 to-emerald-50 dark:from-violet-950/40 dark:via-pink-950/30 dark:to-emerald-950/30': opt.id === 'kawaii',
                             'bg-white dark:bg-zinc-800': opt.id === 'default',
                         }"
@@ -278,6 +284,7 @@ onMounted(() => {
                                 class="shrink-0 rounded-lg"
                                 :class="{
                                     'h-16 w-10 bg-white/10 backdrop-blur': opt.id === 'aurora',
+                                    'h-16 w-10 bg-white/5': opt.id === 'noir',
                                     'h-16 w-10 bg-white/70 dark:bg-white/10': opt.id === 'kawaii',
                                     'h-16 w-8 bg-zinc-200 dark:bg-zinc-700': opt.id === 'default',
                                 }"
@@ -286,7 +293,7 @@ onMounted(() => {
                                 <div
                                     class="h-2 rounded"
                                     :class="{
-                                        'w-full bg-[var(--color-primary)]/40': opt.id === 'aurora',
+                                        'w-full bg-[var(--color-primary)]/40': opt.id === 'aurora' || opt.id === 'noir',
                                         'w-full bg-violet-300/60 dark:bg-violet-400/30': opt.id === 'kawaii',
                                         'w-full bg-zinc-200 dark:bg-zinc-600': opt.id === 'default',
                                     }"
@@ -295,6 +302,7 @@ onMounted(() => {
                                     class="h-6 rounded-md"
                                     :class="{
                                         'aurora-card-preview w-full': opt.id === 'aurora',
+                                        'w-full border border-white/10 bg-white/5': opt.id === 'noir',
                                         'kawaii-card-preview w-full': opt.id === 'kawaii',
                                         'w-full border border-zinc-200 bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-700/50': opt.id === 'default',
                                     }"
@@ -304,6 +312,7 @@ onMounted(() => {
                                     :class="{
                                         'kawaii-card-preview': opt.id === 'kawaii',
                                         'aurora-card-preview': opt.id === 'aurora',
+                                        'border border-white/10 bg-white/5': opt.id === 'noir',
                                         'border border-zinc-200 bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-700/50': opt.id === 'default',
                                     }"
                                 />

@@ -20,6 +20,7 @@ const props = defineProps({
     hideValuesLabel: { type: String, default: 'Ocultar valores' },
     showValuesLabel: { type: String, default: 'Mostrar valores' },
     auroraStyle: { type: Boolean, default: false },
+    shell: { type: String, default: '' },
 });
 
 const emit = defineEmits(['update:period', 'toggle-values']);
@@ -27,6 +28,12 @@ const emit = defineEmits(['update:period', 'toggle-values']);
 const triggerClassDefault = 'flex h-10 w-[240px] shrink-0 cursor-pointer items-center justify-between gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-left text-sm transition hover:border-zinc-300 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:ring-offset-0 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white dark:hover:border-zinc-500';
 const contentClassDefault = 'z-[9999] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-xl border border-zinc-200 bg-white py-1 shadow-xl dark:border-zinc-600 dark:bg-zinc-800';
 const contentClassAurora = 'aurora-select-content z-[99999] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-xl border py-1 shadow-xl';
+
+const themedPrefix = computed(() => {
+    if (props.shell === 'noir') return 'noir';
+    if (props.auroraStyle || props.shell === 'aurora') return 'aurora';
+    return null;
+});
 
 function formatLongDate(date) {
     return date.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' });
@@ -53,13 +60,13 @@ const periodDisplayLabel = computed(() => {
 <template>
     <div
         class="flex flex-wrap items-center gap-2"
-        :class="auroraStyle ? 'w-full justify-end' : 'justify-between'"
+        :class="themedPrefix ? 'w-full justify-end' : 'justify-between'"
     >
-        <div v-if="auroraStyle" class="flex w-full items-center justify-end gap-2">
+        <div v-if="themedPrefix" class="flex w-full items-center justify-end gap-2">
             <button
                 type="button"
                 :aria-label="valuesVisible ? hideValuesLabel : showValuesLabel"
-                class="aurora-icon-btn flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors"
+                :class="`${themedPrefix}-icon-btn flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors`"
                 @click="emit('toggle-values')"
             >
                 <Eye v-if="valuesVisible" class="h-4 w-4" aria-hidden="true" />
@@ -70,7 +77,7 @@ const periodDisplayLabel = computed(() => {
                 <SelectTrigger
                     type="button"
                     :aria-label="periodLabel"
-                    class="aurora-date-picker-btn shrink-0"
+                    :class="`${themedPrefix}-date-picker-btn shrink-0`"
                 >
                     <Calendar class="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                     <span class="truncate">{{ periodDisplayLabel }}</span>
@@ -78,7 +85,9 @@ const periodDisplayLabel = computed(() => {
                 </SelectTrigger>
                 <SelectPortal to="body">
                     <SelectContent
-                        :class="contentClassAurora"
+                        :class="themedPrefix === 'noir'
+                            ? 'noir-select-content z-[99999] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-xl border py-1 shadow-xl'
+                            : contentClassAurora"
                         :side-offset="4"
                         position="popper"
                         :avoid-collisions="true"

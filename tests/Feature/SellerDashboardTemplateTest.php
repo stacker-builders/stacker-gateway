@@ -46,6 +46,23 @@ class SellerDashboardTemplateTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_platform_admin_can_save_noir_template(): void
+    {
+        $admin = User::factory()->create([
+            'role' => User::ROLE_PLATFORM_ADMIN,
+            'tenant_id' => null,
+        ]);
+
+        $this->actingAs($admin)
+            ->putJson(route('plataforma.settings.dashboard-template.update'), [
+                'template' => 'noir',
+            ])
+            ->assertOk()
+            ->assertJsonPath('template', 'noir');
+
+        $this->assertSame('noir', SellerDashboardTemplate::current());
+    }
+
     public function test_platform_admin_can_save_kawaii_template(): void
     {
         $admin = User::factory()->create([
@@ -78,6 +95,24 @@ class SellerDashboardTemplateTest extends TestCase
             ->assertInertia(fn ($page) => $page
                 ->component('Dashboard/Index')
                 ->where('seller_dashboard_template', 'aurora')
+            );
+    }
+
+    public function test_infoprodutor_dashboard_receives_noir_template_prop(): void
+    {
+        Setting::set(SellerDashboardTemplate::KEY, SellerDashboardTemplate::NOIR, null);
+
+        $seller = User::factory()->create([
+            'role' => User::ROLE_INFOPRODUTOR,
+            'tenant_id' => 1,
+        ]);
+
+        $this->actingAs($seller)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Dashboard/Index')
+                ->where('seller_dashboard_template', 'noir')
             );
     }
 

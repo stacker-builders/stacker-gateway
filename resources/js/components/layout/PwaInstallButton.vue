@@ -10,7 +10,7 @@ const props = defineProps({
         default: 'menu',
         validator: (v) => ['menu', 'banner'].includes(v),
     },
-    /** default | aurora | kawaii */
+    /** default | aurora | kawaii | noir */
     theme: {
         type: String,
         default: 'default',
@@ -41,18 +41,23 @@ const bannerSurfaceClass = computed(() => {
     if (props.theme === 'kawaii') {
         return 'border-[var(--color-primary)]/35 bg-gradient-to-br from-[var(--color-primary)]/18 to-[var(--color-primary)]/6';
     }
+    if (props.theme === 'noir') {
+        return 'border-[var(--color-primary)]/30 bg-[var(--color-primary)]/10';
+    }
     return 'border-[var(--color-primary)]/25 bg-gradient-to-br from-[var(--color-primary)]/14 via-[var(--color-primary)]/6 to-transparent dark:from-[var(--color-primary)]/22 dark:via-[var(--color-primary)]/10 dark:to-transparent';
 });
 
 const bannerTitleClass = computed(() => {
     if (props.theme === 'aurora') return 'aurora-fg';
     if (props.theme === 'kawaii') return 'kawaii-fg';
+    if (props.theme === 'noir') return 'noir-fg';
     return 'text-zinc-900 dark:text-white';
 });
 
 const bannerSubtitleClass = computed(() => {
     if (props.theme === 'aurora') return 'aurora-fg-muted';
     if (props.theme === 'kawaii') return 'kawaii-fg-muted';
+    if (props.theme === 'noir') return 'noir-fg-muted';
     return 'text-zinc-500 dark:text-zinc-400';
 });
 

@@ -7,7 +7,7 @@ import { useSellerDashboardTemplate } from '@/composables/useSellerDashboardTemp
 
 const page = usePage();
 const { t } = useI18n();
-const { isAurora, isKawaii, themePrefix } = useSellerDashboardTemplate();
+const { themePrefix } = useSellerDashboardTemplate();
 
 const path = computed(() => page.url.split('?')[0]);
 
@@ -19,8 +19,7 @@ const isMetricas = computed(() => path.value === '/produtos/afiliados/metricas' 
 const isPainelProduto = computed(() => /^\/produtos\/[^/]+\/painel-afiliado/.test(path.value));
 
 const navClass = computed(() => {
-    if (isAurora.value) return 'aurora-subnav';
-    if (isKawaii.value) return 'kawaii-subnav';
+    if (themePrefix.value) return `${themePrefix.value}-subnav`;
     return 'inline-flex flex-wrap gap-1 rounded-xl bg-zinc-100/80 p-1 dark:bg-zinc-800/80';
 });
 

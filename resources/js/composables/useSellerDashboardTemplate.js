@@ -12,7 +12,7 @@ function readPreviewFromStorage() {
         return null;
     }
     const raw = localStorage.getItem(DEMO_TEMPLATE_KEY);
-    if (raw === 'aurora' || raw === 'kawaii' || raw === 'default') {
+    if (raw === 'aurora' || raw === 'kawaii' || raw === 'noir' || raw === 'default') {
         return raw;
     }
     return null;
@@ -55,7 +55,7 @@ export function useSellerDashboardTemplate() {
 
         if (demoEnabled()) {
             const preview = sharedPreviewOverride.value ?? readPreviewFromStorage();
-            if (preview === 'aurora' || preview === 'kawaii' || preview === 'default') {
+            if (preview === 'aurora' || preview === 'kawaii' || preview === 'noir' || preview === 'default') {
                 return preview;
             }
         }
@@ -63,21 +63,23 @@ export function useSellerDashboardTemplate() {
         const raw = page.props.seller_dashboard_template;
         if (raw === 'aurora') return 'aurora';
         if (raw === 'kawaii') return 'kawaii';
+        if (raw === 'noir') return 'noir';
         return 'default';
     });
 
     const isAurora = computed(() => templateId.value === 'aurora');
     const isKawaii = computed(() => templateId.value === 'kawaii');
+    const isNoir = computed(() => templateId.value === 'noir');
     const isDefault = computed(() => templateId.value === 'default');
-    const isThemedShell = computed(() => isAurora.value || isKawaii.value);
+    const isThemedShell = computed(() => isAurora.value || isKawaii.value || isNoir.value);
     const themePrefix = computed(() => {
         if (isAurora.value) return 'aurora';
         if (isKawaii.value) return 'kawaii';
+        if (isNoir.value) return 'noir';
         return null;
     });
     const pageWrapperClass = computed(() => {
-        if (isKawaii.value) return 'kawaii-page';
-        if (isAurora.value) return 'aurora-page';
+        if (themePrefix.value) return `${themePrefix.value}-page`;
         return 'space-y-6';
     });
 
@@ -86,6 +88,7 @@ export function useSellerDashboardTemplate() {
         isDefault,
         isAurora,
         isKawaii,
+        isNoir,
         isThemedShell,
         themePrefix,
         pageWrapperClass,
