@@ -14,12 +14,14 @@ class SellerDashboardTemplate
 
     public const KAWAII = 'kawaii';
 
+    public const NOIR = 'noir';
+
     /**
      * @return list<string>
      */
     public static function allowed(): array
     {
-        return [self::DEFAULT, self::AURORA, self::KAWAII];
+        return [self::DEFAULT, self::AURORA, self::KAWAII, self::NOIR];
     }
 
     public static function resolve(?string $raw): string

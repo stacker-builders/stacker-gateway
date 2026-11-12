@@ -27,6 +27,7 @@ import {
     Activity,
     Code2,
     Send,
+    Repeat,
 } from 'lucide-vue-next';
 import { useI18n } from '@/composables/useI18n';
 
@@ -99,6 +100,11 @@ export function useAppSidebarNav() {
                 name: t('sidebar.sales', 'Vendas'),
                 href: '/vendas',
                 icon: CircleDollarSign,
+            });
+            items.push({
+                name: t('sales.tab_subscriptions', 'Assinaturas'),
+                href: '/vendas/assinaturas',
+                icon: Repeat,
             });
             if (page.props.api_pix_enabled_effective) {
                 items.push({
@@ -201,7 +207,13 @@ export function useAppSidebarNav() {
         if (href === '/painel-cliente') return url === '/painel-cliente';
         if (href === '/frete') return url === '/frete' || url.startsWith('/frete/');
         if (href === '/dashboard') return url === '/dashboard' || url === '/';
+        if (href === '/vendas/assinaturas') {
+            return url === '/vendas/assinaturas' || url.startsWith('/vendas/assinaturas/');
+        }
         if (href === '/vendas') {
+            if (url.startsWith('/vendas/assinaturas')) {
+                return false;
+            }
             return url === '/vendas' || url.startsWith('/vendas/');
         }
         if (href === '/transacoes-api') {

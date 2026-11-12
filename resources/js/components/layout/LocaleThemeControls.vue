@@ -13,7 +13,7 @@ const props = defineProps({
     variant: {
         type: String,
         default: 'default',
-        validator: (v) => ['default', 'kawaii', 'aurora'].includes(v),
+        validator: (v) => ['default', 'kawaii', 'aurora', 'noir'].includes(v),
     },
     /** cycle = um ícone que alterna; toggle = dois botões (desktop) */
     themeStyle: {
@@ -56,6 +56,7 @@ const iconSizeClass = computed(() => (props.size === 'md' ? 'h-5 w-5' : 'h-4 w-4
 const iconBtnClass = computed(() => {
     if (props.variant === 'kawaii') return 'kawaii-icon-btn';
     if (props.variant === 'aurora') return 'aurora-icon-btn';
+    if (props.variant === 'noir') return 'noir-icon-btn';
     return 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200';
 });
 
@@ -66,6 +67,9 @@ const dropdownClass = computed(() => {
     if (props.variant === 'aurora') {
         return 'aurora-surface aurora-divider border shadow-lg';
     }
+    if (props.variant === 'noir') {
+        return 'noir-surface noir-divider border shadow-lg';
+    }
     return 'border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-900';
 });
 
@@ -75,6 +79,9 @@ const dropdownItemClass = computed(() => {
     }
     if (props.variant === 'aurora') {
         return 'aurora-fg hover:bg-white/5';
+    }
+    if (props.variant === 'noir') {
+        return 'noir-fg hover:bg-white/5';
     }
     return 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800';
 });

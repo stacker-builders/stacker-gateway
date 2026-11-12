@@ -8,94 +8,50 @@ const defaultIconBtn =
     'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200';
 
 export function usePanelThemeClasses() {
-    const { isAurora, isKawaii, isThemedShell, themePrefix } = useSellerDashboardTemplate();
+    const { isAurora, isKawaii, isNoir, isThemedShell, themePrefix } = useSellerDashboardTemplate();
 
-    function themed(className) {
-        return computed(() => {
-            if (isAurora.value) return `aurora-${className}`;
-            if (isKawaii.value) return `kawaii-${className}`;
-            return '';
-        });
+    function prefixed(suffix, fallback) {
+        return computed(() => (themePrefix.value ? `${themePrefix.value}-${suffix}` : fallback));
     }
 
-    const btnSecondary = computed(() => {
-        if (isAurora.value) return 'aurora-btn-secondary';
-        if (isKawaii.value) return 'kawaii-btn-secondary';
-        return defaultBtnSecondary;
-    });
+    function themed(className) {
+        return computed(() => (themePrefix.value ? `${themePrefix.value}-${className}` : ''));
+    }
 
-    const iconBtn = computed(() => {
-        if (isAurora.value) return 'aurora-icon-btn';
-        if (isKawaii.value) return 'kawaii-icon-btn';
-        return defaultIconBtn;
-    });
-
-    const tablePanel = computed(() => {
-        if (isAurora.value) return 'aurora-table-panel';
-        if (isKawaii.value) return 'kawaii-table-panel';
-        return 'overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-800/80';
-    });
-
-    const statCard = computed(() => {
-        if (isAurora.value) return 'aurora-stat-card';
-        if (isKawaii.value) return 'kawaii-stat-card';
-        return 'rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50';
-    });
-
-    const statCardLabel = computed(() => {
-        if (isAurora.value) return 'aurora-stat-card-label';
-        if (isKawaii.value) return 'kawaii-stat-card-label';
-        return 'flex items-center gap-2 text-zinc-600 dark:text-zinc-400';
-    });
-
-    const statCardValue = computed(() => {
-        if (isAurora.value) return 'aurora-stat-card-value';
-        if (isKawaii.value) return 'kawaii-stat-card-value';
-        return 'mt-2 text-xl font-bold text-zinc-900 dark:text-white';
-    });
-
-    const pageClass = computed(() => {
-        if (isKawaii.value) return 'kawaii-page';
-        if (isAurora.value) return 'aurora-page';
-        return 'space-y-6';
-    });
-
-    const stackClass = computed(() => {
-        if (isAurora.value) return 'aurora-stack';
-        if (isKawaii.value) return 'kawaii-stack';
-        return 'space-y-4';
-    });
+    const btnSecondary = prefixed('btn-secondary', defaultBtnSecondary);
+    const iconBtn = prefixed('icon-btn', defaultIconBtn);
+    const tablePanel = prefixed(
+        'table-panel',
+        'overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700 dark:bg-zinc-800/80',
+    );
+    const statCard = prefixed(
+        'stat-card',
+        'rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50',
+    );
+    const statCardLabel = prefixed('stat-card-label', 'flex items-center gap-2 text-zinc-600 dark:text-zinc-400');
+    const statCardValue = prefixed('stat-card-value', 'mt-2 text-xl font-bold text-zinc-900 dark:text-white');
+    const pageClass = prefixed('page', 'space-y-6');
+    const stackClass = prefixed('stack', 'space-y-4');
 
     const filterPanelClass = computed(() => {
-        if (isAurora.value) return '';
+        if (isAurora.value || isNoir.value) return '';
         if (isKawaii.value) return 'kawaii-filter-panel';
         return 'rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-800/40';
     });
 
-    const innerPanelClass = computed(() => {
-        if (isAurora.value) return 'aurora-inner-panel';
-        if (isKawaii.value) return 'kawaii-inner-panel';
-        return 'rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50';
-    });
-
-    const mobileCardClass = computed(() => {
-        if (isAurora.value) return 'aurora-mobile-card';
-        if (isKawaii.value) return 'kawaii-mobile-card';
-        return 'rounded-xl border border-zinc-200 bg-white shadow-sm hover:shadow-md dark:border-zinc-700 dark:bg-zinc-800';
-    });
-
-    const subnavClass = computed(() => {
-        if (isAurora.value) return 'aurora-subnav';
-        if (isKawaii.value) return 'kawaii-subnav';
-        return '';
-    });
+    const innerPanelClass = prefixed(
+        'inner-panel',
+        'rounded-xl border border-zinc-200 bg-zinc-50 p-5 dark:border-zinc-700 dark:bg-zinc-800/50',
+    );
+    const mobileCardClass = prefixed(
+        'mobile-card',
+        'rounded-xl border border-zinc-200 bg-white shadow-sm hover:shadow-md dark:border-zinc-700 dark:bg-zinc-800',
+    );
+    const subnavClass = computed(() => (themePrefix.value ? `${themePrefix.value}-subnav` : ''));
 
     function subnavItemClasses(active, defaultActiveClass, defaultInactiveClass) {
-        if (isAurora.value) {
-            return ['aurora-subnav-item', active && 'aurora-subnav-item-active'];
-        }
-        if (isKawaii.value) {
-            return ['kawaii-subnav-item', active && 'kawaii-subnav-item-active'];
+        if (themePrefix.value) {
+            return [`${themePrefix.value}-subnav-item`, active && `${themePrefix.value}-subnav-item-active`];
         }
         return [
             defaultActiveClass ?? 'rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-200',
@@ -106,6 +62,7 @@ export function usePanelThemeClasses() {
     return {
         isAurora,
         isKawaii,
+        isNoir,
         isThemedShell,
         themePrefix,
         themed,

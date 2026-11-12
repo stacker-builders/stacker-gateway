@@ -18,7 +18,7 @@ const props = defineProps({
 });
 
 const page = usePage();
-const { isAurora, isKawaii, isThemedShell } = useSellerDashboardTemplate();
+const { isAurora, isKawaii, isNoir, isThemedShell } = useSellerDashboardTemplate();
 const { heading: themedPageHeading } = useThemedPageHeading();
 const customerPanel = computed(() => !!page.props.customer_panel);
 const themedShell = computed(() => isThemedShell.value && !customerPanel.value);
@@ -46,18 +46,21 @@ const greetingName = computed(() => {
 const titleClass = computed(() => {
     if (isKawaii.value) return 'kawaii-fg';
     if (isAurora.value) return 'aurora-fg';
+    if (isNoir.value) return 'noir-fg';
     return 'text-zinc-900 dark:text-white';
 });
 
 const subtitleClass = computed(() => {
     if (isKawaii.value) return 'kawaii-fg-muted';
     if (isAurora.value) return 'aurora-fg-muted';
+    if (isNoir.value) return 'noir-fg-muted';
     return 'text-zinc-500 dark:text-zinc-400';
 });
 
 const iconBtnClass = computed(() => {
     if (isKawaii.value) return 'kawaii-icon-btn';
     if (isAurora.value) return 'aurora-icon-btn';
+    if (isNoir.value) return 'noir-icon-btn';
     return 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200';
 });
 
@@ -71,17 +74,18 @@ const { t } = useI18n();
 const controlsVariant = computed(() => {
     if (isKawaii.value) return 'kawaii';
     if (isAurora.value) return 'aurora';
+    if (isNoir.value) return 'noir';
     return 'default';
 });
 
 const dashboardGreetingTitleClass = computed(() => {
-    if (isAurora.value) return 'text-base font-semibold tracking-tight sm:text-lg';
+    if (isAurora.value || isNoir.value) return 'text-base font-semibold tracking-tight sm:text-lg';
     if (isKawaii.value) return 'text-lg font-bold tracking-tight md:text-xl';
     return 'text-xl font-bold tracking-tight md:text-2xl';
 });
 
 const dashboardGreetingSubtitleClass = computed(() => {
-    if (isAurora.value) return 'mt-0.5 truncate text-xs sm:text-sm';
+    if (isAurora.value || isNoir.value) return 'mt-0.5 truncate text-xs sm:text-sm';
     return 'mt-0.5 truncate text-sm';
 });
 </script>

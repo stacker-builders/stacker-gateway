@@ -21,7 +21,7 @@ import { htmlToText } from '@/lib/sanitizeHtml';
 
 defineOptions({ layout: LayoutInfoprodutor });
 const { t } = useI18n();
-const { pageClass, mobileCardClass, isKawaii, isAurora } = usePanelThemeClasses();
+const { pageClass, mobileCardClass, isKawaii, isAurora, isNoir } = usePanelThemeClasses();
 
 const props = defineProps({
     produtos: { type: [Array, Object], default: () => [] },
@@ -321,7 +321,7 @@ function pluginActions(productId) {
             <div
                 v-if="!produtosList.length"
                 class="flex flex-col items-center justify-center rounded-xl border border-dashed py-16"
-                :class="isAurora ? 'border-[var(--aurora-border)]' : isKawaii ? 'border-[var(--kawaii-border)]' : 'border-zinc-300 dark:border-zinc-700'"
+                :class="isAurora ? 'border-[var(--aurora-border)]' : isKawaii ? 'border-[var(--kawaii-border)]' : isNoir ? 'border-[var(--noir-border)]' : 'border-zinc-300 dark:border-zinc-700'"
             >
                 <Package class="h-14 w-14 text-zinc-400 dark:text-zinc-500" />
                 <p class="mt-3 text-zinc-600 dark:text-zinc-400">Nenhum produto ainda.</p>

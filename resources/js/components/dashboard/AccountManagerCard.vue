@@ -9,12 +9,12 @@ const props = defineProps({
     variant: {
         type: String,
         default: 'default',
-        validator: (v) => ['default', 'kawaii', 'aurora'].includes(v),
+        validator: (v) => ['default', 'kawaii', 'aurora', 'noir'].includes(v),
     },
 });
 
 const page = usePage();
-const { isAurora, isKawaii } = useSellerDashboardTemplate();
+const { isAurora, isKawaii, isNoir } = useSellerDashboardTemplate();
 
 const manager = computed(() => props.manager ?? page.props.account_manager ?? null);
 const open = ref(false);
@@ -23,12 +23,14 @@ const resolvedVariant = computed(() => {
     if (props.variant !== 'default') return props.variant;
     if (isKawaii.value) return 'kawaii';
     if (isAurora.value) return 'aurora';
+    if (isNoir.value) return 'noir';
     return 'default';
 });
 
 const iconBtnClass = computed(() => {
     if (resolvedVariant.value === 'kawaii') return 'kawaii-icon-btn';
     if (resolvedVariant.value === 'aurora') return 'aurora-icon-btn';
+    if (resolvedVariant.value === 'noir') return 'noir-icon-btn';
     return 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200';
 });
 

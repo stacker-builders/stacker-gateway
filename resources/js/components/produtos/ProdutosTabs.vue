@@ -7,7 +7,7 @@ import { useSellerDashboardTemplate } from '@/composables/useSellerDashboardTemp
 
 const page = usePage();
 const { t } = useI18n();
-const { isAurora, isKawaii, themePrefix } = useSellerDashboardTemplate();
+const { themePrefix } = useSellerDashboardTemplate();
 
 const path = computed(() => page.url.split('?')[0]);
 
@@ -39,8 +39,7 @@ const isProdutos = computed(() => {
 });
 
 const navClass = computed(() => {
-    if (isAurora.value) return 'aurora-subnav';
-    if (isKawaii.value) return 'kawaii-subnav';
+    if (themePrefix.value) return `${themePrefix.value}-subnav`;
     return 'inline-flex rounded-xl bg-zinc-100/80 p-1 dark:bg-zinc-800/80';
 });
 
