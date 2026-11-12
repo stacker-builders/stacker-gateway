@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\Subscription;
 use App\Services\SellerActivityLogService;
 use App\Services\TeamAccessService;
+use App\Support\SubscriptionChargeSummary;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -58,10 +59,14 @@ class AssinaturasController extends Controller
             $listQuery->where('status', $statusFilter);
         }
 
-        $assinaturas = $listQuery->orderByDesc('subscriptions.current_period_end')
+        $page = $listQuery->orderByDesc('subscriptions.current_period_end')
             ->paginate(20)
-            ->withQueryString()
-            ->through(fn ($s) => [
+            ->withQueryString();
+        $summaries = SubscriptionChargeSummary::forSubscriptions($page->getCollection());
+        $assinaturas = $page->through(function ($s) use ($summaries) {
+            $summary = $summaries[$s->id] ?? [];
+
+            return [
                 'id' => $s->id,
                 'user' => $s->user ? ['id' => $s->user->id, 'name' => $s->user->name, 'email' => $s->user->email] : null,
                 'product' => $s->product ? ['id' => $s->product->id, 'name' => $s->product->name] : null,
@@ -70,10 +75,18 @@ class AssinaturasController extends Controller
                     'name' => $s->subscriptionPlan->name,
                     'interval' => $s->subscriptionPlan->interval,
                     'interval_label' => \App\Models\SubscriptionPlan::intervalLabels()[$s->subscriptionPlan->interval] ?? $s->subscriptionPlan->interval,
+                    'price' => (float) $s->subscriptionPlan->price,
                 ] : null,
                 'current_period_end' => $s->current_period_end?->toDateString(),
+                'purchased_at' => $summary['purchased_at'] ?? $s->created_at?->toIso8601String(),
+                'next_charge_at' => $summary['next_charge_at'] ?? null,
+                'next_charge_amount' => $summary['next_charge_amount'] ?? null,
+                'payment_method_label' => $summary['payment_method_label'] ?? '—',
+                'charges_count' => $summary['charges_count'] ?? 0,
+                'automatic_charges_count' => $summary['automatic_charges_count'] ?? 0,
                 'status' => $s->status,
-            ]);
+            ];
+        });
 
         return Inertia::render('Assinaturas/Index', [
             'stats' => [
@@ -90,6 +103,8 @@ class AssinaturasController extends Controller
     {
         $this->authorizeSubscription($subscription);
 
+        $subscription->loadMissing(['user', 'product', 'subscriptionPlan']);
+        $summary = SubscriptionChargeSummary::forSubscriptions([$subscription])[$subscription->id] ?? [];
         $plan = $subscription->subscriptionPlan;
         $paidPeriodsCount = Order::query()
             ->where('tenant_id', $subscription->tenant_id)
@@ -113,7 +128,11 @@ class AssinaturasController extends Controller
                 'status' => $o->status,
                 'amount' => (float) $o->amount,
                 'is_renewal' => (bool) $o->is_renewal,
+                'charge_label' => $o->is_renewal ? 'Cobrança automática' : 'Compra',
                 'payment_method' => $o->payment_method,
+                'payment_method_label' => $o->paymentMethodDisplayLabel(),
+                'period_start' => $o->period_start?->toDateString(),
+                'period_end' => $o->period_end?->toDateString(),
                 'created_at' => $o->created_at?->toIso8601String(),
             ]);
 
@@ -144,6 +163,11 @@ class AssinaturasController extends Controller
                     'currency' => $plan->getCurrencyOrDefault(),
                 ] : null,
                 'paid_periods_count' => $paidPeriodsCount,
+                'purchased_at' => $summary['purchased_at'] ?? $subscription->created_at?->toIso8601String(),
+                'next_charge_at' => $summary['next_charge_at'] ?? null,
+                'next_charge_amount' => $summary['next_charge_amount'] ?? null,
+                'payment_method_label' => $summary['payment_method_label'] ?? '—',
+                'automatic_charges_count' => $summary['automatic_charges_count'] ?? 0,
             ],
             'recent_orders' => $recentOrders,
             'cancel_grace_days' => (int) config('getfy.subscriptions.cancel_grace_days_after_period_end', 14),

@@ -214,6 +214,7 @@ class DemoPlatformData
                 'product_label' => self::PRODUCT_NAMES[$idx],
                 'product_name' => self::PRODUCT_NAMES[$idx],
                 'payment_type_label' => ($i % 4 === 0) ? 'Pagamento recorrente' : 'Pagamento único',
+                'sale_type_label' => ($i % 4 === 0) ? 'Assinatura' : 'Único',
                 'customer_name' => 'Cliente Demo '.($i + 1),
                 'customer_email' => 'cliente'.($i + 1).'@demo.exemplo',
                 'infoprodutor_name' => 'Vendedor Demo',

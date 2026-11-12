@@ -17,6 +17,7 @@ import {
     Wallet,
     Activity,
     ArrowLeftRight,
+    Repeat,
     AlertTriangle,
     Banknote,
     CircleDollarSign,
@@ -103,6 +104,7 @@ const navGroupsCore = [
         label: 'Operações',
         items: [
             { name: 'Transações', href: '/plataforma/transacoes', icon: ArrowLeftRight, badgeKey: 'transacoes' },
+            { name: 'Assinaturas', href: '/plataforma/assinaturas', icon: Repeat },
             { name: 'Transações API', href: '/plataforma/transacoes-api', icon: Code2 },
             { name: 'Disputas MED', href: '/plataforma/disputas', icon: AlertTriangle, badgeKey: 'disputas' },
             { name: 'Produtos', href: '/plataforma/produtos?filter=pending', icon: Package, badgeKey: 'produtos' },
@@ -193,6 +195,9 @@ function isActive(href) {
     }
     if (href === '/plataforma/transacoes-api') {
         return url === '/plataforma/transacoes-api' || url.startsWith('/plataforma/transacoes-api/');
+    }
+    if (href === '/plataforma/assinaturas') {
+        return url === '/plataforma/assinaturas' || url.startsWith('/plataforma/assinaturas/');
     }
     if (href === '/plataforma/transacoes') {
         return (url === '/plataforma/transacoes' || url.startsWith('/plataforma/transacoes/'))
