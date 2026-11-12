@@ -715,6 +715,7 @@ class ProdutosController extends Controller
             'cademi_available' => $cademiAvailable,
             'shipping_stores' => PhysicalProductAccess::globalEnabled() ? $shippingStores : [],
             'telegram_delivery' => $telegramDelivery,
+            'reusable_meta_pixels' => $this->reusableMetaPixelsForEdit($produto, $coproductionReadonly),
             'layoutContentFlushLeft' => true,
             'pageTitleBadge' => $produto->name,
         ]);
@@ -812,6 +813,7 @@ class ProdutosController extends Controller
             'conversion_pixels.meta.enabled' => ['nullable', 'boolean'],
             'conversion_pixels.meta.entries' => ['nullable', 'array'],
             'conversion_pixels.meta.entries.*.id' => ['nullable', 'string', 'max:64'],
+            'conversion_pixels.meta.entries.*.name' => ['nullable', 'string', 'max:80'],
             'conversion_pixels.meta.entries.*.pixel_id' => ['nullable', 'string', 'max:64'],
             'conversion_pixels.meta.entries.*.access_token' => ['nullable', 'string', 'max:500'],
             'conversion_pixels.meta.entries.*.fire_purchase_on_pix' => ['nullable', 'boolean'],
@@ -1609,6 +1611,64 @@ class ProdutosController extends Controller
                 'owner_name' => $owner?->name ?? '',
             ],
         ];
+    }
+
+    /**
+     * Pixels Meta de outros produtos do mesmo infoprodutor, para copiar Pixel ID e token.
+     *
+     * @return list<array{key: string, product_name: string, name: string, pixel_id: string, access_token: string}>
+     */
+    private function reusableMetaPixelsForEdit(Product $produto, bool $coproductionReadonly): array
+    {
+        if ($coproductionReadonly) {
+            return [];
+        }
+
+        $user = auth()->user();
+        $tenantId = $user?->tenant_id;
+        if ($user === null || $tenantId === null || (int) $produto->tenant_id !== (int) $tenantId) {
+            return [];
+        }
+
+        $allowed = array_values(array_filter(
+            app(TeamAccessService::class)->allowedProductIdsFor($user),
+            fn ($id) => (string) $id !== (string) $produto->id
+        ));
+        if ($allowed === []) {
+            return [];
+        }
+
+        $rows = [];
+        $others = Product::forTenant((int) $tenantId)
+            ->whereIn('id', $allowed)
+            ->orderBy('name')
+            ->get(['id', 'name', 'conversion_pixels']);
+
+        foreach ($others as $other) {
+            $entries = $other->conversion_pixels['meta']['entries'] ?? [];
+            if (! is_array($entries)) {
+                continue;
+            }
+            foreach ($entries as $entry) {
+                if (! is_array($entry)) {
+                    continue;
+                }
+                $pixelId = trim((string) ($entry['pixel_id'] ?? ''));
+                if ($pixelId === '') {
+                    continue;
+                }
+                $entryId = trim((string) ($entry['id'] ?? ''));
+                $rows[] = [
+                    'key' => (string) $other->id.':'.($entryId !== '' ? $entryId : $pixelId),
+                    'product_name' => (string) $other->name,
+                    'name' => trim((string) ($entry['name'] ?? '')),
+                    'pixel_id' => $pixelId,
+                    'access_token' => trim((string) ($entry['access_token'] ?? '')),
+                ];
+            }
+        }
+
+        return $rows;
     }
 
     private function authorizeProduct(Product $produto, bool $manage = true): void

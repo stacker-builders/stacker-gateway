@@ -19,7 +19,7 @@ const ENTRY_FLAGS = {
 };
 
 export function newMetaEntry() {
-    return { id: randomClientId(), pixel_id: '', access_token: '', ...ENTRY_FLAGS };
+    return { id: randomClientId(), name: '', pixel_id: '', access_token: '', ...ENTRY_FLAGS };
 }
 export function newTiktokEntry() {
     return { id: randomClientId(), pixel_id: '', access_token: '', ...ENTRY_FLAGS };
