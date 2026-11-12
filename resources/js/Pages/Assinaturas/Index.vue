@@ -37,6 +37,18 @@ function formatBRL(value) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value ?? 0);
 }
 
+function formatDate(value) {
+    if (!value) return '—';
+    const text = String(value);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+        const [year, month, day] = text.split('-');
+        return `${day}/${month}/${year}`;
+    }
+    const date = new Date(text);
+    if (Number.isNaN(date.getTime())) return text;
+    return date.toLocaleDateString('pt-BR');
+}
+
 function statusBadgeClass(status) {
     const map = {
         active: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
@@ -177,12 +189,22 @@ function statusBadgeLabel(status) {
 
                                 <div class="flex items-end justify-between gap-3">
                                     <p class="text-[11px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                                        {{ t('subscriptions.renews_on', 'Renova em') }}
+                                        Compra
                                     </p>
                                     <p class="text-sm font-semibold tabular-nums text-zinc-900 dark:text-white">
-                                        {{ s.current_period_end || '—' }}
+                                        {{ formatDate(s.purchased_at) }}
                                     </p>
                                 </div>
+                                <div class="flex items-end justify-between gap-3">
+                                    <p class="text-[11px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                                        Próxima cobrança
+                                    </p>
+                                    <p class="text-right text-sm font-semibold tabular-nums text-zinc-900 dark:text-white">
+                                        <template v-if="s.next_charge_at">{{ formatDate(s.next_charge_at) }} · {{ formatBRL(s.next_charge_amount) }}</template>
+                                        <template v-else>—</template>
+                                    </p>
+                                </div>
+                                <p class="text-xs text-zinc-500 dark:text-zinc-400">{{ s.payment_method_label }}</p>
                             </div>
                         </div>
                     </div>
@@ -195,7 +217,8 @@ function statusBadgeLabel(status) {
                         <tr>
                             <th class="px-4 py-3 font-medium">{{ t('sales.customer', 'Cliente') }}</th>
                             <th class="px-4 py-3 font-medium">{{ t('subscriptions.product_plan', 'Produto / Plano') }}</th>
-                            <th class="px-4 py-3 font-medium">{{ t('subscriptions.renews_on', 'Renova em') }}</th>
+                            <th class="px-4 py-3 font-medium">Compra</th>
+                            <th class="px-4 py-3 font-medium">Próxima cobrança</th>
                             <th class="px-4 py-3 font-medium">{{ t('sales.status', 'Status') }}</th>
                         </tr>
                     </thead>
@@ -217,7 +240,17 @@ function statusBadgeLabel(status) {
                                 <p class="font-medium">{{ s.product?.name || '—' }}</p>
                                 <p class="text-xs text-zinc-500 dark:text-zinc-400">{{ s.plan?.name }} · {{ s.plan?.interval_label || s.plan?.interval }}</p>
                             </td>
-                            <td class="px-4 py-3">{{ s.current_period_end || '—' }}</td>
+                            <td class="px-4 py-3">
+                                {{ formatDate(s.purchased_at) }}
+                                <p class="text-xs text-zinc-500 dark:text-zinc-400">{{ s.charges_count }} cobrança(s)</p>
+                            </td>
+                            <td class="px-4 py-3">
+                                <template v-if="s.next_charge_at">
+                                    {{ formatDate(s.next_charge_at) }}
+                                    <p class="text-xs text-zinc-500 dark:text-zinc-400">{{ s.payment_method_label }} · {{ formatBRL(s.next_charge_amount) }}</p>
+                                </template>
+                                <template v-else>—</template>
+                            </td>
                             <td class="px-4 py-3">
                                 <span
                                     :class="[

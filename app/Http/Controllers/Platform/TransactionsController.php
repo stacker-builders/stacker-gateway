@@ -250,6 +250,7 @@ class TransactionsController extends Controller
         $arr['checkout_url'] = url('/c/'.$o->getCheckoutSlug());
         $arr['partner_checkout_url'] = $partnerCheckoutUrl !== '' ? $partnerCheckoutUrl : null;
         $arr['payment_type_label'] = $this->paymentTypeLabel($o);
+        $arr['sale_type_label'] = ($o->subscription_plan_id || $o->is_renewal) ? 'Assinatura' : 'Único';
         $arr['amount_total'] = $breakdown['gross'];
         $arr['amount_gross'] = $breakdown['gross'];
         $arr['amount_fee'] = $breakdown['fee'];

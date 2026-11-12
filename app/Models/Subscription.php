@@ -56,6 +56,11 @@ class Subscription extends Model
         return $this->belongsTo(User::class);
     }
 
+    public function tenantOwner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'tenant_id', 'id');
+    }
+
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);

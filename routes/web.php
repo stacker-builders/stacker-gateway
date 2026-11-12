@@ -701,6 +701,7 @@ Route::prefix('plataforma')->name('plataforma.')->group(function () {
             ->name('indique-ganhe.saques.reject');
 
         Route::get('/transacoes', [\App\Http\Controllers\Platform\TransactionsController::class, 'index'])->name('transacoes.index');
+        Route::get('/assinaturas', [\App\Http\Controllers\Platform\SubscriptionsController::class, 'index'])->name('assinaturas.index');
         Route::get('/transacoes-api', [\App\Http\Controllers\Platform\TransactionsController::class, 'apiIndex'])->name('transacoes-api.index');
         Route::post('/transacoes/pedidos/excluir-em-massa', [\App\Http\Controllers\Platform\TransactionsController::class, 'bulkDestroyPending'])
             ->name('transacoes.pedidos.bulk-destroy')

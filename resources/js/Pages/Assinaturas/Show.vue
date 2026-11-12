@@ -26,6 +26,18 @@ function formatBRL(value) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value ?? 0);
 }
 
+function formatDate(value) {
+    if (!value) return '—';
+    const text = String(value);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+        const [year, month, day] = text.split('-');
+        return `${day}/${month}/${year}`;
+    }
+    const date = new Date(text);
+    if (Number.isNaN(date.getTime())) return text;
+    return date.toLocaleString('pt-BR');
+}
+
 function statusBadgeClass(status) {
     const map = {
         active: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
@@ -108,15 +120,20 @@ function cancelSubscription() {
                 </div>
                 <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-900/40">
                     <dt class="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                        {{ t('subscriptions.period_start', 'Início do período') }}
+                        Compra
                     </dt>
-                    <dd class="mt-1 text-sm font-semibold text-zinc-900 dark:text-white">{{ subscription.current_period_start || '—' }}</dd>
+                    <dd class="mt-1 text-sm font-semibold text-zinc-900 dark:text-white">{{ formatDate(subscription.purchased_at) }}</dd>
+                    <dd class="mt-1 text-xs text-zinc-500">{{ subscription.payment_method_label }}</dd>
                 </div>
                 <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-900/40">
                     <dt class="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                        {{ t('subscriptions.renews_on', 'Renova em') }}
+                        Próxima cobrança
                     </dt>
-                    <dd class="mt-1 text-sm font-semibold text-zinc-900 dark:text-white">{{ subscription.current_period_end || '—' }}</dd>
+                    <dd class="mt-1 text-sm font-semibold text-zinc-900 dark:text-white">
+                        <template v-if="subscription.next_charge_at">{{ formatDate(subscription.next_charge_at) }} · {{ formatBRL(subscription.next_charge_amount) }}</template>
+                        <template v-else>Sem próxima cobrança</template>
+                    </dd>
+                    <dd class="mt-1 text-xs text-zinc-500">{{ subscription.automatic_charges_count }} cobrança(s) automática(s) paga(s)</dd>
                 </div>
                 <div class="rounded-lg bg-zinc-50 p-4 dark:bg-zinc-900/40">
                     <dt class="text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
@@ -153,9 +170,11 @@ function cancelSubscription() {
                     <thead class="border-b border-zinc-200 bg-zinc-50/80 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-400">
                         <tr>
                             <th class="px-4 py-3 font-medium">{{ t('sales.order', 'Pedido') }}</th>
+                            <th class="px-4 py-3 font-medium">Tipo</th>
                             <th class="px-4 py-3 font-medium">{{ t('sales.status', 'Status') }}</th>
+                            <th class="px-4 py-3 font-medium">Método</th>
                             <th class="px-4 py-3 font-medium">{{ t('sales.amount', 'Valor') }}</th>
-                            <th class="px-4 py-3 font-medium">{{ t('subscriptions.renewal', 'Renovação') }}</th>
+                            <th class="px-4 py-3 font-medium">Período</th>
                             <th class="px-4 py-3 font-medium">{{ t('sales.date', 'Data') }}</th>
                         </tr>
                     </thead>
@@ -170,10 +189,12 @@ function cancelSubscription() {
                                     {{ o.public_reference || '#' + o.id }}
                                 </button>
                             </td>
+                            <td class="px-4 py-3">{{ o.charge_label || (o.is_renewal ? 'Cobrança automática' : 'Compra') }}</td>
                             <td class="px-4 py-3">{{ o.status }}</td>
+                            <td class="px-4 py-3">{{ o.payment_method_label || '—' }}</td>
                             <td class="px-4 py-3 tabular-nums">{{ formatBRL(o.amount) }}</td>
-                            <td class="px-4 py-3">{{ o.is_renewal ? t('common.yes', 'Sim') : t('common.no', 'Não') }}</td>
-                            <td class="px-4 py-3 text-xs text-zinc-500">{{ o.created_at ? new Date(o.created_at).toLocaleString() : '—' }}</td>
+                            <td class="px-4 py-3 text-xs text-zinc-500">{{ formatDate(o.period_start) }} — {{ formatDate(o.period_end) }}</td>
+                            <td class="px-4 py-3 text-xs text-zinc-500">{{ formatDate(o.created_at) }}</td>
                         </tr>
                     </tbody>
                 </table>

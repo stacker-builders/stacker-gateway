@@ -777,6 +777,14 @@ const tableColCount = computed(() => (isRefundRequestsFilter.value ? 12 : 11));
                     <div class="min-w-0 space-y-3 border-l border-zinc-100 pl-3 dark:border-zinc-700">
                         <div>
                             <dt class="text-[11px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                                Tipo
+                            </dt>
+                            <dd class="mt-0.5 text-sm text-zinc-800 dark:text-zinc-200">
+                                {{ o.sale_type_label || 'Único' }}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt class="text-[11px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                                 Método
                             </dt>
                             <dd class="mt-0.5 break-words text-sm text-zinc-800 dark:text-zinc-200">
@@ -847,6 +855,7 @@ const tableColCount = computed(() => (isRefundRequestsFilter.value ? 12 : 11));
                             <th class="min-w-0 px-2 py-2.5">Infoprodutor</th>
                             <th class="min-w-0 px-2 py-2.5">Produto</th>
                             <th class="w-[6.75rem] px-2 py-2.5">Status</th>
+                            <th class="w-[5.5rem] px-2 py-2.5">Tipo</th>
                             <th v-if="isRefundRequestsFilter" class="min-w-0 px-2 py-2.5">Solicitação</th>
                             <th class="w-[5.25rem] px-2 py-2.5">Método</th>
                             <th class="w-[6.25rem] px-2 py-2.5">Recebedor</th>
@@ -930,6 +939,16 @@ const tableColCount = computed(() => (isRefundRequestsFilter.value ? 12 : 11));
                                         Aprovação manual
                                     </span>
                                 </div>
+                            </td>
+                            <td class="px-2 py-2.5 align-top">
+                                <span
+                                    class="inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium"
+                                    :class="o.sale_type_label === 'Assinatura'
+                                        ? 'bg-[var(--color-primary)]/15 text-[var(--color-primary)]'
+                                        : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200'"
+                                >
+                                    {{ o.sale_type_label || 'Único' }}
+                                </span>
                             </td>
                             <td v-if="isRefundRequestsFilter" class="min-w-0 px-2 py-2.5 align-top">
                                 <div class="leading-tight text-zinc-500 dark:text-zinc-400">
