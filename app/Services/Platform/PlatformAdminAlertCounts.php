@@ -20,6 +20,9 @@ class PlatformAdminAlertCounts
 {
     public const KEY_KYC = 'kyc';
 
+    /** Aprovações de KYC ainda não vistas na lista. */
+    public const KEY_KYC_APROVADOS = 'kyc_aprovados';
+
     public const KEY_APROVACAO = 'aprovacao';
 
     public const KEY_PRODUTOS = 'produtos';
@@ -42,7 +45,7 @@ class PlatformAdminAlertCounts
     public function sidebarBadges(?User $user = null): array
     {
         return [
-            self::KEY_KYC => $this->kycPendingCount($user),
+            self::KEY_KYC => $this->kycPendingCount($user) + $this->kycApprovedUnseenCount($user),
             self::KEY_APROVACAO => $this->pendingAccountApprovalCount($user),
             self::KEY_PRODUTOS => $this->productsPendingCount($user),
             self::KEY_SAQUES => $this->withdrawalsAttentionCount($user),
@@ -118,6 +121,31 @@ class PlatformAdminAlertCounts
             });
 
         return (int) $query->count();
+    }
+
+    /**
+     * Aprovações de KYC desde a última visita à lista.
+     * A primeira leitura só marca o ponto de partida, para o histórico antigo não acender o balão.
+     */
+    public function kycApprovedUnseenCount(?User $user = null): int
+    {
+        if ($user === null || ! Schema::hasColumn('users', 'kyc_status') || ! Schema::hasColumn('users', 'kyc_reviewed_at')) {
+            return 0;
+        }
+
+        $since = $this->viewedAt($user, self::KEY_KYC_APROVADOS);
+        if ($since === null) {
+            $this->markViewed($user, self::KEY_KYC_APROVADOS);
+
+            return 0;
+        }
+
+        return (int) User::query()
+            ->where('role', User::ROLE_INFOPRODUTOR)
+            ->whereNotNull('tenant_id')
+            ->where('kyc_status', User::KYC_APPROVED)
+            ->where('kyc_reviewed_at', '>', $since)
+            ->count();
     }
 
     public function pendingAccountApprovalCount(?User $user = null): int
@@ -240,6 +268,7 @@ class PlatformAdminAlertCounts
     {
         return [
             self::KEY_KYC,
+            self::KEY_KYC_APROVADOS,
             self::KEY_PRODUTOS,
             self::KEY_SAQUES,
             self::KEY_FINANCEIRO,

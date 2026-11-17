@@ -33,10 +33,18 @@ const props = defineProps({
     conversion_rejection_reason: { type: String, default: null },
     verification_mode: { type: String, default: 'manual' },
     verification_ready: { type: Boolean, default: true },
+    identity_verified: { type: Boolean, default: false },
 });
 
 const conversionMode = computed(() => !!props.conversion_mode);
-const usesDiditFlow = computed(() => props.verification_mode === 'didit' && !conversionMode.value);
+const companyDocsAfterDidit = computed(
+    () =>
+        props.verification_mode === 'didit' &&
+        !!props.identity_verified &&
+        props.person_type === 'pj' &&
+        !conversionMode.value,
+);
+const usesDiditFlow = computed(() => props.verification_mode === 'didit' && !conversionMode.value && !companyDocsAfterDidit.value);
 const diditReady = computed(() => props.verification_ready !== false);
 const startingDidit = ref(false);
 
@@ -205,7 +213,7 @@ function parseAxiosError(err, field) {
 }
 
 async function persistPreferences() {
-    if (!conversionMode.value && !identityType.value) {
+    if (!conversionMode.value && !companyDocsAfterDidit.value && !identityType.value) {
         return false;
     }
     if (isPj.value && req.value.require_company_constitution && !companyNature.value) {
@@ -260,7 +268,7 @@ async function onFile(field, event) {
         return;
     }
 
-    if (!conversionMode.value && !identityType.value) {
+    if (!conversionMode.value && !companyDocsAfterDidit.value && !identityType.value) {
         fieldErrors[field] = 'Selecione o tipo de documento de identificação antes de enviar.';
         return;
     }
@@ -303,7 +311,7 @@ const canFinalize = computed(() => {
     if (isReadOnlyKyc.value) {
         return false;
     }
-    if (conversionMode.value) {
+    if (conversionMode.value || companyDocsAfterDidit.value) {
         if (req.value.require_company_address_proof && !uploaded.company_address_proof) {
             return false;
         }
@@ -469,6 +477,9 @@ const fileAccept =
                 <template v-if="documentUpgrade">
                     Sua conta precisa passar de novo pela verificação de identidade. O fluxo abre na Didit.
                 </template>
+                <template v-else-if="person_type === 'pj'">
+                    A identidade do responsável abre na Didit. Com o ok, você envia os documentos da empresa para a análise da plataforma.
+                </template>
                 <template v-else>
                     A verificação abre num fluxo seguro da Didit, com documento e selfie. Ao terminar, você volta para esta página.
                 </template>
@@ -492,11 +503,20 @@ const fileAccept =
         </div>
         <div v-else-if="embedded && !isReadOnlyKyc">
             <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">
-                {{ conversionMode ? 'Documentos da empresa para migrar para CNPJ' : 'Documentos para verificação' }}
+                {{
+                    conversionMode
+                        ? 'Documentos da empresa para migrar para CNPJ'
+                        : companyDocsAfterDidit
+                          ? 'Documentos da empresa'
+                          : 'Documentos para verificação'
+                }}
             </h3>
             <p class="mt-1 text-xs text-zinc-500">
                 <template v-if="conversionMode">
                     A identidade PF já foi verificada. Envie só os documentos da empresa. A conta continua operando como CPF até a aprovação.
+                </template>
+                <template v-else-if="companyDocsAfterDidit">
+                    A identidade já foi confirmada na Didit. Envie os documentos da empresa para a análise da plataforma.
                 </template>
                 <template v-else>
                     Selecione cada arquivo separadamente (até 20 MB). Formatos: JPG, PNG, WebP, HEIC/HEIF ou PDF.
@@ -554,7 +574,7 @@ const fileAccept =
                 {{ uploadError }}
             </p>
 
-            <div v-if="!conversionMode">
+            <div v-if="!conversionMode && !companyDocsAfterDidit">
                 <h2 class="flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-white">
                     <Upload class="h-4 w-4 text-[var(--color-primary)]" />
                     {{ isPj ? 'Documento do responsável legal' : 'Documento de identificação' }}
@@ -576,7 +596,7 @@ const fileAccept =
                 </select>
             </div>
 
-            <div v-if="identityType && !conversionMode" class="space-y-4">
+            <div v-if="identityType && !conversionMode && !companyDocsAfterDidit" class="space-y-4">
                 <p v-if="identityType === 'passport'" class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
                     O passaporte deve estar <strong>dentro da validade</strong> na data do envio.
                 </p>
@@ -703,7 +723,7 @@ const fileAccept =
 
             <!-- PJ extras -->
             <div
-                v-if="isPj && (identityType || conversionMode) && (req.require_company_address_proof || req.require_company_constitution)"
+                v-if="isPj && (identityType || conversionMode || companyDocsAfterDidit) && (req.require_company_address_proof || req.require_company_constitution)"
                 class="space-y-6"
                 :class="conversionMode ? '' : 'border-t border-zinc-200 pt-6 dark:border-zinc-700'"
             >

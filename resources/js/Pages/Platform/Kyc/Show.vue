@@ -342,6 +342,12 @@ function onStepUpConfirm(payload) {
         <div>
             <h1 class="text-xl font-semibold text-zinc-900 dark:text-white">{{ merchant.name }}</h1>
             <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{{ merchant.email }}</p>
+            <p v-if="merchant.approval_mode === 'automatic'" class="mt-2 text-sm text-sky-800 dark:text-sky-200">
+                Aprovação automática (Didit)
+            </p>
+            <p v-else-if="merchant.approval_mode === 'manual'" class="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
+                Aprovação manual (plataforma)
+            </p>
             <div
                 v-if="merchant.whatsapp || merchant.phone || merchant.whatsapp_url"
                 class="mt-2 flex flex-wrap items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300"
@@ -720,7 +726,10 @@ function onStepUpConfirm(payload) {
                 </ul>
             </section>
 
-            <p v-if="!documents.length && merchant.kyc_provider === 'didit'" class="mt-2 text-sm text-zinc-500">
+            <p v-if="merchant.identity_verified && merchant.person_type === 'pj'" class="mt-2 text-sm text-zinc-500">
+                A identidade do responsável foi confirmada na Didit. A aprovação da conta depende dos documentos da empresa.
+            </p>
+            <p v-if="!documents.length && merchant.kyc_provider === 'didit' && !merchant.identity_verified" class="mt-2 text-sm text-zinc-500">
                 Esta verificação foi feita na Didit. Os arquivos ficam no console dela, não nesta plataforma.
             </p>
             <p v-else-if="!documents.length" class="mt-2 text-sm text-zinc-500">Nenhum arquivo enviado.</p>

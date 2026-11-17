@@ -356,6 +356,61 @@ class PlatformAdminAlertsTest extends TestCase
                 ->where('refund_requests_pending_count', 1));
     }
 
+    public function test_approved_kyc_shows_in_the_sidebar_until_the_list_is_opened(): void
+    {
+        $this->withoutMiddleware([
+            EnsureInstalled::class,
+            EnsureStackerLicense::class,
+            ValidateCsrfToken::class,
+        ]);
+
+        if (! Schema::hasColumn('users', 'kyc_reviewed_at') || ! Schema::hasColumn('users', 'kyc_provider')) {
+            $this->markTestSkipped('kyc approval columns missing');
+        }
+
+        Carbon::setTestNow('2026-11-17 12:00:00');
+        try {
+            $admin = $this->platformAdmin('plat-kyc-approved-badge@example.com');
+            $manual = $this->seller('kyc-manual@example.com');
+            $manual->forceFill([
+                'kyc_provider' => 'manual',
+                'kyc_reviewed_at' => '2026-11-17 11:00:00',
+                'updated_at' => '2026-11-17 11:00:00',
+            ])->save();
+            $didit = $this->seller('kyc-didit@example.com');
+            $didit->forceFill([
+                'kyc_provider' => 'didit',
+                'kyc_reviewed_at' => '2026-11-17 11:00:00',
+                'updated_at' => '2026-11-17 11:00:00',
+            ])->save();
+
+            $counts = app(PlatformAdminAlertCounts::class);
+            $this->assertSame(0, $counts->kycApprovedUnseenCount($admin));
+
+            Carbon::setTestNow('2026-11-17 12:05:00');
+            $didit->forceFill([
+                'kyc_reviewed_at' => now(),
+                'updated_at' => now(),
+            ])->save();
+
+            $this->assertSame(1, $counts->sidebarBadges($admin)['kyc']);
+
+            $this->actingAs($admin)
+                ->get('/plataforma/verificacoes-kyc?status=approved')
+                ->assertOk()
+                ->assertInertia(fn ($page) => $page
+                    ->where('approved_unseen', 1)
+                    ->where('users.data.0.approval_mode', 'automatic')
+                    ->where('users.data.1.approval_mode', 'manual')
+                    ->where('platform_admin_sidebar_badges.kyc', 0)
+                );
+
+            $this->assertSame(0, $counts->sidebarBadges($admin->fresh())['kyc']);
+        } finally {
+            Carbon::setTestNow();
+        }
+    }
+
     private function platformAdmin(string $email): User
     {
         return User::factory()->create([

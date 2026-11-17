@@ -251,6 +251,59 @@ class KycRequiredDocuments
         return array_values(array_diff($required, $existing));
     }
 
+    /**
+     * CNPJ com a Didit ligada ainda precisa da análise manual dos documentos da empresa.
+     */
+    public static function diditLeavesCompanyReview(User $user): bool
+    {
+        if (($user->person_type ?? '') !== 'pj' || PjConversion::isCollectingOrPending($user)) {
+            return false;
+        }
+
+        if (! DiditKycSettings::isEnabled()) {
+            return false;
+        }
+
+        $cfg = KycRequirementSettings::resolved();
+
+        return $cfg['require_company_address_proof'] || $cfg['require_company_constitution'];
+    }
+
+    public static function hasCompanyPackage(User $user): bool
+    {
+        $cfg = KycRequirementSettings::resolved();
+        if ($cfg['require_company_constitution']
+            && self::normalizeCompanyNature($user->company_legal_nature ?? null) === null) {
+            return false;
+        }
+
+        $required = [];
+        if ($cfg['require_company_address_proof']) {
+            $required[] = KycDocument::KIND_COMPANY_ADDRESS_PROOF;
+        }
+        if ($cfg['require_company_constitution']) {
+            $nature = self::normalizeCompanyNature($user->company_legal_nature ?? null);
+            if ($nature === self::COMPANY_NATURE_MEI) {
+                $required[] = KycDocument::KIND_CCMEI;
+            } elseif ($nature === self::COMPANY_NATURE_OTHER) {
+                $required[] = KycDocument::KIND_SOCIAL_CONTRACT;
+            }
+        }
+
+        if ($required === []) {
+            return true;
+        }
+
+        $existing = KycDocument::query()
+            ->where('user_id', $user->id)
+            ->active()
+            ->whereIn('kind', $required)
+            ->pluck('kind')
+            ->all();
+
+        return array_diff($required, $existing) === [];
+    }
+
     public static function hasAllRequired(User $user): bool
     {
         if (PjConversion::isCollectingOrPending($user)) {

@@ -6,8 +6,11 @@ use App\Http\Middleware\EnsureInstalled;
 use App\Http\Middleware\EnsureStackerLicense;
 use App\Models\User;
 use App\Support\DiditKycSettings;
+use App\Support\KycRequirementSettings;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 class DiditKycToggleTest extends TestCase
@@ -30,6 +33,7 @@ class DiditKycToggleTest extends TestCase
         ]);
 
         $this->actingAs($admin)
+            ->from('/plataforma/configuracoes')
             ->put('/plataforma/configuracoes', [
                 'kyc_didit_enabled' => '1',
             ])
@@ -160,6 +164,96 @@ class DiditKycToggleTest extends TestCase
         $fresh = $seller->fresh();
         $this->assertSame(User::KYC_REJECTED, $fresh->kyc_status);
         $this->assertNotSame('', (string) $fresh->kyc_rejection_reason);
+    }
+
+    public function test_cnpj_didit_approval_waits_for_company_documents(): void
+    {
+        Storage::fake('local');
+        $seller = $this->seller();
+        $seller->forceFill([
+            'person_type' => 'pj',
+            'kyc_provider' => DiditKycSettings::PROVIDER,
+            'kyc_external_session_id' => 'sess-cnpj',
+            'account_status' => 'pending',
+        ])->save();
+        $this->enableDidit();
+        $seller->refresh();
+        $this->assertTrue(\Illuminate\Support\Facades\Schema::hasColumn('users', 'kyc_identity_verified_at'), 'coluna kyc_identity_verified_at ausente');
+        $this->assertSame('pj', $seller->person_type);
+        $this->assertTrue(DiditKycSettings::isEnabled(), 'didit desligada');
+        $this->assertTrue(\App\Support\KycRequiredDocuments::diditLeavesCompanyReview($seller), 'nao deixou analise da empresa');
+
+        $this->postDidit([
+            'webhook_type' => 'status.updated',
+            'session_id' => 'sess-cnpj',
+            'status' => 'Approved',
+            'vendor_data' => (string) $seller->id,
+            'timestamp' => time(),
+        ])->assertOk();
+
+        $seller->refresh();
+        $this->assertSame(User::KYC_NOT_SUBMITTED, $seller->kyc_status);
+        $this->assertSame('pending', $seller->account_status);
+        $this->assertSame(DiditKycSettings::PROVIDER, $seller->kyc_provider);
+        $this->assertNotNull($seller->kyc_identity_verified_at);
+
+        $this->actingAs($seller)
+            ->postJson('/kyc/document', ['field' => 'rg_front'])
+            ->assertStatus(422);
+
+        $this->actingAs($seller)
+            ->post('/kyc/document', [
+                'field' => 'company_address_proof',
+                'company_legal_nature' => 'mei',
+                'company_address_proof' => UploadedFile::fake()->image('endereco.jpg', 400, 300),
+            ])
+            ->assertOk();
+
+        $this->actingAs($seller)
+            ->post('/kyc/document', [
+                'field' => 'ccmei',
+                'company_legal_nature' => 'mei',
+                'ccmei' => UploadedFile::fake()->image('ccmei.jpg', 400, 300),
+            ])
+            ->assertOk();
+
+        $this->actingAs($seller)
+            ->post('/kyc/finalize', ['company_legal_nature' => 'mei'])
+            ->assertRedirect();
+
+        $fresh = $seller->fresh();
+        $this->assertSame(User::KYC_PENDING_REVIEW, $fresh->kyc_status);
+        $this->assertSame(DiditKycSettings::PROVIDER, $fresh->kyc_provider);
+        $this->assertSame('sess-cnpj', $fresh->kyc_external_session_id);
+        $this->assertNotNull($fresh->kyc_identity_verified_at);
+    }
+
+    public function test_cnpj_is_fully_approved_when_company_documents_are_not_required(): void
+    {
+        $seller = $this->seller();
+        $seller->forceFill([
+            'person_type' => 'pj',
+            'kyc_provider' => DiditKycSettings::PROVIDER,
+            'kyc_external_session_id' => 'sess-cnpj-full',
+            'account_status' => 'pending',
+        ])->save();
+        $this->enableDidit();
+        KycRequirementSettings::persistFromValidated([
+            'kyc_require_company_address_proof' => '0',
+            'kyc_require_company_constitution' => '0',
+        ]);
+
+        $this->postDidit([
+            'webhook_type' => 'status.updated',
+            'session_id' => 'sess-cnpj-full',
+            'status' => 'Approved',
+            'vendor_data' => (string) $seller->id,
+            'timestamp' => time(),
+        ])->assertOk();
+
+        $fresh = $seller->fresh();
+        $this->assertSame(User::KYC_APPROVED, $fresh->kyc_status);
+        $this->assertNull($fresh->kyc_identity_verified_at);
     }
 
     private function enableDidit(): void

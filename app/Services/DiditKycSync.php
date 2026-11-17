@@ -98,6 +98,13 @@ class DiditKycSync
             return;
         }
 
+        if (Schema::hasColumn('users', 'kyc_identity_verified_at')
+            && KycRequiredDocuments::diditLeavesCompanyReview($user)) {
+            $this->releaseForCompanyDocuments($user, $sessionId);
+
+            return;
+        }
+
         $attrs = [
             'kyc_status' => User::KYC_APPROVED,
             'kyc_provider' => DiditKycSettings::PROVIDER,
@@ -135,14 +142,19 @@ class DiditKycSync
             return;
         }
 
-        $user->forceFill([
+        $attrs = [
             'kyc_status' => User::KYC_REJECTED,
             'kyc_provider' => DiditKycSettings::PROVIDER,
             'kyc_external_session_id' => $sessionId,
             'kyc_rejection_reason' => $reason,
             'kyc_reviewed_at' => now(),
             'kyc_reviewed_by' => null,
-        ])->save();
+        ];
+        if (Schema::hasColumn('users', 'kyc_identity_verified_at')) {
+            $attrs['kyc_identity_verified_at'] = null;
+        }
+
+        $user->forceFill($attrs)->save();
         $fresh = $user->fresh();
 
         PlatformAuditService::log('platform.kyc.didit_rejected', [
@@ -155,7 +167,7 @@ class DiditKycSync
 
     private function markInReview(User $user, string $sessionId): void
     {
-        if ($user->kyc_status === User::KYC_APPROVED) {
+        if ($user->kyc_status === User::KYC_APPROVED || $user->kyc_identity_verified_at !== null) {
             return;
         }
 
@@ -178,6 +190,29 @@ class DiditKycSync
         if (! $wasPending) {
             $this->platformEmailNotifications->kycSubmitted($user->fresh());
         }
+    }
+
+    private function releaseForCompanyDocuments(User $user, string $sessionId): void
+    {
+        if ($user->kyc_identity_verified_at !== null && $user->kyc_status === User::KYC_PENDING_REVIEW) {
+            $this->rememberSession($user, $sessionId);
+
+            return;
+        }
+
+        $attrs = [
+            'kyc_provider' => DiditKycSettings::PROVIDER,
+            'kyc_external_session_id' => $sessionId,
+            'kyc_identity_verified_at' => $user->kyc_identity_verified_at ?? now(),
+            'kyc_rejection_reason' => null,
+            'kyc_reviewed_at' => null,
+            'kyc_reviewed_by' => null,
+        ];
+        if ($user->kyc_status !== User::KYC_NOT_SUBMITTED) {
+            $attrs['kyc_status'] = User::KYC_NOT_SUBMITTED;
+        }
+
+        $user->forceFill($attrs)->save();
     }
 
     private function rememberSession(User $user, string $sessionId): void

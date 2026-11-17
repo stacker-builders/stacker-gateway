@@ -67,8 +67,9 @@ function toggleIdentity(value, checked) {
                 <div>
                     <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">Verificação pela Didit</h3>
                     <p class="mt-1 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
-                        Ligado, o infoprodutor faz a identidade no fluxo da Didit. Desligado, continua o envio
-                        manual de documentos nesta plataforma. A migração de CPF para CNPJ segue pedindo os
+                        Ligado, a identidade passa pela Didit. No CNPJ, depois do ok o seller ainda envia os
+                        documentos da empresa para análise manual. Desligado, o envio continua todo manual.
+                        A migração de CPF para CNPJ segue pedindo os
                         documentos da empresa aqui.
                     </p>
                 </div>
@@ -191,8 +192,8 @@ function toggleIdentity(value, checked) {
         <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
             <p class="font-medium">Escopo desta configuração</p>
             <p class="mt-1 text-xs leading-relaxed">
-                Vale para novos envios e reenvios (KYC rejeitado) no modo manual. Com a Didit ligada, o fluxo
-                dela substitui este pacote na identidade. A migração para CNPJ continua usando estes documentos.
+                Vale para novos envios e reenvios (KYC rejeitado) no modo manual. Com a Didit ligada, a identidade
+                sai deste pacote. No CNPJ, comprovante e constituição da empresa continuam aqui, assim como na migração de CPF.
                 Contas já aprovadas ou em análise com o pacote antigo continuam válidas.
             </p>
         </div>

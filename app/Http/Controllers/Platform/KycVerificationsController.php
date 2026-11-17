@@ -13,6 +13,7 @@ use App\Services\Platform\PlatformTotpService;
 use App\Services\PlatformAuditService;
 use App\Services\PlatformEmailNotifications;
 use App\Support\BlockedDocuments;
+use App\Support\DiditKycSettings;
 use App\Support\CnpjLookup;
 use App\Support\KycRequiredDocuments;
 use App\Support\KycUpload;
@@ -47,6 +48,8 @@ class KycVerificationsController extends Controller
             $q->where('kyc_status', User::KYC_BLOCKED);
         } elseif ($filter === 'not_submitted') {
             $q->where('kyc_status', User::KYC_NOT_SUBMITTED);
+        } elseif ($filter === 'approved') {
+            $q->where('kyc_status', User::KYC_APPROVED);
         } elseif ($filter === 'needs_document_review' && Schema::hasColumn('users', 'kyc_needs_document_review')) {
             $q->where('kyc_needs_document_review', true);
         }
@@ -61,6 +64,8 @@ class KycVerificationsController extends Controller
                     'email' => $u->email,
                     'person_type' => $u->person_type,
                     'kyc_status' => $u->kyc_status,
+                    'kyc_provider' => Schema::hasColumn('users', 'kyc_provider') ? $u->kyc_provider : null,
+                    'approval_mode' => self::approvalMode($u),
                     'pj_conversion_status' => PjConversion::status($u),
                     'updated_at' => $u->updated_at?->toIso8601String(),
                 ];
@@ -70,6 +75,7 @@ class KycVerificationsController extends Controller
         return Inertia::render('Platform/Kyc/Index', [
             'users' => $paginator,
             'filter' => $filter,
+            'approved_unseen' => (int) $request->attributes->get('kyc_approved_unseen', 0),
         ]);
     }
 
@@ -122,6 +128,8 @@ class KycVerificationsController extends Controller
                 'monthly_revenue_range' => $user->monthly_revenue_range,
                 'kyc_status' => $user->kyc_status,
                 'kyc_provider' => $user->kyc_provider ?? null,
+                'identity_verified' => $user->kyc_identity_verified_at !== null,
+                'approval_mode' => self::approvalMode($user),
                 'kyc_rejection_reason' => $user->kyc_rejection_reason,
                 'kyc_reviewed_at' => $user->kyc_reviewed_at?->toIso8601String(),
                 'identity_document_type' => $user->identity_document_type ?? null,
@@ -142,8 +150,14 @@ class KycVerificationsController extends Controller
 
         $this->validatePlatformStepUp($request, redirectRoute: 'plataforma.kyc.show');
 
-        $verifiedByDidit = (string) ($user->kyc_provider ?? '') === \App\Support\DiditKycSettings::PROVIDER;
-        if (! $verifiedByDidit && ! KycRequiredDocuments::hasAllRequired($user)) {
+        $verifiedByDidit = (string) ($user->kyc_provider ?? '') === DiditKycSettings::PROVIDER;
+        if (KycRequiredDocuments::diditLeavesCompanyReview($user)) {
+            if (! KycRequiredDocuments::hasCompanyPackage($user)) {
+                throw ValidationException::withMessages([
+                    'kyc' => 'Faltam os documentos da empresa para concluir a análise manual.',
+                ]);
+            }
+        } elseif (! $verifiedByDidit && ! KycRequiredDocuments::hasAllRequired($user)) {
             $missing = implode(', ', KycRequiredDocuments::missingLabelsForUser($user));
             throw ValidationException::withMessages([
                 'kyc' => 'Documentos obrigatórios ausentes: '.$missing.'.',
@@ -360,5 +374,24 @@ class KycVerificationsController extends Controller
             'X-Content-Type-Options' => 'nosniff',
             'Cache-Control' => 'private, no-store',
         ]);
+    }
+
+    private static function approvalMode(User $user): ?string
+    {
+        if ((string) ($user->kyc_status ?? '') !== User::KYC_APPROVED) {
+            return null;
+        }
+
+        if (! Schema::hasColumn('users', 'kyc_provider')) {
+            return 'manual';
+        }
+
+        if ($user->kyc_reviewed_by) {
+            return 'manual';
+        }
+
+        return (string) ($user->kyc_provider ?? '') === DiditKycSettings::PROVIDER
+            ? 'automatic'
+            : 'manual';
     }
 }
