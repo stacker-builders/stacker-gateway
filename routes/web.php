@@ -187,6 +187,10 @@ Route::post('/webhooks/platform-whatsapp/{secret}', [\App\Http\Controllers\Webho
     ->where('secret', '[A-Za-z0-9]{32,64}')
     ->name('webhooks.platform-whatsapp');
 
+Route::post('/webhooks/didit', [\App\Http\Controllers\Webhooks\DiditWebhookController::class, 'handle'])
+    ->middleware('throttle:120,1')
+    ->name('webhooks.didit');
+
 Route::post('/webhooks/telegram/{secret}', [\App\Http\Controllers\Webhooks\TelegramWebhookController::class, 'handle'])
     ->middleware('throttle:120,1')
     ->where('secret', '[A-Za-z0-9]{32,64}')
@@ -954,6 +958,7 @@ Route::middleware(['auth', 'admin.tenant', 'seller.panel', 'stacker.license', 'r
     Route::post('/kyc/document', [\App\Http\Controllers\SellerKycController::class, 'uploadDocument'])->middleware('throttle:30,1')->name('kyc.document');
     Route::post('/kyc/finalize', [\App\Http\Controllers\SellerKycController::class, 'finalize'])->middleware('throttle:15,1')->name('kyc.finalize');
     Route::post('/kyc', [\App\Http\Controllers\SellerKycController::class, 'store'])->middleware('throttle:15,1')->name('kyc.store');
+    Route::post('/kyc/didit', [\App\Http\Controllers\SellerKycController::class, 'startDidit'])->middleware('throttle:15,1')->name('kyc.didit');
 
     Route::middleware('team.permission:financeiro.view')->group(function () {
         Route::get('/financeiro', [\App\Http\Controllers\SellerFinancialController::class, 'index'])->name('financeiro.seller.index');

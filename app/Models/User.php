@@ -79,6 +79,8 @@ class User extends Authenticatable
         'address_state',
         'monthly_revenue_range',
         'kyc_status',
+        'kyc_provider',
+        'kyc_external_session_id',
         'kyc_rejection_reason',
         'kyc_reviewed_at',
         'kyc_reviewed_by',

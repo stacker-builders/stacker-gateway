@@ -302,6 +302,13 @@ const form = useForm({
     kyc_require_company_address_proof: props.settings.kyc_require_company_address_proof ?? '1',
     kyc_require_company_constitution: props.settings.kyc_require_company_constitution ?? '1',
     kyc_enforcement: props.settings.kyc_enforcement ?? 'onboarding',
+    kyc_didit_enabled: props.settings.kyc_didit_enabled ?? '0',
+    kyc_didit_workflow_id: props.settings.kyc_didit_workflow_id ?? '',
+    kyc_didit_api_key: '',
+    kyc_didit_api_key_configured: Boolean(props.settings.kyc_didit_api_key_configured),
+    kyc_didit_webhook_secret: '',
+    kyc_didit_webhook_secret_configured: Boolean(props.settings.kyc_didit_webhook_secret_configured),
+    kyc_didit_webhook_url: props.settings.kyc_didit_webhook_url ?? '',
 });
 
 const showCloudR2Override = ref(false);
@@ -783,6 +790,13 @@ function applyKycSettingsFromSettings(s) {
     form.kyc_require_company_address_proof = s.kyc_require_company_address_proof ?? '1';
     form.kyc_require_company_constitution = s.kyc_require_company_constitution ?? '1';
     form.kyc_enforcement = s.kyc_enforcement ?? 'onboarding';
+    form.kyc_didit_enabled = s.kyc_didit_enabled ?? '0';
+    form.kyc_didit_workflow_id = s.kyc_didit_workflow_id ?? '';
+    form.kyc_didit_api_key = '';
+    form.kyc_didit_api_key_configured = Boolean(s.kyc_didit_api_key_configured);
+    form.kyc_didit_webhook_secret = '';
+    form.kyc_didit_webhook_secret_configured = Boolean(s.kyc_didit_webhook_secret_configured);
+    form.kyc_didit_webhook_url = s.kyc_didit_webhook_url ?? '';
 }
 
 function syncKycSettingsFromProps() {
@@ -892,6 +906,10 @@ function buildSettingsPayload() {
             kyc_require_company_address_proof: data.kyc_require_company_address_proof,
             kyc_require_company_constitution: data.kyc_require_company_constitution,
             kyc_enforcement: data.kyc_enforcement,
+            kyc_didit_enabled: data.kyc_didit_enabled,
+            kyc_didit_workflow_id: data.kyc_didit_workflow_id,
+            kyc_didit_api_key: data.kyc_didit_api_key,
+            kyc_didit_webhook_secret: data.kyc_didit_webhook_secret,
         };
     }
     if (activeTab.value === 'suporte_painel') {

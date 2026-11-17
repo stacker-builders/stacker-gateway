@@ -49,6 +49,10 @@ const props = defineProps({
     kyc_company_legal_nature: { type: String, default: null },
     kyc_company_nature_suggestion: { type: String, default: null },
     kyc_uploaded_kinds: { type: Array, default: () => [] },
+    kyc_verification: {
+        type: Object,
+        default: () => ({ mode: 'manual', ready: true }),
+    },
     kyc_requirements: {
         type: Object,
         default: () => ({
@@ -1060,6 +1064,9 @@ const inputClass =
                                         Sua conta é anterior à verificação atual. Envie os mesmos documentos das contas novas.
                                         O saque libera depois que a plataforma aceitar a análise.
                                     </template>
+                                    <template v-else-if="kyc_verification?.mode === 'didit'">
+                                        A identidade é conferida no fluxo da Didit. Em celulares, use a tela cheia para continuar.
+                                    </template>
                                     <template v-else>
                                         Envie seus documentos para liberar saques e o uso completo do painel. Em celulares, use o
                                         formulário em tela cheia para não perder o envio no fim da página.
@@ -1067,7 +1074,7 @@ const inputClass =
                                 </p>
                                 <Button type="button" class="mt-4 inline-flex items-center gap-2" @click="openKycModal">
                                     <Shield class="h-4 w-4" aria-hidden="true" />
-                                    Enviar documentos KYC
+                                    {{ kyc_verification?.mode === 'didit' ? 'Continuar verificação' : 'Enviar documentos KYC' }}
                                 </Button>
                             </div>
                         </template>
@@ -1082,6 +1089,8 @@ const inputClass =
                             :company_nature_suggestion="kyc_company_nature_suggestion"
                             :uploaded_kinds="kyc_uploaded_kinds"
                             :requirements="kyc_requirements"
+                            :verification_mode="kyc_verification?.mode || 'manual'"
+                            :verification_ready="kyc_verification?.ready !== false"
                             :conversion_mode="pjConversionMode"
                             :conversion_status="pj_conversion?.status"
                             :conversion_rejection_reason="pj_conversion?.rejection_reason"
@@ -1751,7 +1760,11 @@ const inputClass =
                                     Verificação de identidade
                                 </h3>
                                 <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                                    Envie um arquivo por vez e depois conclua o envio para análise.
+                                    {{
+                                        kyc_verification?.mode === 'didit'
+                                            ? 'A verificação abre no fluxo da Didit e volta para esta página ao terminar.'
+                                            : 'Envie um arquivo por vez e depois conclua o envio para análise.'
+                                    }}
                                 </p>
                             </div>
                             <button
@@ -1775,6 +1788,8 @@ const inputClass =
                                 :company_nature_suggestion="kyc_company_nature_suggestion"
                                 :uploaded_kinds="kyc_uploaded_kinds"
                                 :requirements="kyc_requirements"
+                                :verification_mode="kyc_verification?.mode || 'manual'"
+                                :verification_ready="kyc_verification?.ready !== false"
                             />
                         </div>
                     </div>
