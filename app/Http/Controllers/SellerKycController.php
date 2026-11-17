@@ -154,8 +154,9 @@ class SellerKycController extends Controller
 
         $isPj = $this->treatAsPjForDocuments($subject);
         $conversionUpload = PjConversion::allowsDocumentUpload($subject);
+        $companyAfterDidit = $this->companyDocumentsAfterDidit($subject);
 
-        $allowedFields = $conversionUpload
+        $allowedFields = $conversionUpload || $companyAfterDidit
             ? ['company_address_proof', 'ccmei', 'social_contract']
             : [
                 'rg_front',
@@ -376,6 +377,14 @@ class SellerKycController extends Controller
             }
         }
 
+        if ($this->companyDocumentsAfterDidit($subject)) {
+            if (! KycRequiredDocuments::hasCompanyPackage($subject)) {
+                return redirect($this->kycReturnUrl($subject))->with('error', 'Envie os documentos da empresa antes de concluir.');
+            }
+
+            return $this->completeKycSubmission($subject);
+        }
+
         if (! KycRequiredDocuments::hasAllRequired($subject)) {
             $list = implode(', ', KycRequiredDocuments::missingLabelsForUser($subject));
 
@@ -423,6 +432,11 @@ class SellerKycController extends Controller
         if (PjConversion::allowsDocumentUpload($subject)) {
             throw ValidationException::withMessages([
                 'didit' => 'A migração para CNPJ continua com o envio dos documentos da empresa.',
+            ]);
+        }
+        if ($this->companyDocumentsAfterDidit($subject)) {
+            throw ValidationException::withMessages([
+                'didit' => 'A identidade já foi confirmada. Envie os documentos da empresa para a análise da plataforma.',
             ]);
         }
         if ($subject->kyc_status === User::KYC_PENDING_REVIEW && (string) ($subject->kyc_provider ?? '') !== DiditKycSettings::PROVIDER) {
@@ -484,11 +498,26 @@ class SellerKycController extends Controller
         if (! DiditKycSettings::isEnabled() || PjConversion::allowsDocumentUpload($subject)) {
             return null;
         }
+        if ($this->companyDocumentsAfterDidit($subject)) {
+            return null;
+        }
         if (! DiditKycSettings::isReady()) {
             return 'A verificação automática está ligada, mas a Didit ainda não foi configurada. Avise o suporte da plataforma.';
         }
 
         return 'A verificação de identidade desta conta é feita pela Didit. Use o botão de verificação.';
+    }
+
+    private function companyDocumentsAfterDidit(User $subject): bool
+    {
+        if (! Schema::hasColumn('users', 'kyc_identity_verified_at') || $subject->kyc_identity_verified_at === null) {
+            return false;
+        }
+        if (in_array((string) $subject->kyc_status, [User::KYC_APPROVED, User::KYC_BLOCKED], true)) {
+            return false;
+        }
+
+        return KycRequiredDocuments::diditLeavesCompanyReview($subject);
     }
 
     private function treatAsPjForDocuments(User $subject): bool
@@ -519,7 +548,7 @@ class SellerKycController extends Controller
         if (Schema::hasColumn('users', 'kyc_needs_document_review')) {
             $attrs['kyc_needs_document_review'] = false;
         }
-        if (Schema::hasColumn('users', 'kyc_provider')) {
+        if (Schema::hasColumn('users', 'kyc_provider') && ! $this->companyDocumentsAfterDidit($subject)) {
             $attrs['kyc_provider'] = DiditKycSettings::MANUAL;
             $attrs['kyc_external_session_id'] = null;
         }

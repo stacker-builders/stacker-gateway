@@ -217,6 +217,8 @@ class SellerFinancialController extends Controller
             'kyc_document_upgrade' => Schema::hasColumn('users', 'kyc_status')
                 && \App\Support\KycRequiredDocuments::mayUpgradeLegacyDocuments($subject),
             'kyc_person_type' => Schema::hasColumn('users', 'person_type') ? ($subject->person_type ?? 'pf') : 'pf',
+            'kyc_identity_verified' => Schema::hasColumn('users', 'kyc_identity_verified_at')
+                && $subject->kyc_identity_verified_at !== null,
             'kyc_rejection_reason' => Schema::hasColumn('users', 'kyc_rejection_reason')
                 ? ($subject->kyc_rejection_reason ?? null)
                 : null,

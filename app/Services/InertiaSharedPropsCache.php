@@ -132,6 +132,12 @@ class InertiaSharedPropsCache
     public function platformAdminSidebarBadges(User $user, Request $request): array
     {
         $counts = app(PlatformAdminAlertCounts::class);
+        $routeName = (string) $request->route()?->getName();
+        if (in_array($routeName, ['plataforma.kyc.index', 'plataforma.kyc.show'], true)) {
+            $request->attributes->set('kyc_approved_unseen', $counts->kycApprovedUnseenCount($user));
+            $counts->markViewed($user, PlatformAdminAlertCounts::KEY_KYC_APROVADOS);
+        }
+
         $menuKey = $counts->menuKeyForRequest($request);
         if ($menuKey !== null && $counts->clearsBadgeOnVisit($menuKey)) {
             $counts->markViewed($user, $menuKey);

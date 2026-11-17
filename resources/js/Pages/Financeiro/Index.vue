@@ -44,6 +44,7 @@ const props = defineProps({
     kyc_status: { type: String, default: null },
     kyc_document_upgrade: { type: Boolean, default: false },
     kyc_person_type: { type: String, default: 'pf' },
+    kyc_identity_verified: { type: Boolean, default: false },
     kyc_rejection_reason: { type: String, default: null },
     kyc_identity_document_type: { type: String, default: null },
     kyc_company_legal_nature: { type: String, default: null },
@@ -1057,12 +1058,22 @@ const inputClass =
                                 class="rounded-xl border border-amber-200 bg-amber-50/80 p-5 dark:border-amber-900/50 dark:bg-amber-950/30"
                             >
                                 <h3 class="text-sm font-semibold text-amber-950 dark:text-amber-100">
-                                    Verificação de identidade pendente
+                                    {{
+                                        kyc_identity_verified && kyc_person_type === 'pj'
+                                            ? 'Documentos da empresa pendentes'
+                                            : 'Verificação de identidade pendente'
+                                    }}
                                 </h3>
                                 <p class="mt-1 text-xs leading-relaxed text-amber-900/90 dark:text-amber-200/90">
                                     <template v-if="kyc_document_upgrade">
                                         Sua conta é anterior à verificação atual. Envie os mesmos documentos das contas novas.
                                         O saque libera depois que a plataforma aceitar a análise.
+                                    </template>
+                                    <template v-else-if="kyc_identity_verified && kyc_person_type === 'pj'">
+                                        A identidade já foi confirmada. Envie os documentos da empresa para a análise da plataforma.
+                                    </template>
+                                    <template v-else-if="kyc_verification?.mode === 'didit' && kyc_person_type === 'pj'">
+                                        A identidade do responsável é conferida na Didit. Depois, você envia os documentos da empresa.
                                     </template>
                                     <template v-else-if="kyc_verification?.mode === 'didit'">
                                         A identidade é conferida no fluxo da Didit. Em celulares, use a tela cheia para continuar.
@@ -1074,7 +1085,13 @@ const inputClass =
                                 </p>
                                 <Button type="button" class="mt-4 inline-flex items-center gap-2" @click="openKycModal">
                                     <Shield class="h-4 w-4" aria-hidden="true" />
-                                    {{ kyc_verification?.mode === 'didit' ? 'Continuar verificação' : 'Enviar documentos KYC' }}
+                                    {{
+                                        kyc_identity_verified && kyc_person_type === 'pj'
+                                            ? 'Enviar documentos da empresa'
+                                            : kyc_verification?.mode === 'didit'
+                                              ? 'Continuar verificação'
+                                              : 'Enviar documentos KYC'
+                                    }}
                                 </Button>
                             </div>
                         </template>
@@ -1091,6 +1108,7 @@ const inputClass =
                             :requirements="kyc_requirements"
                             :verification_mode="kyc_verification?.mode || 'manual'"
                             :verification_ready="kyc_verification?.ready !== false"
+                            :identity_verified="kyc_identity_verified"
                             :conversion_mode="pjConversionMode"
                             :conversion_status="pj_conversion?.status"
                             :conversion_rejection_reason="pj_conversion?.rejection_reason"
@@ -1757,13 +1775,21 @@ const inputClass =
                         <div class="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4 dark:border-zinc-700">
                             <div>
                                 <h3 id="kyc-modal-title" class="text-lg font-semibold text-zinc-900 dark:text-white">
-                                    Verificação de identidade
+                                    {{
+                                        kyc_identity_verified && kyc_person_type === 'pj'
+                                            ? 'Documentos da empresa'
+                                            : 'Verificação de identidade'
+                                    }}
                                 </h3>
                                 <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
                                     {{
-                                        kyc_verification?.mode === 'didit'
-                                            ? 'A verificação abre no fluxo da Didit e volta para esta página ao terminar.'
-                                            : 'Envie um arquivo por vez e depois conclua o envio para análise.'
+                                        kyc_identity_verified && kyc_person_type === 'pj'
+                                            ? 'A identidade já foi confirmada. Envie os documentos da empresa para análise.'
+                                            : kyc_verification?.mode === 'didit' && kyc_person_type === 'pj'
+                                              ? 'A identidade abre na Didit. Depois você envia os documentos da empresa.'
+                                              : kyc_verification?.mode === 'didit'
+                                                ? 'A verificação abre no fluxo da Didit e volta para esta página ao terminar.'
+                                                : 'Envie um arquivo por vez e depois conclua o envio para análise.'
                                     }}
                                 </p>
                             </div>
@@ -1790,6 +1816,7 @@ const inputClass =
                                 :requirements="kyc_requirements"
                                 :verification_mode="kyc_verification?.mode || 'manual'"
                                 :verification_ready="kyc_verification?.ready !== false"
+                                :identity_verified="kyc_identity_verified"
                             />
                         </div>
                     </div>

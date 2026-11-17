@@ -9,10 +9,12 @@ defineOptions({ layout: LayoutPlatform });
 defineProps({
     users: { type: Object, required: true },
     filter: { type: String, default: 'pending_review' },
+    approved_unseen: { type: Number, default: 0 },
 });
 
 const filters = [
     { value: 'pending_review', label: 'Pendentes' },
+    { value: 'approved', label: 'Aprovados' },
     { value: 'needs_document_review', label: 'Revisão de docs' },
     { value: 'all', label: 'Todos' },
     { value: 'rejected', label: 'Rejeitados' },
@@ -30,6 +32,12 @@ function statusLabel(s) {
     };
     return m[s] || s || '—';
 }
+
+function approvalLabel(mode) {
+    if (mode === 'automatic') return 'Automática (Didit)';
+    if (mode === 'manual') return 'Manual (plataforma)';
+    return '—';
+}
 </script>
 
 <template>
@@ -42,6 +50,16 @@ function statusLabel(s) {
                 </h1>
                 <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Analise documentos enviados pelos infoprodutores.</p>
             </div>
+        </div>
+
+        <div
+            v-if="approved_unseen > 0"
+            class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-100"
+        >
+            {{ approved_unseen === 1 ? '1 verificação foi aprovada.' : `${approved_unseen} verificações foram aprovadas.` }}
+            <Link href="/plataforma/verificacoes-kyc?status=approved" class="ml-1 font-semibold underline">
+                Ver aprovados
+            </Link>
         </div>
 
         <div class="flex flex-wrap gap-2">
@@ -93,7 +111,10 @@ function statusLabel(s) {
                     </span>
                 </div>
                 <div class="mt-3 flex items-center justify-between gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
-                    <span class="text-xs text-zinc-500">{{ u.person_type === 'pj' ? 'Pessoa jurídica' : 'Pessoa física' }}</span>
+                    <span class="text-xs text-zinc-500">
+                        {{ u.person_type === 'pj' ? 'Pessoa jurídica' : 'Pessoa física' }}
+                        <span v-if="u.approval_mode" class="mt-1 block">{{ approvalLabel(u.approval_mode) }}</span>
+                    </span>
                     <span class="text-sm font-semibold text-[var(--color-primary)]">Abrir verificação →</span>
                 </div>
             </Link>
@@ -109,6 +130,7 @@ function statusLabel(s) {
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-zinc-500">E-mail</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-zinc-500">Tipo</th>
                             <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-zinc-500">Status KYC</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-zinc-500">Aprovação</th>
                             <th class="px-4 py-3 text-right text-xs font-semibold uppercase text-zinc-500">Ação</th>
                         </tr>
                     </thead>
@@ -125,6 +147,21 @@ function statusLabel(s) {
                                 >
                                     PF→PJ
                                 </span>
+                            </td>
+                            <td class="px-4 py-3 text-sm">
+                                <span
+                                    v-if="u.approval_mode === 'automatic'"
+                                    class="inline-flex rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-medium text-sky-900 dark:bg-sky-950/50 dark:text-sky-200"
+                                >
+                                    Automática (Didit)
+                                </span>
+                                <span
+                                    v-else-if="u.approval_mode === 'manual'"
+                                    class="inline-flex rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200"
+                                >
+                                    Manual (plataforma)
+                                </span>
+                                <span v-else class="text-zinc-400">—</span>
                             </td>
                             <td class="px-4 py-3 text-right">
                                 <Link
