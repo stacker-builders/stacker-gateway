@@ -238,6 +238,7 @@ class SellerFinancialController extends Controller
                     ->all()
                 : [],
             'kyc_requirements' => \App\Support\KycRequirementSettings::forSellerForm(),
+            'kyc_verification' => \App\Support\DiditKycSettings::forSeller(),
             'kyc_finance_locked' => $kycFinanceLocked,
             'pj_conversion' => \App\Support\PjConversion::forFrontend($subject),
             'registration_snapshot' => MerchantProfileSnapshot::forUser($subject, maskDocuments: false),

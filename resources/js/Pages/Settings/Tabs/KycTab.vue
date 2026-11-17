@@ -1,5 +1,6 @@
 <script setup>
 import { BadgeCheck } from 'lucide-vue-next';
+import Toggle from '@/components/ui/Toggle.vue';
 
 const props = defineProps({
     form: { type: Object, required: true },
@@ -16,6 +17,14 @@ function isIdentityChecked(value) {
         ? props.form.kyc_allowed_identity_types
         : [];
     return list.includes(value);
+}
+
+function diditOn() {
+    return props.form.kyc_didit_enabled === '1' || props.form.kyc_didit_enabled === true;
+}
+
+function setDidit(enabled) {
+    props.form.kyc_didit_enabled = enabled ? '1' : '0';
 }
 
 function toggleIdentity(value, checked) {
@@ -49,6 +58,70 @@ function toggleIdentity(value, checked) {
                 <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
                     Defina quais documentos os infoprodutores precisam enviar na verificação. Instalações mais
                     leves podem exigir só a identidade; outras podem ser mais criteriosas.
+                </p>
+            </div>
+        </div>
+
+        <div class="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                    <h3 class="text-sm font-semibold text-zinc-900 dark:text-white">Verificação pela Didit</h3>
+                    <p class="mt-1 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+                        Ligado, o infoprodutor faz a identidade no fluxo da Didit. Desligado, continua o envio
+                        manual de documentos nesta plataforma. A migração de CPF para CNPJ segue pedindo os
+                        documentos da empresa aqui.
+                    </p>
+                </div>
+                <Toggle
+                    :model-value="diditOn()"
+                    label="Usar a Didit"
+                    @update:model-value="setDidit"
+                />
+            </div>
+            <div v-if="diditOn()" class="mt-5 space-y-4 border-t border-zinc-200 pt-5 dark:border-zinc-700">
+                <label class="block text-sm">
+                    <span class="font-medium text-zinc-900 dark:text-white">Chave de API</span>
+                    <input
+                        v-model="form.kyc_didit_api_key"
+                        type="password"
+                        autocomplete="new-password"
+                        class="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+                        :placeholder="form.kyc_didit_api_key_configured ? 'Deixe em branco para manter a chave atual' : 'x-api-key da Didit'"
+                    />
+                </label>
+                <label class="block text-sm">
+                    <span class="font-medium text-zinc-900 dark:text-white">ID do fluxo</span>
+                    <input
+                        v-model="form.kyc_didit_workflow_id"
+                        type="text"
+                        class="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+                        placeholder="UUID do workflow de KYC"
+                    />
+                </label>
+                <label class="block text-sm">
+                    <span class="font-medium text-zinc-900 dark:text-white">Segredo do webhook</span>
+                    <input
+                        v-model="form.kyc_didit_webhook_secret"
+                        type="password"
+                        autocomplete="new-password"
+                        class="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-800 dark:text-white"
+                        :placeholder="form.kyc_didit_webhook_secret_configured ? 'Deixe em branco para manter o segredo atual' : 'secret_shared_key do destino'"
+                    />
+                </label>
+                <label class="block text-sm">
+                    <span class="font-medium text-zinc-900 dark:text-white">URL do webhook</span>
+                    <input
+                        :value="form.kyc_didit_webhook_url || ''"
+                        type="text"
+                        readonly
+                        class="mt-1 w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-700 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200"
+                    />
+                    <span class="mt-1 block text-xs text-zinc-500 dark:text-zinc-400">
+                        Cadastre este endereço no console da Didit, no destino de webhook, com o evento de status.
+                    </span>
+                </label>
+                <p v-if="form.errors?.kyc_didit_api_key" class="text-sm text-red-600">
+                    {{ form.errors.kyc_didit_api_key }}
                 </p>
             </div>
         </div>
@@ -118,8 +191,9 @@ function toggleIdentity(value, checked) {
         <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100">
             <p class="font-medium">Escopo desta configuração</p>
             <p class="mt-1 text-xs leading-relaxed">
-                Vale para novos envios e reenvios (KYC rejeitado). Contas já aprovadas ou em análise com o
-                pacote antigo continuam válidas. O documento de identificação é sempre obrigatório.
+                Vale para novos envios e reenvios (KYC rejeitado) no modo manual. Com a Didit ligada, o fluxo
+                dela substitui este pacote na identidade. A migração para CNPJ continua usando estes documentos.
+                Contas já aprovadas ou em análise com o pacote antigo continuam válidas.
             </p>
         </div>
 

@@ -81,6 +81,7 @@ class EnsureSellerPanel
             'kyc.document',
             'kyc.finalize',
             'kyc.store',
+            'kyc.didit',
             'financeiro.seller.index',
             'logout',
             'panel.switch',

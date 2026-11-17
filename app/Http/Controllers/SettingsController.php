@@ -20,6 +20,7 @@ use App\Support\RegistrationTurnstileSettings;
 use App\Support\InfoproducerRegistrationSettings;
 use App\Support\AccountManagerSettings;
 use App\Support\ProductApprovalSettings;
+use App\Support\DiditKycSettings;
 use App\Support\KycEnforcement;
 use App\Support\KycRequirementSettings;
 use App\Support\SellerPanelSupportSettings;
@@ -162,6 +163,7 @@ class SettingsController extends Controller
                 ...($tenantId === null ? ProductApprovalSettings::forSettingsForm() : []),
                 ...($tenantId === null ? KycRequirementSettings::forSettingsForm() : []),
                 ...($tenantId === null ? KycEnforcement::forSettingsForm() : []),
+                ...($tenantId === null ? DiditKycSettings::forSettingsForm() : []),
                 ...($tenantId === null ? AccountManagerSettings::forSettingsForm() : []),
                 ...($tenantId === null ? SellerPanelSupportSettings::forSettingsForm() : []),
                 ...($tenantId === null ? PlatformGa4Settings::forSettingsForm() : []),
@@ -278,6 +280,7 @@ class SettingsController extends Controller
             'kyc_require_company_address_proof' => ['nullable', 'boolean'],
             'kyc_require_company_constitution' => ['nullable', 'boolean'],
             'kyc_enforcement' => ['nullable', 'string', 'in:onboarding,withdrawal'],
+            ...DiditKycSettings::validationRules(),
             'platform_legal_name' => ['nullable', 'string', 'max:255'],
             'platform_cnpj' => [
                 'nullable',
@@ -393,6 +396,7 @@ class SettingsController extends Controller
             PlatformCompanySettings::persistFromValidated($validated);
             KycRequirementSettings::persistFromValidated($validated);
             KycEnforcement::persistFromValidated($validated);
+            DiditKycSettings::persistFromValidated($validated);
             DatabaseBackupSettings::persistFromValidated($validated, $request);
         }
 
@@ -468,6 +472,10 @@ class SettingsController extends Controller
             'kyc_require_company_address_proof',
             'kyc_require_company_constitution',
             'kyc_enforcement',
+            DiditKycSettings::KEY_ENABLED,
+            DiditKycSettings::KEY_API_KEY,
+            DiditKycSettings::KEY_WORKFLOW_ID,
+            DiditKycSettings::KEY_WEBHOOK_SECRET,
         ];
         $backupKeys = DatabaseBackupSettings::FORM_KEYS;
         // Handle passwords separately (encrypt)

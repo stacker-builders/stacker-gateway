@@ -8,6 +8,8 @@ use App\Models\User;
 use App\Services\PlatformEmailNotifications;
 use App\Services\PjConversionService;
 use App\Services\SellerActivityLogService;
+use App\Services\DiditSessionClient;
+use App\Support\DiditKycSettings;
 use App\Support\KycRequiredDocuments;
 use App\Support\KycRequirementSettings;
 use App\Support\KycUpload;
@@ -20,6 +22,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Inertia\Inertia;
 
 class SellerKycController extends Controller
 {
@@ -145,6 +148,9 @@ class SellerKycController extends Controller
         if ($blocked = $this->kycMutationBlockedMessage($subject)) {
             return response()->json(['message' => $blocked], 422);
         }
+        if ($didit = $this->diditManualUploadBlockedMessage($subject)) {
+            return response()->json(['message' => $didit], 422);
+        }
 
         $isPj = $this->treatAsPjForDocuments($subject);
         $conversionUpload = PjConversion::allowsDocumentUpload($subject);
@@ -248,6 +254,9 @@ class SellerKycController extends Controller
         if ($blocked = $this->kycMutationBlockedMessage($subject)) {
             return redirect($this->kycReturnUrl($subject))->with('error', $blocked);
         }
+        if ($didit = $this->diditManualUploadBlockedMessage($subject)) {
+            return redirect($this->kycReturnUrl($subject))->with('error', $didit);
+        }
 
         $isPj = $this->treatAsPjForDocuments($subject);
         $conversionUpload = PjConversion::allowsDocumentUpload($subject);
@@ -336,6 +345,9 @@ class SellerKycController extends Controller
 
             return redirect($this->kycReturnUrl($subject))->with($key, $blocked);
         }
+        if ($didit = $this->diditManualUploadBlockedMessage($subject)) {
+            return redirect($this->kycReturnUrl($subject))->with('error', $didit);
+        }
 
         if ($request->filled('identity_document_type') || $request->filled('company_legal_nature')) {
             $isPj = $this->treatAsPjForDocuments($subject);
@@ -385,6 +397,64 @@ class SellerKycController extends Controller
         return $this->markPendingReview($subject);
     }
 
+    public function startDidit(Request $request, DiditSessionClient $sessions): RedirectResponse|\Symfony\Component\HttpFoundation\Response
+    {
+        $user = $request->user();
+        if (! $user->canAccessSellerPanel()) {
+            abort(403);
+        }
+
+        $subject = $user->kycSubjectUser();
+        if (! DiditKycSettings::isEnabled()) {
+            throw ValidationException::withMessages([
+                'didit' => 'A verificação manual continua ativa. Envie os documentos por aqui.',
+            ]);
+        }
+        if (! DiditKycSettings::isReady()) {
+            throw ValidationException::withMessages([
+                'didit' => 'A verificação automática ainda não está configurada. Avise o suporte da plataforma.',
+            ]);
+        }
+        if ($subject->kyc_status === User::KYC_BLOCKED) {
+            throw ValidationException::withMessages([
+                'didit' => 'Esta conta está bloqueada e não pode iniciar a verificação.',
+            ]);
+        }
+        if (PjConversion::allowsDocumentUpload($subject)) {
+            throw ValidationException::withMessages([
+                'didit' => 'A migração para CNPJ continua com o envio dos documentos da empresa.',
+            ]);
+        }
+        if ($subject->kyc_status === User::KYC_PENDING_REVIEW && (string) ($subject->kyc_provider ?? '') !== DiditKycSettings::PROVIDER) {
+            throw ValidationException::withMessages([
+                'didit' => 'Documentos em análise. Aguarde a conclusão.',
+            ]);
+        }
+        if ($subject->kyc_status === User::KYC_APPROVED && ! KycRequiredDocuments::mayUpgradeLegacyDocuments($subject)) {
+            throw ValidationException::withMessages([
+                'didit' => 'Sua conta já está verificada.',
+            ]);
+        }
+
+        try {
+            $session = $sessions->create($subject, url('/financeiro?tab=seus-dados'));
+        } catch (\Throwable $e) {
+            report($e);
+            throw ValidationException::withMessages([
+                'didit' => 'Não foi possível abrir a verificação agora. Tente de novo em instantes.',
+            ]);
+        }
+
+        if (Schema::hasColumn('users', 'kyc_provider')) {
+            $subject->forceFill([
+                'kyc_provider' => DiditKycSettings::PROVIDER,
+                'kyc_external_session_id' => $session['session_id'],
+            ])->save();
+        }
+
+        return Inertia::location($session['url']);
+    }
+
     private function kycMutationBlockedMessage(User $subject): ?string
     {
         if ($subject->kyc_status === User::KYC_BLOCKED) {
@@ -407,6 +477,18 @@ class SellerKycController extends Controller
         }
 
         return 'Conta já verificada.';
+    }
+
+    private function diditManualUploadBlockedMessage(User $subject): ?string
+    {
+        if (! DiditKycSettings::isEnabled() || PjConversion::allowsDocumentUpload($subject)) {
+            return null;
+        }
+        if (! DiditKycSettings::isReady()) {
+            return 'A verificação automática está ligada, mas a Didit ainda não foi configurada. Avise o suporte da plataforma.';
+        }
+
+        return 'A verificação de identidade desta conta é feita pela Didit. Use o botão de verificação.';
     }
 
     private function treatAsPjForDocuments(User $subject): bool
@@ -436,6 +518,10 @@ class SellerKycController extends Controller
         }
         if (Schema::hasColumn('users', 'kyc_needs_document_review')) {
             $attrs['kyc_needs_document_review'] = false;
+        }
+        if (Schema::hasColumn('users', 'kyc_provider')) {
+            $attrs['kyc_provider'] = DiditKycSettings::MANUAL;
+            $attrs['kyc_external_session_id'] = null;
         }
 
         $subject->forceFill($attrs)->save();

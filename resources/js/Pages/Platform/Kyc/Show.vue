@@ -720,7 +720,10 @@ function onStepUpConfirm(payload) {
                 </ul>
             </section>
 
-            <p v-if="!documents.length" class="mt-2 text-sm text-zinc-500">Nenhum arquivo enviado.</p>
+            <p v-if="!documents.length && merchant.kyc_provider === 'didit'" class="mt-2 text-sm text-zinc-500">
+                Esta verificação foi feita na Didit. Os arquivos ficam no console dela, não nesta plataforma.
+            </p>
+            <p v-else-if="!documents.length" class="mt-2 text-sm text-zinc-500">Nenhum arquivo enviado.</p>
         </div>
 
         <div v-if="merchant.kyc_status === 'blocked'" class="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-950 dark:border-red-900 dark:bg-red-950/40 dark:text-red-100">

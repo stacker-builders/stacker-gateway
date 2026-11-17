@@ -121,6 +121,7 @@ class KycVerificationsController extends Controller
                 'address_state' => $user->address_state,
                 'monthly_revenue_range' => $user->monthly_revenue_range,
                 'kyc_status' => $user->kyc_status,
+                'kyc_provider' => $user->kyc_provider ?? null,
                 'kyc_rejection_reason' => $user->kyc_rejection_reason,
                 'kyc_reviewed_at' => $user->kyc_reviewed_at?->toIso8601String(),
                 'identity_document_type' => $user->identity_document_type ?? null,
@@ -141,7 +142,8 @@ class KycVerificationsController extends Controller
 
         $this->validatePlatformStepUp($request, redirectRoute: 'plataforma.kyc.show');
 
-        if (! KycRequiredDocuments::hasAllRequired($user)) {
+        $verifiedByDidit = (string) ($user->kyc_provider ?? '') === \App\Support\DiditKycSettings::PROVIDER;
+        if (! $verifiedByDidit && ! KycRequiredDocuments::hasAllRequired($user)) {
             $missing = implode(', ', KycRequiredDocuments::missingLabelsForUser($user));
             throw ValidationException::withMessages([
                 'kyc' => 'Documentos obrigatórios ausentes: '.$missing.'.',

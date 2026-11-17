@@ -31,9 +31,32 @@ const props = defineProps({
     document_upgrade: { type: Boolean, default: false },
     conversion_status: { type: String, default: null },
     conversion_rejection_reason: { type: String, default: null },
+    verification_mode: { type: String, default: 'manual' },
+    verification_ready: { type: Boolean, default: true },
 });
 
 const conversionMode = computed(() => !!props.conversion_mode);
+const usesDiditFlow = computed(() => props.verification_mode === 'didit' && !conversionMode.value);
+const diditReady = computed(() => props.verification_ready !== false);
+const startingDidit = ref(false);
+
+function startDidit() {
+    uploadError.value = '';
+    startingDidit.value = true;
+    router.post(
+        '/kyc/didit',
+        {},
+        {
+            preserveScroll: true,
+            onError: (errors) => {
+                uploadError.value = errors?.didit || 'Não foi possível abrir a verificação.';
+            },
+            onFinish: () => {
+                startingDidit.value = false;
+            },
+        }
+    );
+}
 const documentUpgrade = computed(() => !!props.document_upgrade);
 const isPj = computed(() => props.person_type === 'pj' || conversionMode.value);
 
@@ -383,7 +406,80 @@ const fileAccept =
 </script>
 
 <template>
-    <div class="space-y-6" :class="embedded ? '' : 'mx-auto max-w-2xl'">
+    <div v-if="usesDiditFlow" class="space-y-4" :class="embedded ? '' : 'mx-auto max-w-2xl'">
+        <div v-if="!embedded">
+            <h1 class="text-xl font-semibold text-zinc-900 dark:text-white">Verificação de identidade (KYC)</h1>
+        </div>
+
+        <div
+            v-if="uploadError"
+            class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
+        >
+            {{ uploadError }}
+        </div>
+
+        <div
+            v-if="!diditReady"
+            class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-100"
+        >
+            A verificação automática ainda não está disponível. Avise o suporte da plataforma.
+        </div>
+
+        <div
+            v-else-if="kyc_status === 'blocked'"
+            class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
+        >
+            Esta conta está bloqueada e não pode iniciar a verificação.
+        </div>
+
+        <div
+            v-else-if="isApproved"
+            class="rounded-2xl border border-emerald-200/90 bg-emerald-50/90 px-5 py-6 text-center shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/35"
+        >
+            <div class="flex justify-center">
+                <BadgeCheck class="h-12 w-12 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+            </div>
+            <h3 class="mt-4 text-base font-semibold text-emerald-950 dark:text-emerald-100">Conta verificada</h3>
+            <p class="mt-2 text-sm text-emerald-900/90 dark:text-emerald-200/95">
+                A identidade já foi confirmada.
+            </p>
+        </div>
+
+        <div v-else class="space-y-4">
+            <div
+                v-if="rejection_reason && kyc_status === 'rejected'"
+                class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
+            >
+                <p class="font-medium">Última análise foi rejeitada:</p>
+                <p class="mt-1">{{ rejection_reason }}</p>
+            </div>
+            <div
+                v-if="isPendingReview"
+                class="rounded-2xl border border-emerald-200/90 bg-emerald-50/90 px-5 py-6 text-center shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/35"
+            >
+                <div class="flex justify-center">
+                    <CheckCircle2 class="h-12 w-12 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                </div>
+                <h3 class="mt-4 text-base font-semibold text-emerald-950 dark:text-emerald-100">Verificação em análise</h3>
+                <p class="mt-2 text-sm text-emerald-900/90 dark:text-emerald-200/95">
+                    A Didit está conferindo a identidade. Se o fluxo ainda estiver aberto, você pode retomá-lo.
+                </p>
+            </div>
+            <p v-else class="text-sm text-zinc-600 dark:text-zinc-400">
+                <template v-if="documentUpgrade">
+                    Sua conta precisa passar de novo pela verificação de identidade. O fluxo abre na Didit.
+                </template>
+                <template v-else>
+                    A verificação abre num fluxo seguro da Didit, com documento e selfie. Ao terminar, você volta para esta página.
+                </template>
+            </p>
+            <Button type="button" class="inline-flex items-center gap-2" :disabled="startingDidit" @click="startDidit">
+                <Loader2 v-if="startingDidit" class="h-4 w-4 animate-spin" />
+                {{ isPendingReview || kyc_status === 'rejected' ? 'Abrir verificação' : 'Iniciar verificação' }}
+            </Button>
+        </div>
+    </div>
+    <div v-else class="space-y-6" :class="embedded ? '' : 'mx-auto max-w-2xl'">
         <div v-if="!embedded && !isReadOnlyKyc">
             <h1 class="text-xl font-semibold text-zinc-900 dark:text-white">Verificação de identidade (KYC)</h1>
             <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
