@@ -87,6 +87,7 @@ class MerchantWithdrawalService
         }
 
         WithdrawalPolicyService::assertIntervalAllows($tenantId);
+        WithdrawalPolicyService::assertRequestAllowed();
 
         $bucket = in_array($bucket, ['pix', 'card', 'boleto'], true) ? $bucket : 'pix';
         $col = 'available_'.$bucket;
