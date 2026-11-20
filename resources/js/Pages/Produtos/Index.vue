@@ -89,9 +89,28 @@ const props = defineProps({
     },
     bundle_candidates: { type: Array, default: () => [] },
     telegram_delivery: { type: Object, default: () => ({}) },
+    filters: { type: Object, default: () => ({}) },
 });
 
 const produtosList = computed(() => props.produtos?.data ?? (Array.isArray(props.produtos) ? props.produtos : []));
+const selectedCategory = computed(() => props.filters?.category || '');
+
+const categorySelectClass = computed(() => {
+    const base = 'h-9 max-w-full rounded-xl border px-3 text-sm font-medium shadow-sm';
+    if (isAurora.value) return `${base} border-[var(--aurora-border)] bg-[var(--aurora-panel)] text-zinc-800`;
+    if (isKawaii.value) return `${base} border-[var(--kawaii-border)] bg-[var(--kawaii-panel)] text-zinc-800`;
+    if (isNoir.value) return `${base} border-[var(--noir-border)] bg-[var(--noir-panel)] text-zinc-100`;
+    return `${base} border-zinc-200 bg-white text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200`;
+});
+
+function setCategory(event) {
+    const value = String(event.target.value || '');
+    router.get('/produtos', value ? { category: value } : {}, {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    });
+}
 
 const sidebarOpen = ref(false);
 const openMenuId = ref(null);
@@ -177,6 +196,7 @@ function pluginActions(productId) {
         <AuroraPageSection>
             <div class="space-y-4">
             <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div class="flex flex-wrap items-center gap-2">
                 <div
                     :class="viewToggleGroupClass"
                     role="group"
@@ -200,6 +220,24 @@ function pluginActions(productId) {
                         <LayoutGrid class="h-4 w-4" aria-hidden="true" />
                         Grade
                     </button>
+                </div>
+                <label class="sr-only" for="produtos-category-filter">Categoria</label>
+                <select
+                    id="produtos-category-filter"
+                    :value="selectedCategory"
+                    :class="categorySelectClass"
+                    aria-label="Filtrar por categoria"
+                    @change="setCategory"
+                >
+                    <option value="">Todos</option>
+                    <option
+                        v-for="cat in productCategories"
+                        :key="cat.value"
+                        :value="cat.value"
+                    >
+                        {{ cat.label }}
+                    </option>
+                </select>
                 </div>
                 <Button class="self-start sm:self-auto" @click="openSidebar">
                     Novo produto
@@ -488,10 +526,13 @@ function pluginActions(productId) {
                 :class="isAurora ? 'border-[var(--aurora-border)]' : isKawaii ? 'border-[var(--kawaii-border)]' : isNoir ? 'border-[var(--noir-border)]' : 'border-zinc-300 dark:border-zinc-700'"
             >
                 <Package class="h-14 w-14 text-zinc-400 dark:text-zinc-500" />
-                <p class="mt-3 text-zinc-600 dark:text-zinc-400">Nenhum produto ainda.</p>
-                <Button class="mt-4" @click="openSidebar">
-                    Criar primeiro produto
-                </Button>
+                <p v-if="selectedCategory" class="mt-3 text-zinc-600 dark:text-zinc-400">Nenhum produto nesta categoria.</p>
+                <template v-else>
+                    <p class="mt-3 text-zinc-600 dark:text-zinc-400">Nenhum produto ainda.</p>
+                    <Button class="mt-4" @click="openSidebar">
+                        Criar primeiro produto
+                    </Button>
+                </template>
             </div>
             </div>
         </AuroraPageSection>

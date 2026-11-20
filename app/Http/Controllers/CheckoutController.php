@@ -13,6 +13,7 @@ use App\Models\CheckoutSession;
 use App\Models\Coupon;
 use App\Models\GatewayCredential;
 use App\Support\AffiliateOrderMetadata;
+use App\Support\CheckoutDisplayCurrency;
 use App\Support\GatewayPaymentCredentials;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -951,6 +952,7 @@ class CheckoutController extends Controller
 
         $orderMetadata = $this->mergeCheckoutSessionMetaTracking($orderMetadata, $validated['checkout_session_token'] ?? null);
         $orderMetadata = $this->mergeCheckoutSessionUtmsIntoOrderMetadata($orderMetadata, $validated['checkout_session_token'] ?? null, $validated, $product);
+        $orderMetadata['display_currency'] = CheckoutDisplayCurrency::normalize($validated['display_currency'] ?? null);
 
         $metricsSessionKey = $this->resolveValidMetricsSessionKey(
             isset($validated['metrics_session_key']) && is_string($validated['metrics_session_key'])
@@ -3322,6 +3324,7 @@ class CheckoutController extends Controller
 
         $orderMetadata = $this->mergeCheckoutSessionMetaTracking($orderMetadata, $validated['checkout_session_token'] ?? null);
         $orderMetadata = $this->mergeCheckoutSessionUtmsIntoOrderMetadata($orderMetadata, $validated['checkout_session_token'] ?? null, $validated, $product);
+        $orderMetadata['display_currency'] = CheckoutDisplayCurrency::normalize($validated['display_currency'] ?? ($draft['display_currency'] ?? null));
 
         $cpfDigits = preg_replace('/\D/', '', (string) ($validated['cpf'] ?? '')) ?: null;
         $phone = ($validated['phone'] ?? null) ?: null;
@@ -3828,33 +3831,7 @@ class CheckoutController extends Controller
             return round($amountBrl, 2);
         }
 
-        $currenciesRaw = Setting::get('currencies', null, null);
-        $currencies = $currenciesRaw
-            ? (is_string($currenciesRaw) ? json_decode($currenciesRaw, true) : $currenciesRaw)
-            : config('products.currencies');
-        $currencies = is_array($currencies) ? $currencies : config('products.currencies');
-
-        $rates = [
-            'brl_eur' => (float) config('products.rates.brl_eur', 0.16),
-            'brl_usd' => (float) config('products.rates.brl_usd', 0.18),
-        ];
-        foreach ($currencies as $currency) {
-            if (! is_array($currency)) {
-                continue;
-            }
-            $code = strtoupper((string) ($currency['code'] ?? ''));
-            $rate = (float) ($currency['rate_to_brl'] ?? 0);
-            if ($rate <= 0) {
-                continue;
-            }
-            if ($code === 'EUR') {
-                $rates['brl_eur'] = $rate;
-            } elseif ($code === 'USD') {
-                $rates['brl_usd'] = $rate;
-            }
-        }
-
-        return MoneyDecimal::storageFromBrl($amountBrl, $displayCurrency, $rates);
+        return MoneyDecimal::storageFromBrl($amountBrl, $displayCurrency, CheckoutDisplayCurrency::rates());
     }
 
     private function resolveValidMetricsSessionKey(mixed $candidate): ?string

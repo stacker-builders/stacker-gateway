@@ -137,6 +137,14 @@ class ProdutosController extends Controller
             $query = Product::query()->whereIn('id', $allIds ?: ['__none__'])->orderBy('name');
         }
 
+        $category = '';
+        if (Schema::hasColumn('products', 'category')) {
+            $category = Product::normalizeCategoryFilter($request->query('category'));
+            if ($category !== '') {
+                $query->ofCategory($category);
+            }
+        }
+
         $products = $query->paginate(20)->withQueryString()->through(function (Product $p) use ($rates, $tenantId, $coproPercents) {
             $arr = $this->productToArray($p, $rates);
             $isCoproduction = (int) $p->tenant_id !== (int) $tenantId;
@@ -179,6 +187,9 @@ class ProdutosController extends Controller
             'productTypes' => $productTypes,
             'billingTypes' => $billingTypes,
             'productCategories' => Product::categoriesForSelect(),
+            'filters' => [
+                'category' => $category !== '' ? $category : null,
+            ],
             'exchange_rates' => $rates,
             'plugin_card_actions' => [],
             'plugin_form_sections' => [],

@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductOffer;
 use App\Models\SubscriptionPlan;
+use App\Support\CheckoutDisplayCurrency;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -185,5 +186,71 @@ class UpsellAfterOfferCheckoutTest extends TestCase
         $response->assertOk();
         $response->assertJsonPath('status', 'completed');
         $this->assertStringContainsString('/checkout/upsell?token=', (string) $response->json('redirect_url'));
+    }
+
+    public function test_upsell_and_downsell_prices_follow_checkout_display_currency(): void
+    {
+        $upsellProduct = $this->createTestProduct([
+            'name' => 'Oferta extra',
+            'price' => 50,
+            'currency' => 'BRL',
+            'approval_status' => Product::APPROVAL_APPROVED,
+            'admin_blocked' => false,
+            'is_active' => true,
+        ]);
+        $product = $this->createTestProduct([
+            'name' => 'Produto euro',
+            'approval_status' => Product::APPROVAL_APPROVED,
+            'checkout_config' => [
+                'upsell' => [
+                    'enabled' => true,
+                    'products' => [
+                        ['product_id' => (string) $upsellProduct->id, 'product_offer_id' => null],
+                    ],
+                ],
+                'downsell' => [
+                    'enabled' => true,
+                    'product_id' => (string) $upsellProduct->id,
+                ],
+            ],
+        ]);
+        $order = Order::create([
+            'tenant_id' => $product->tenant_id,
+            'product_id' => $product->id,
+            'status' => 'completed',
+            'amount' => 50,
+            'email' => 'buyer-eur@test.com',
+            'gateway' => 'efi',
+            'metadata' => ['display_currency' => 'EUR'],
+        ]);
+
+        $expected = CheckoutDisplayCurrency::formatStored(50, 'BRL', 'EUR');
+        $this->assertStringNotContainsString('R$', $expected);
+
+        $token = Str::random(40);
+        Cache::put('upsell_token.'.$token, [
+            'order_id' => $order->id,
+            'gateway' => 'efi',
+        ], now()->addMinutes(60));
+
+        $this->get('/checkout/upsell?token='.$token)
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Checkout/Upsell')
+                ->where('offers.0.price_formatted', $expected)
+            );
+
+        $downToken = Str::random(40);
+        Cache::put('upsell_token.'.$downToken, [
+            'order_id' => $order->id,
+            'gateway' => 'efi',
+        ], now()->addMinutes(60));
+
+        $this->get('/checkout/downsell?token='.$downToken)
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('Checkout/Downsell')
+                ->where('offer.price_formatted', $expected)
+            );
     }
 }
