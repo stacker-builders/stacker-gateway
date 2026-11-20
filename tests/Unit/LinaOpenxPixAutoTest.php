@@ -254,7 +254,7 @@ class LinaOpenxPixAutoTest extends TestCase
         ]);
     }
 
-    public function test_handle_return_posts_first_payment_when_authorised_without_payments(): void
+    public function test_handle_return_completes_when_authorised_without_payment_leg(): void
     {
         if (! Schema::hasTable('orders')) {
             $this->markTestSkipped('orders');
@@ -266,6 +266,7 @@ class LinaOpenxPixAutoTest extends TestCase
             'status' => 'pending',
             'gateway' => 'linaopenx',
             'gateway_id' => 'pr-auto-1',
+            'is_renewal' => false,
             'metadata' => [
                 'checkout_payment_method' => 'pix_auto',
                 'linaopenx_pix_auto_consent_id' => 'urn:banco:consent:abc',
@@ -279,7 +280,8 @@ class LinaOpenxPixAutoTest extends TestCase
                 'data' => [
                     'consentId' => 'urn:banco:consent:abc',
                     'consentStatus' => 'AUTHORISED',
-                    'payments' => [],
+                    'status' => 'EM_PROCESSAMENTO',
+                    'automaticPayments' => [],
                 ],
             ], 200),
             'embedded-payment-manager.linaob.com.br/api/v1/automatic-payments/recurring-consents/*' => Http::response([
@@ -287,18 +289,59 @@ class LinaOpenxPixAutoTest extends TestCase
                 'recurringConsentId' => 'urn:banco:consent:abc',
             ], 200),
             'embedded-payment-manager.linaob.com.br/api/v1/automatic-payments/recurring-payments' => Http::response([
-                'data' => ['recurringPaymentId' => 'pay-1'],
+                'data' => ['id' => 'should-not-post', 'status' => 'RECEBIDO'],
             ], 201),
+        ]);
+
+        $result = app(LinaOpenxPixAutoService::class)->handleReturn($order);
+        $this->assertSame('paid', $result['status']);
+        $this->assertTrue($result['paid']);
+        $this->assertSame('completed', $order->fresh()->status);
+        Http::assertNotSent(fn ($r) => $r->method() === 'POST' && str_ends_with(parse_url($r->url(), PHP_URL_PATH) ?? '', '/recurring-payments'));
+    }
+
+    public function test_handle_return_completes_when_bank_is_processing_immediate_first_charge(): void
+    {
+        if (! Schema::hasTable('orders')) {
+            $this->markTestSkipped('orders');
+        }
+        $this->seedCredential();
+        $ctx = $this->makePixAutoContext();
+        $order = $ctx['order'];
+        $order->update([
+            'status' => 'pending',
+            'gateway' => 'linaopenx',
+            'gateway_id' => 'pr-auto-1',
+            'is_renewal' => false,
+            'metadata' => [
+                'checkout_payment_method' => 'pix_auto',
+                'linaopenx_pix_auto_consent_id' => 'urn:banco:consent:abc',
+                'lina_payment_request_id' => 'pr-auto-1',
+            ],
+        ]);
+
+        Http::fake([
+            'iam.linaob.com.br/*' => Http::response(['access_token' => 'tok', 'expires_in' => 900], 200),
+            'embedded-payment-manager.linaob.com.br/api/v1/automatic-payments/request/*' => Http::response([
+                'data' => [
+                    'consentId' => 'urn:banco:consent:abc',
+                    'consentStatus' => 'AUTHORISED',
+                    'status' => 'EM_PROCESSAMENTO',
+                    'automaticPayments' => [[
+                        'id' => 'pay-processing',
+                        'status' => 'EM_PROCESSAMENTO',
+                    ]],
+                ],
+            ], 200),
             'embedded-payment-manager.linaob.com.br/api/v1/automatic-payments/recurring-payments/*' => Http::response([
-                'status' => 'PDNG',
+                'data' => ['id' => 'pay-processing', 'status' => 'EM_PROCESSAMENTO'],
             ], 200),
         ]);
 
         $result = app(LinaOpenxPixAutoService::class)->handleReturn($order);
-        $this->assertSame('pending', $result['status']);
-        $this->assertFalse($result['paid']);
-        $this->assertSame('pay-1', $order->fresh()->metadata['linaopenx_pix_auto_recurring_payment_id'] ?? null);
-        Http::assertSent(fn ($r) => $r->method() === 'POST' && str_ends_with(parse_url($r->url(), PHP_URL_PATH) ?? '', '/recurring-payments'));
+        $this->assertTrue($result['paid']);
+        $this->assertSame('completed', $order->fresh()->status);
+        Http::assertNotSent(fn ($r) => $r->method() === 'POST' && str_ends_with(parse_url($r->url(), PHP_URL_PATH) ?? '', '/recurring-payments'));
     }
 
     public function test_handle_return_completes_when_payment_acsc(): void

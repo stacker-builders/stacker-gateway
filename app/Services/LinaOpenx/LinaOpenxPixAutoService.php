@@ -75,9 +75,9 @@ class LinaOpenxPixAutoService
         $plan = $order->subscriptionPlan;
         $interval = self::intervalFromPlan($plan?->interval);
         $amount = $this->formatAmount((float) $order->amount);
-        // Primeiro débito vai no contrato e pode liquidar no dia da autorização.
+        // O firstPayment liquida na autorização. A âncora do ciclo não pode cair no mesmo dia.
         $firstDate = now()->toDateString();
-        $referenceStartDate = now()->utc()->startOfDay()->format('Y-m-d\TH:i:s\Z');
+        $referenceStartDate = now()->addDay()->startOfDay()->utc()->format('Y-m-d\TH:i:s\Z');
         $payerName = trim((string) ($consumer['name'] ?? '')) ?: 'Cliente';
         $returnUrl = $this->signedReturnUrl($order);
         $info = $description !== '' ? $description : ('Assinatura PIX automático - Pedido #'.($order->public_reference ?: $order->id));
@@ -262,6 +262,17 @@ class LinaOpenxPixAutoService
                         return 'paid';
                     }
                 }
+                $consentPay = trim((string) ($consent['payment_status'] ?? ''));
+                $knownPay = $consentPay !== '' ? $consentPay : trim((string) ($result['payment_status'] ?? ''));
+                if (! $this->paymentStatusBlocksFirstCharge($knownPay)
+                    && $this->immediateFirstChargeAccepted($order, [
+                        'consent_status' => $consent['consent_status'] ?? $result['consent_status'] ?? null,
+                        'payment_status' => $knownPay,
+                    ], true)) {
+                    return 'paid';
+                }
+            } elseif ($this->immediateFirstChargeAccepted($order, $result, true)) {
+                return 'paid';
             }
 
             return $result['status'] ?? 'pending';
@@ -431,6 +442,12 @@ class LinaOpenxPixAutoService
             return;
         }
 
+        if ($this->immediateFirstChargeAccepted($order, $result)) {
+            $this->markImmediateFirstChargeSettled($order, $meta, $result);
+
+            return;
+        }
+
         $payments = $result['payments'] ?? [];
         if (is_array($payments) && $payments !== []) {
             $firstId = $this->firstPaymentId($payments);
@@ -466,12 +483,28 @@ class LinaOpenxPixAutoService
 
                     return;
                 }
+                if ($this->immediateFirstChargeAccepted($order, [
+                    'consent_status' => $consent['consent_status'] ?? $result['consent_status'] ?? null,
+                    'payment_status' => $consent['payment_status'] ?? null,
+                ])) {
+                    $this->markImmediateFirstChargeSettled($order, $meta, $result);
+
+                    return;
+                }
                 if ($this->client->isInflightPaymentStatus($consent['payment_status'] ?? null)) {
                     $order->update(['metadata' => $meta]);
 
                     return;
                 }
             }
+        }
+
+        $knownPay = trim((string) ($result['payment_status'] ?? ''));
+        if (! $this->paymentStatusBlocksFirstCharge($knownPay)
+            && $this->immediateFirstChargeAccepted($order, $result, true)) {
+            $this->markImmediateFirstChargeSettled($order, $meta, $result);
+
+            return;
         }
 
         $consentStatus = strtoupper(trim((string) ($result['consent_status'] ?? '')));
@@ -548,6 +581,62 @@ class LinaOpenxPixAutoService
         $created = $this->client->createRecurringPayment($credentials, $body);
 
         return $created['recurring_payment_id'];
+    }
+
+    /**
+     * O firstPayment do contrato liquida quando o banco autoriza.
+     * A Lina pode continuar em EM_PROCESSAMENTO e nunca virar PAGO.
+     * Renovação não usa este atalho: o consentimento segue AUTHORISED o ciclo inteiro.
+     *
+     * @param  array<string, mixed>  $result
+     */
+    private function immediateFirstChargeAccepted(Order $order, array $result, bool $allowWithoutPaymentStatus = false): bool
+    {
+        if ($order->is_renewal) {
+            return false;
+        }
+
+        $consentStatus = strtoupper(trim((string) ($result['consent_status'] ?? '')));
+        if (! in_array($consentStatus, ['AUTHORISED', 'CONSUMED', 'CONSUMIDO'], true)) {
+            return false;
+        }
+
+        $pay = strtoupper(trim((string) ($result['payment_status'] ?? '')));
+        if ($pay === '') {
+            return $allowWithoutPaymentStatus;
+        }
+        if ($this->client->isSettledPaymentStatus($pay)) {
+            return true;
+        }
+
+        return in_array($pay, ['RECEBIDO', 'EM_PROCESSAMENTO', 'PROCESSING'], true);
+    }
+
+    private function paymentStatusBlocksFirstCharge(?string $status): bool
+    {
+        $pay = strtoupper(trim((string) $status));
+        if ($pay === '' || $this->client->isSettledPaymentStatus($pay)) {
+            return false;
+        }
+
+        return ! in_array($pay, ['RECEBIDO', 'EM_PROCESSAMENTO', 'PROCESSING'], true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $meta
+     * @param  array<string, mixed>  $result
+     */
+    private function markImmediateFirstChargeSettled(Order $order, array &$meta, array $result): void
+    {
+        if (empty($meta['linaopenx_pix_auto_first_payment_settled'])) {
+            Log::info('LinaOpenxPixAutoService: primeiro débito aceito na autorização', [
+                'order_id' => $order->id,
+                'consent_status' => $result['consent_status'] ?? null,
+                'payment_status' => $result['payment_status'] ?? null,
+            ]);
+        }
+        $meta['linaopenx_pix_auto_first_payment_settled'] = true;
+        $order->update(['metadata' => $meta]);
     }
 
     /**
