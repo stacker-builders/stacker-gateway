@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Webhooks;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Services\LinaOpenx\LinaOpenxPixAutoService;
 use App\Support\GatewayInboundWebhookAuth;
 use App\Support\PaymentWebhookDispatcher;
 use Illuminate\Http\JsonResponse;
@@ -82,7 +83,9 @@ class LinaOpenxWebhookController extends Controller
             }
         }
 
-        $eventType = strtoupper(trim((string) ($payload['type'] ?? $payload['event'] ?? 'PAYMENT')));
+        $this->rememberPixAutoPaymentId($order, $paymentId);
+
+        $eventType = strtoupper(trim((string) ($payload['type'] ?? $payload['event'] ?? $payload['paymentType'] ?? 'PAYMENT')));
         $rejectReason = $payload['rejectReason'] ?? $payload['reject_reason'] ?? null;
         $mappedStatus = 'pending';
         $event = 'order.pending';
@@ -159,7 +162,28 @@ class LinaOpenxWebhookController extends Controller
             }
         }
 
+        $data = $payload['data'] ?? null;
+        if (is_array($data)) {
+            return $this->extractPaymentId($data);
+        }
+
         return null;
+    }
+
+    private function rememberPixAutoPaymentId(Order $order, ?string $paymentId): void
+    {
+        $paymentId = trim((string) $paymentId);
+        if ($paymentId === '' || ! LinaOpenxPixAutoService::isPixAutoOrder($order)) {
+            return;
+        }
+
+        $meta = is_array($order->metadata) ? $order->metadata : [];
+        if (trim((string) ($meta['linaopenx_pix_auto_recurring_payment_id'] ?? '')) !== '') {
+            return;
+        }
+
+        $meta['linaopenx_pix_auto_recurring_payment_id'] = $paymentId;
+        $order->update(['metadata' => $meta]);
     }
 
     /**

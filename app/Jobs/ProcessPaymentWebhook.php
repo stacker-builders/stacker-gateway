@@ -11,6 +11,7 @@ use App\Models\GatewayCredential;
 use App\Models\Order;
 use App\Models\Subscription;
 use App\Services\CajuPay\CajuPaySdkCheckoutService;
+use App\Services\LinaOpenx\LinaOpenxPixAutoService;
 use App\Services\PlatformOrderAdminService;
 use App\Support\CajuPayCheckoutMetadata;
 use App\Support\GatewayPaymentCredentials;
@@ -552,6 +553,10 @@ class ProcessPaymentWebhook implements ShouldQueue
             }
 
             return $lastStatus;
+        }
+
+        if ($this->gatewaySlug === 'linaopenx' && LinaOpenxPixAutoService::isPixAutoOrder($order)) {
+            return app(LinaOpenxPixAutoService::class)->resolveNormalizedStatus($order);
         }
 
         $credentials = GatewayPaymentCredentials::resolve($order->tenant_id, $this->gatewaySlug, $order);

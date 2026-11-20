@@ -52,6 +52,7 @@ class LinaOpenxClient
         'PENDENTE',
         'PENDING',
         'EM_PROCESSAMENTO',
+        'RECEBIDO',
         'AGENDADO',
         'PROCESSING',
     ];
@@ -1223,9 +1224,10 @@ class LinaOpenxClient
      */
     private function extractPaymentsList(array $data): array
     {
-        foreach (['payments', 'recurringPayments', 'recurring_payments'] as $key) {
-            $raw = $data[$key] ?? null;
-            if (is_array($raw) && $raw !== []) {
+        // Get payment request documenta os débitos em automaticPayments, não em payments.
+        foreach (['automaticPayments', 'automatic_payments', 'payments', 'recurringPayments', 'recurring_payments'] as $key) {
+            $raw = $this->arrayValue($data, [$key]);
+            if (is_array($raw) && array_is_list($raw) && $raw !== []) {
                 return array_values(array_filter($raw, 'is_array'));
             }
         }
@@ -1328,16 +1330,16 @@ class LinaOpenxClient
             if ($depth > 6 || ! is_array($node)) {
                 continue;
             }
-            foreach (['firstPayment', 'first_payment', 'payment'] as $key) {
-                $child = $node[$key] ?? null;
+            foreach (['firstPayment', 'first_payment', 'payment', 'automaticPayment'] as $key) {
+                $child = $this->arrayValue($node, [$key]);
                 if (is_array($child) && ! array_is_list($child)) {
                     $nodes[] = $child;
                     $stack[] = [$child, $depth + 1];
                 }
             }
-            foreach (['payments', 'recurringPayments', 'recurring_payments'] as $key) {
-                $list = $node[$key] ?? null;
-                if (! is_array($list)) {
+            foreach (['automaticPayments', 'automatic_payments', 'payments', 'recurringPayments', 'recurring_payments'] as $key) {
+                $list = $this->arrayValue($node, [$key]);
+                if (! is_array($list) || ! array_is_list($list)) {
                     continue;
                 }
                 foreach ($list as $row) {
