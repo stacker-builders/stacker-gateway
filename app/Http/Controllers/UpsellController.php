@@ -17,6 +17,7 @@ use App\Services\AccessEmailService;
 use App\Services\MinimumChargeService;
 use App\Services\PaymentService;
 use App\Services\UtmifyService;
+use App\Support\CheckoutDisplayCurrency;
 use App\Support\SafeUrl;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -256,7 +257,7 @@ class UpsellController extends Controller
      * @param  array<int, array{product_id: string|int, product_offer_id?: int, title_override?: string, description?: string, image_url?: string, video_url?: string}>  $products
      * @return array<int, array{product_id: string, product_offer_id: int|null, name: string, price: float, price_formatted: string, image_url: string|null, checkout_slug: string, description: string|null, video_url: string|null}>
      */
-    private function buildUpsellOffers(array $products): array
+    private function buildUpsellOffers(array $products, string $displayCurrency = 'BRL'): array
     {
         $out = [];
         foreach ($products as $item) {
@@ -295,7 +296,7 @@ class UpsellController extends Controller
                 'product_offer_id' => $offer ? $offer->id : null,
                 'name' => trim((string) ($item['title_override'] ?? $name)) ?: $name,
                 'price' => $price,
-                'price_formatted' => 'R$ ' . number_format($price, 2, ',', '.'),
+                'price_formatted' => CheckoutDisplayCurrency::formatStored($price, $currency, $displayCurrency),
                 'image_url' => $imageUrl,
                 'checkout_slug' => $checkoutSlug,
                 'description' => isset($item['description']) && trim((string) $item['description']) !== '' ? trim((string) $item['description']) : null,
@@ -328,7 +329,7 @@ class UpsellController extends Controller
             return $this->redirectToThankYou($order);
         }
 
-        $offers = $this->buildUpsellOffers($upsell['products']);
+        $offers = $this->buildUpsellOffers($upsell['products'], CheckoutDisplayCurrency::fromOrder($order));
         if (empty($offers)) {
             return $this->redirectToThankYou($order);
         }
@@ -404,7 +405,7 @@ class UpsellController extends Controller
             'image_url' => $downsell['image_url'] ?? null,
             'video_url' => $downsell['video_url'] ?? null,
         ];
-        $offers = $this->buildUpsellOffers([$downsellProduct]);
+        $offers = $this->buildUpsellOffers([$downsellProduct], CheckoutDisplayCurrency::fromOrder($order));
         if (empty($offers)) {
             return $this->redirectToThankYou($order);
         }
@@ -539,6 +540,7 @@ class UpsellController extends Controller
                 'payment_method' => 'pix',
                 'metadata' => array_merge($inheritedTracking, [
                     'checkout_payment_method' => 'pix',
+                    'display_currency' => CheckoutDisplayCurrency::fromOrder($order),
                 ]),
             ]);
             OrderItem::create([
