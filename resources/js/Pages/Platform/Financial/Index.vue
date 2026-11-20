@@ -110,6 +110,7 @@ const props = defineProps({
             hours_enabled: false,
             hours_start: '06:00',
             hours_end: '21:00',
+            allowed_days: [1, 2, 3, 4, 5, 6, 7],
             timezone: 'America/Sao_Paulo',
             has_manual_approval_pin: false,
             interval_enabled: false,
@@ -540,6 +541,21 @@ const tabs = computed(() => [
 
 const MANUAL_APPROVAL_PIN_MAX_LENGTH = 6;
 const MANUAL_APPROVAL_PIN_MIN_LENGTH = 4;
+const withdrawalWeekdays = [
+    { value: 1, label: 'Segunda' },
+    { value: 2, label: 'Terça' },
+    { value: 3, label: 'Quarta' },
+    { value: 4, label: 'Quinta' },
+    { value: 5, label: 'Sexta' },
+    { value: 6, label: 'Sábado' },
+    { value: 7, label: 'Domingo' },
+];
+
+function normalizeAllowedDays(days) {
+    const selected = Array.isArray(days) ? days : [1, 2, 3, 4, 5, 6, 7];
+
+    return [...new Set(selected.map((day) => Number(day)).filter((day) => day >= 1 && day <= 7))].sort((a, b) => a - b);
+}
 
 function sanitizeManualApprovalPinInput(value) {
     return String(value ?? '').replace(/\D/g, '').slice(0, MANUAL_APPROVAL_PIN_MAX_LENGTH);
@@ -554,6 +570,7 @@ const withdrawalPolicyForm = useForm({
     hours_enabled: props.withdrawal_policy?.hours_enabled === true,
     hours_start: props.withdrawal_policy?.hours_start || '06:00',
     hours_end: props.withdrawal_policy?.hours_end || '21:00',
+    allowed_days: normalizeAllowedDays(props.withdrawal_policy?.allowed_days),
     timezone: props.withdrawal_policy?.timezone || 'America/Sao_Paulo',
     current_manual_approval_pin: '',
     manual_approval_pin: '',
@@ -573,6 +590,7 @@ watch(
         withdrawalPolicyForm.hours_enabled = v.hours_enabled === true;
         withdrawalPolicyForm.hours_start = v.hours_start || '06:00';
         withdrawalPolicyForm.hours_end = v.hours_end || '21:00';
+        withdrawalPolicyForm.allowed_days = normalizeAllowedDays(v.allowed_days);
         withdrawalPolicyForm.timezone = v.timezone || 'America/Sao_Paulo';
     },
     { deep: true }
@@ -645,7 +663,26 @@ function validateWithdrawalPinFields() {
     return true;
 }
 
+function withdrawalDayChecked(day) {
+    return normalizeAllowedDays(withdrawalPolicyForm.allowed_days).includes(day);
+}
+
+function setWithdrawalDays(days) {
+    withdrawalPolicyForm.allowed_days = normalizeAllowedDays(days);
+    withdrawalPolicyForm.clearErrors('allowed_days');
+}
+
+function toggleWithdrawalDay(day) {
+    const current = normalizeAllowedDays(withdrawalPolicyForm.allowed_days);
+    setWithdrawalDays(current.includes(day) ? current.filter((value) => value !== day) : [...current, day]);
+}
+
 function submitWithdrawalPolicy() {
+    if (normalizeAllowedDays(withdrawalPolicyForm.allowed_days).length === 0) {
+        withdrawalPolicyForm.setError('allowed_days', 'Selecione ao menos um dia da semana.');
+        return;
+    }
+
     if (!validateWithdrawalPinFields()) {
         return;
     }
@@ -2144,7 +2181,7 @@ function submitSettlement() {
                         Política de saques
                     </h2>
                     <p class="mb-6 text-sm text-zinc-600 dark:text-zinc-400">
-                        Controle saque automático, janela de horário para solicitações e PIN de operação.
+                        Controle saque automático, dias e horário para solicitações e PIN de operação.
                         Com 2FA ativo no perfil, o PIN não é exigido nas aprovações. Sem 2FA, o PIN é obrigatório.
                         Pagamento manual nunca é aceito sem 2FA ou PIN cadastrado.
                     </p>
@@ -2192,6 +2229,52 @@ function submitSettlement() {
                                     class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-600 dark:bg-zinc-900"
                                 />
                             </div>
+                        </div>
+
+                        <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-600">
+                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                <p class="text-sm font-medium text-zinc-800 dark:text-zinc-200">Dias permitidos para saque</p>
+                                <div class="flex gap-3 text-xs">
+                                    <button
+                                        type="button"
+                                        class="font-medium text-zinc-600 underline hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
+                                        @click="setWithdrawalDays([1, 2, 3, 4, 5, 6, 7])"
+                                    >
+                                        Marcar todos
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="font-medium text-zinc-600 underline hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
+                                        @click="setWithdrawalDays([1, 2, 3, 4, 5])"
+                                    >
+                                        Dias úteis
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                                O infoprodutor só solicita saque nos dias marcados. Se o horário estiver ligado, ele continua valendo nesses dias.
+                            </p>
+                            <div class="mt-3 flex flex-wrap gap-2">
+                                <label
+                                    v-for="day in withdrawalWeekdays"
+                                    :key="day.value"
+                                    class="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
+                                    :class="withdrawalDayChecked(day.value)
+                                        ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100'
+                                        : 'border-zinc-200 text-zinc-700 dark:border-zinc-600 dark:text-zinc-300'"
+                                >
+                                    <input
+                                        type="checkbox"
+                                        class="rounded border-zinc-300"
+                                        :checked="withdrawalDayChecked(day.value)"
+                                        @change="toggleWithdrawalDay(day.value)"
+                                    />
+                                    {{ day.label }}
+                                </label>
+                            </div>
+                            <p v-if="withdrawalPolicyForm.errors.allowed_days" class="mt-2 text-xs text-red-600">
+                                {{ withdrawalPolicyForm.errors.allowed_days }}
+                            </p>
                         </div>
 
                         <div class="rounded-xl border border-zinc-200 p-4 dark:border-zinc-600">

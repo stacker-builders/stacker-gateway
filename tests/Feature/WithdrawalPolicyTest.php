@@ -59,6 +59,54 @@ class WithdrawalPolicyTest extends TestCase
         $this->assertTrue(WithdrawalPolicyService::allowsRequestAt($allowed));
     }
 
+    public function test_withdrawal_days_block_unselected_weekdays(): void
+    {
+        Setting::set('platform_withdrawal_hours_enabled', false, null);
+        Setting::set('platform_withdrawal_allowed_days', [1, 2, 3, 4, 5], null);
+        Setting::set('platform_withdrawal_timezone', 'America/Sao_Paulo', null);
+
+        $tuesday = Carbon::parse('2026-06-09 10:00:00', 'America/Sao_Paulo');
+        $sunday = Carbon::parse('2026-06-14 10:00:00', 'America/Sao_Paulo');
+
+        $this->assertTrue(WithdrawalPolicyService::allowsRequestAt($tuesday));
+        $this->assertFalse(WithdrawalPolicyService::allowsRequestAt($sunday));
+        $this->assertStringContainsString('sexta', WithdrawalPolicyService::requestBlockedMessage($sunday));
+    }
+
+    public function test_missing_allowed_days_keeps_every_day_open(): void
+    {
+        Setting::set('platform_withdrawal_hours_enabled', false, null);
+        Setting::set('platform_withdrawal_timezone', 'America/Sao_Paulo', null);
+
+        $sunday = Carbon::parse('2026-06-14 22:30:00', 'America/Sao_Paulo');
+
+        $this->assertTrue(WithdrawalPolicyService::allowsRequestAt($sunday));
+    }
+
+    public function test_admin_can_save_allowed_withdrawal_days(): void
+    {
+        $admin = $this->platformAdmin();
+
+        $response = $this->actingAs($admin)->put(route('plataforma.financeiro.saques-politica.update'), [
+            'allowed_days' => [1, 3, 5],
+        ]);
+
+        $response->assertRedirect(route('plataforma.financeiro.index', ['tab' => 'saques']));
+        $this->assertSame([1, 3, 5], WithdrawalPolicyService::allowedDays());
+    }
+
+    public function test_admin_cannot_clear_every_withdrawal_day(): void
+    {
+        $admin = $this->platformAdmin();
+
+        $response = $this->actingAs($admin)->put(route('plataforma.financeiro.saques-politica.update'), [
+            'allowed_days' => [],
+        ]);
+
+        $response->assertSessionHasErrors('allowed_days');
+        $this->assertSame(WithdrawalPolicyService::ALL_WEEKDAYS, WithdrawalPolicyService::allowedDays());
+    }
+
     public function test_interval_blocks_a_second_withdrawal_until_hours_pass(): void
     {
         if (! Schema::hasTable('withdrawals')) {

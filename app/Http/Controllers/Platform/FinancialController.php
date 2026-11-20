@@ -117,6 +117,8 @@ class FinancialController extends Controller
             'hours_enabled' => ['nullable', 'boolean'],
             'hours_start' => ['nullable', 'string', 'regex:/^\d{2}:\d{2}$/'],
             'hours_end' => ['nullable', 'string', 'regex:/^\d{2}:\d{2}$/'],
+            'allowed_days' => ['sometimes', 'array', 'min:1'],
+            'allowed_days.*' => ['integer', 'distinct', 'between:1,7'],
             'timezone' => ['nullable', 'string', 'max:64'],
             'current_manual_approval_pin' => ['nullable', 'string', "max:{$pinMax}", 'regex:/^\d*$/'],
             'manual_approval_pin' => ['nullable', 'string', "min:{$pinMin}", "max:{$pinMax}", 'regex:/^\d+$/'],
@@ -129,6 +131,9 @@ class FinancialController extends Controller
         Setting::set('platform_withdrawal_hours_start', $validated['hours_start'] ?? WithdrawalPolicyService::hoursStart(), null);
         Setting::set('platform_withdrawal_hours_end', $validated['hours_end'] ?? WithdrawalPolicyService::hoursEnd(), null);
         Setting::set('platform_withdrawal_timezone', $validated['timezone'] ?? WithdrawalPolicyService::timezone(), null);
+        if ($request->exists('allowed_days')) {
+            WithdrawalPolicyService::setAllowedDays($validated['allowed_days'] ?? []);
+        }
 
         $pin = trim((string) ($validated['manual_approval_pin'] ?? ''));
         $pinConfirm = trim((string) ($validated['manual_approval_pin_confirmation'] ?? ''));
@@ -163,6 +168,7 @@ class FinancialController extends Controller
         PlatformAuditService::log('platform.withdrawal.policy_updated', [
             'auto_withdrawal_enabled' => $request->boolean('auto_withdrawal_enabled', true),
             'hours_enabled' => $request->boolean('hours_enabled', false),
+            'allowed_days' => WithdrawalPolicyService::allowedDays(),
             'pin_changed' => $pinChanged,
         ], $request);
 
