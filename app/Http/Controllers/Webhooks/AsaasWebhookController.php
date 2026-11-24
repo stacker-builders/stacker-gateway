@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Webhooks;
 
 use App\Http\Controllers\Controller;
 use App\Models\Order;
+use App\Services\Asaas\AsaasPixAutoService;
 use App\Support\GatewayInboundWebhookAuth;
 use App\Support\PaymentWebhookDispatcher;
 use Illuminate\Http\JsonResponse;
@@ -19,6 +20,11 @@ class AsaasWebhookController extends Controller
      */
     public function handle(Request $request): JsonResponse
     {
+        $eventType = strtoupper((string) $request->input('event', ''));
+        if (str_starts_with($eventType, 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_')) {
+            return $this->handleAuthorization($request, $eventType);
+        }
+
         $payment = $request->input('payment');
         if (! is_array($payment)) {
             return response()->json(['received' => true]);
@@ -29,11 +35,16 @@ class AsaasWebhookController extends Controller
         }
         $transactionId = (string) $transactionId;
 
-        $order = Order::where('gateway', 'asaas')->where('gateway_id', $transactionId)->first();
+        $pixAuto = app(AsaasPixAutoService::class);
+        $order = Order::where('gateway', 'asaas')->where('gateway_id', $transactionId)->first()
+            ?? $pixAuto->findOrderForPayment($payment);
         if (! $order) {
             Log::debug('AsaasWebhook: order not found', ['gateway_id' => $transactionId]);
 
             return response()->json(['received' => true]);
+        }
+        if ($order->gateway_id === null || $order->gateway_id === '') {
+            $order->update(['gateway_id' => $transactionId]);
         }
 
         if (! GatewayInboundWebhookAuth::verifyAsaas($request, $order->tenant_id)) {
@@ -73,5 +84,25 @@ class AsaasWebhookController extends Controller
         }
 
         return ['order.pending', 'pending'];
+    }
+
+    private function handleAuthorization(Request $request, string $eventType): JsonResponse
+    {
+        $authorization = $request->input('authorization');
+        if (! is_array($authorization) || trim((string) ($authorization['id'] ?? '')) === '') {
+            return response()->json(['received' => true]);
+        }
+
+        $order = app(AsaasPixAutoService::class)->findOrderByAuthorization((string) $authorization['id']);
+        if ($order === null) {
+            return response()->json(['received' => true]);
+        }
+        if (! GatewayInboundWebhookAuth::verifyAsaas($request, $order->tenant_id)) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        app(AsaasPixAutoService::class)->applyAuthorizationEvent($eventType, $authorization);
+
+        return response()->json(['received' => true]);
     }
 }

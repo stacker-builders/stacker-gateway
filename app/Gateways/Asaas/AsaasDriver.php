@@ -428,6 +428,198 @@ class AsaasDriver implements GatewayDriver
     }
 
     /**
+     * Saldo disponível da conta. GET /v3/finance/balance → { "balance": 5210.96 }.
+     *
+     * @param  array<string, mixed>  $credentials
+     * @return array<string, mixed>
+     */
+    public function fetchAccountBalance(array $credentials): array
+    {
+        $response = $this->http($credentials, 8)->get($this->getBaseUrl($credentials).'/finance/balance');
+        if (! $response->successful()) {
+            throw new \RuntimeException('Asaas: falha ao consultar saldo (HTTP '.$response->status().').');
+        }
+
+        $data = $response->json();
+        if (! is_array($data) || ! is_numeric($data['balance'] ?? null)) {
+            throw new \RuntimeException('Asaas: resposta de saldo inválida.');
+        }
+
+        return $data;
+    }
+
+    /**
+     * Jornada 3: QR imediato + autorização. As cobranças seguintes ficam no modo MANUAL.
+     *
+     * @param  array<string, mixed>  $credentials
+     * @param  array{name?: string, document?: string, email?: string, phone?: string, address?: array}  $consumer
+     * @return array{authorization_id: string, customer_id: string, copy_paste: ?string, qrcode: ?string, status: string, payment_id: ?string}
+     */
+    public function createPixAutomaticAuthorization(
+        array $credentials,
+        array $consumer,
+        string $externalId,
+        float $amount,
+        string $frequency,
+        string $startDate,
+        string $description
+    ): array {
+        $baseUrl = $this->getBaseUrl($credentials);
+        $customerId = $this->ensureCustomer($credentials, $consumer, $externalId);
+        $contractId = substr(preg_replace('/[^A-Za-z0-9\-]/', '', 'A'.$externalId) ?? '', 0, 35);
+        if ($contractId === '') {
+            $contractId = substr('A'.$externalId, 0, 35);
+        }
+        $label = mb_substr(trim($description) !== '' ? trim($description) : 'Assinatura', 0, 35);
+        $body = [
+            'frequency' => $frequency,
+            'contractId' => $contractId,
+            'startDate' => $startDate,
+            'customerId' => $customerId,
+            'value' => round($amount, 2),
+            'description' => $label,
+            'paymentCreationMode' => 'MANUAL',
+            'retryPolicy' => 'ALLOW_THREE_IN_SEVEN_DAYS',
+            'immediateQrCode' => [
+                'expirationSeconds' => 86400,
+                'originalValue' => round($amount, 2),
+                'description' => mb_substr('Pedido '.$externalId, 0, 35),
+            ],
+        ];
+        $response = $this->http($credentials)->post($baseUrl.'/pix/automatic/authorizations', $body);
+        if (! $response->successful()) {
+            throw new \RuntimeException('Asaas: '.$this->errorDescription($response, 'Não foi possível criar o PIX automático.'));
+        }
+        $data = $response->json();
+        $authorizationId = trim((string) ($data['id'] ?? ''));
+        if ($authorizationId === '') {
+            throw new \RuntimeException('Asaas: resposta sem identificador da autorização.');
+        }
+
+        return [
+            'authorization_id' => $authorizationId,
+            'customer_id' => (string) ($data['customerId'] ?? $customerId),
+            'copy_paste' => is_string($data['payload'] ?? null) ? $data['payload'] : null,
+            'qrcode' => is_string($data['encodedImage'] ?? null) ? $data['encodedImage'] : null,
+            'status' => strtoupper((string) ($data['status'] ?? 'CREATED')),
+            'payment_id' => $this->findImmediatePixPaymentId($credentials, $customerId, $amount),
+        ];
+    }
+
+    /**
+     * Cobrança do ciclo seguinte, vinculada a uma autorização ACTIVE.
+     *
+     * @param  array<string, mixed>  $credentials
+     */
+    public function createPixAutomaticPayment(
+        array $credentials,
+        string $customerId,
+        string $authorizationId,
+        float $amount,
+        string $dueDate,
+        string $externalId
+    ): string {
+        $baseUrl = $this->getBaseUrl($credentials);
+        $response = $this->http($credentials)->post($baseUrl.'/payments', [
+            'customer' => $customerId,
+            'billingType' => 'PIX',
+            'value' => round($amount, 2),
+            'dueDate' => $dueDate,
+            'pixAutomaticAuthorizationId' => $authorizationId,
+            'externalReference' => $externalId,
+            'description' => mb_substr('Renovação '.$externalId, 0, 35),
+        ]);
+        if (! $response->successful()) {
+            throw new \RuntimeException('Asaas: '.$this->errorDescription($response, 'Não foi possível agendar o PIX automático.'));
+        }
+        $paymentId = trim((string) ($response->json('id') ?? ''));
+        if ($paymentId === '') {
+            throw new \RuntimeException('Asaas: resposta sem identificador da cobrança recorrente.');
+        }
+
+        return $paymentId;
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     */
+    public function getPixAutomaticAuthorization(array $credentials, string $authorizationId): array
+    {
+        $response = $this->http($credentials, 8)->get(
+            $this->getBaseUrl($credentials).'/pix/automatic/authorizations/'.rawurlencode($authorizationId)
+        );
+        if (! $response->successful()) {
+            throw new \RuntimeException('Asaas: '.$this->errorDescription($response, 'Não foi possível consultar a autorização.'));
+        }
+        $data = $response->json();
+        if (! is_array($data)) {
+            throw new \RuntimeException('Asaas: resposta de autorização inválida.');
+        }
+
+        return $data;
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     */
+    public function cancelPixAutomaticAuthorization(array $credentials, string $authorizationId): void
+    {
+        $response = $this->http($credentials, 8)->delete(
+            $this->getBaseUrl($credentials).'/pix/automatic/authorizations/'.rawurlencode($authorizationId)
+        );
+        if (! $response->successful() && $response->status() !== 404) {
+            throw new \RuntimeException('Asaas: '.$this->errorDescription($response, 'Não foi possível cancelar a autorização.'));
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     */
+    private function findImmediatePixPaymentId(array $credentials, string $customerId, float $amount): ?string
+    {
+        try {
+            $response = $this->http($credentials, 8)->get($this->getBaseUrl($credentials).'/payments', [
+                'customer' => $customerId,
+                'billingType' => 'PIX',
+                'limit' => 10,
+            ]);
+        } catch (\Throwable) {
+            return null;
+        }
+        if (! $response->successful()) {
+            return null;
+        }
+        $rows = $response->json('data');
+        if (! is_array($rows)) {
+            return null;
+        }
+        foreach ($rows as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $value = $row['value'] ?? null;
+            $id = trim((string) ($row['id'] ?? ''));
+            if ($id === '' || ! is_numeric($value) || abs(((float) $value) - $amount) > 0.009) {
+                continue;
+            }
+            $status = strtoupper((string) ($row['status'] ?? ''));
+            if (in_array($status, ['PENDING', 'AWAITING_RISK_ANALYSIS', ''], true)) {
+                return $id;
+            }
+        }
+
+        return null;
+    }
+
+    private function errorDescription(\Illuminate\Http\Client\Response $response, string $fallback): string
+    {
+        $err = $response->json('errors');
+        $msg = is_array($err) && isset($err[0]['description']) ? $err[0]['description'] : $fallback;
+
+        return is_string($msg) && $msg !== '' ? $msg : $fallback;
+    }
+
+    /**
      * @param  array<string, string>  $credentials
      */
     public function getTransactionStatus(string $transactionId, array $credentials): ?string

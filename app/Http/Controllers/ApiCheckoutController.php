@@ -16,6 +16,7 @@ use App\Models\Product;
 use App\Models\ProductOffer;
 use App\Models\Setting;
 use App\Models\SubscriptionPlan;
+use App\Services\Asaas\AsaasPixAutoService;
 use App\Services\Checkout\CheckoutAbuseGuard;
 use App\Services\EfiPixRecorrenteService;
 use App\Services\MinimumChargeService;
@@ -756,6 +757,53 @@ class ApiCheckoutController extends Controller
                         'order_id' => $order->id,
                         'qrcode' => $qrcodeImage,
                         'copy_paste' => $copyPaste ?? '',
+                        'amount' => $amount,
+                        'product_name' => $product?->name ?? 'Pagamento',
+                        'redirect_after_purchase' => route('api-checkout.thank-you', ['order_id' => $order->id]),
+                        'created_at' => time(),
+                    ]);
+
+                    return redirect()->route('checkout.pix', ['token' => $pixToken]);
+                }
+
+                if ($gatewaySlug === 'asaas') {
+                    $credential = GatewayCredential::resolveForPayment($tenantId, 'asaas');
+                    $credentials = $credential?->getDecryptedCredentials() ?? [];
+                    if ($credential === null || trim((string) ($credentials['api_key'] ?? '')) === '') {
+                        throw new \RuntimeException('Asaas não configurada para PIX automático.');
+                    }
+                    if ($plan === null || $plan->isLifetime()) {
+                        throw new \RuntimeException('PIX automático da Asaas exige um plano com recorrência.');
+                    }
+
+                    $order->load('product');
+                    $created = app(AsaasPixAutoService::class)->createCheckoutAuthorization(
+                        $credentials,
+                        $consumer,
+                        $order,
+                        $plan,
+                        (float) $amount,
+                        $periodEnd
+                    );
+                    $order->update([
+                        'gateway' => 'asaas',
+                        'gateway_id' => $created['payment_id'],
+                        'metadata' => array_merge($order->metadata ?? [], [
+                            'asaas_pix_auto_authorization_id' => $created['authorization_id'],
+                            'asaas_pix_auto_status' => $created['status'],
+                            'asaas_customer_id' => $created['customer_id'],
+                        ]),
+                    ]);
+                    event(new PixGenerated($order, [
+                        'qrcode' => $created['qrcode'],
+                        'copy_paste' => $created['copy_paste'] ?? '',
+                        'transaction_id' => $created['payment_id'] ?? $created['authorization_id'],
+                    ]));
+                    $pixToken = Str::random(32);
+                    session()->put('pix_display.'.$pixToken, [
+                        'order_id' => $order->id,
+                        'qrcode' => $created['qrcode'],
+                        'copy_paste' => $created['copy_paste'] ?? '',
                         'amount' => $amount,
                         'product_name' => $product?->name ?? 'Pagamento',
                         'redirect_after_purchase' => route('api-checkout.thank-you', ['order_id' => $order->id]),

@@ -2,6 +2,7 @@
 
 namespace App\Services\Platform;
 
+use App\Gateways\Asaas\AsaasDriver;
 use App\Gateways\Bspay\BspayDriver;
 use App\Gateways\CajuPay\CajuPayDriver;
 use App\Gateways\Efi\EfiDriver;
@@ -29,7 +30,7 @@ class AcquirerWalletBalanceService
     private const CACHE_TTL_SECONDS = 45;
 
     /** @var list<string> */
-    private const BALANCE_SLUGS = ['cajupay', 'efi', 'woovi', 'mercadopago', 'stripe', 'versell', 'xflow', 'okto', 'xpag'];
+    private const BALANCE_SLUGS = ['cajupay', 'efi', 'woovi', 'mercadopago', 'asaas', 'stripe', 'versell', 'xflow', 'okto', 'xpag'];
 
     /**
      * @return list<array{
@@ -270,6 +271,7 @@ class AcquirerWalletBalanceService
             'efi' => $this->hasEfiBalanceCredentials($credentials),
             'woovi' => trim((string) ($credentials['app_id'] ?? $credentials['authorization'] ?? '')) !== '',
             'mercadopago' => trim((string) ($credentials['access_token'] ?? '')) !== '',
+            'asaas' => trim((string) ($credentials['api_key'] ?? '')) !== '',
             'stripe' => trim((string) ($credentials['secret_key'] ?? '')) !== '',
             'versell' => VersellCredentials::isCashOutReady($credentials),
             'xflow' => trim((string) ($credentials['public_key'] ?? '')) !== ''
@@ -301,6 +303,7 @@ class AcquirerWalletBalanceService
             'efi' => $this->fetchEfi($credentials),
             'woovi' => $this->fetchWoovi($credentials),
             'mercadopago' => $this->fetchMercadoPago($credentials),
+            'asaas' => $this->fetchAsaas($credentials),
             'stripe' => $this->fetchStripe($credentials)['available'],
             'versell' => $this->fetchVersell($credentials),
             'xflow' => $this->fetchXflow($credentials),
@@ -359,6 +362,16 @@ class AcquirerWalletBalanceService
         $balance = app(MercadoPagoBalanceService::class)->fetchBalance($token);
 
         return round((float) ($balance['available_balance'] ?? 0), 2);
+    }
+
+    /**
+     * @param  array<string, mixed>  $credentials
+     */
+    private function fetchAsaas(array $credentials): float
+    {
+        $payload = app(AsaasDriver::class)->fetchAccountBalance($credentials);
+
+        return round((float) $payload['balance'], 2);
     }
 
     /**

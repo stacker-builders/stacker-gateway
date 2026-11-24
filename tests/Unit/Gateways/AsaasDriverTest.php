@@ -185,4 +185,71 @@ class AsaasDriverTest extends TestCase
 
         $this->assertSame('pending', (new AsaasDriver)->getTransactionStatus('pay_1', $this->credentials()));
     }
+
+    public function test_fetch_account_balance_reads_reais(): void
+    {
+        Http::fake([
+            'api-sandbox.asaas.com/v3/finance/balance' => Http::response(['balance' => 5210.96], 200),
+        ]);
+
+        $payload = (new AsaasDriver)->fetchAccountBalance($this->credentials());
+
+        $this->assertSame(5210.96, $payload['balance']);
+    }
+
+    public function test_pix_automatic_authorization_uses_manual_mode_and_links_pending_payment(): void
+    {
+        Http::fake(function ($request) {
+            $url = $request->url();
+            if ($request->method() === 'GET' && str_contains($url, '/customers')) {
+                return Http::response(['data' => []], 200);
+            }
+            if ($request->method() === 'POST' && str_contains($url, '/customers')) {
+                return Http::response(['id' => 'cus_auto'], 200);
+            }
+            if ($request->method() === 'POST' && str_contains($url, '/pix/automatic/authorizations')) {
+                return Http::response([
+                    'id' => 'auth-1',
+                    'customerId' => 'cus_auto',
+                    'status' => 'CREATED',
+                    'payload' => '000201',
+                    'encodedImage' => 'aW1n',
+                ], 200);
+            }
+            if ($request->method() === 'GET' && str_contains($url, '/payments')) {
+                return Http::response([
+                    'data' => [
+                        ['id' => 'pay_first', 'value' => 49.9, 'status' => 'PENDING'],
+                    ],
+                ], 200);
+            }
+
+            return Http::response(['errors' => [['description' => 'unexpected '.$url]]], 500);
+        });
+
+        $result = (new AsaasDriver)->createPixAutomaticAuthorization(
+            $this->credentials(),
+            ['name' => 'Maria', 'document' => '12345678901', 'email' => 'maria@test.com', 'phone' => '11999999999'],
+            '88',
+            49.9,
+            'MONTHLY',
+            now()->addMonth()->toDateString(),
+            'Plano mensal'
+        );
+
+        $this->assertSame('auth-1', $result['authorization_id']);
+        $this->assertSame('pay_first', $result['payment_id']);
+        $this->assertSame('000201', $result['copy_paste']);
+        Http::assertSent(function ($request) {
+            if ($request->method() !== 'POST' || ! str_contains($request->url(), '/pix/automatic/authorizations')) {
+                return false;
+            }
+            $body = $request->data();
+
+            return ($body['paymentCreationMode'] ?? null) === 'MANUAL'
+                && ($body['frequency'] ?? null) === 'MONTHLY'
+                && ($body['immediateQrCode']['originalValue'] ?? null) === 49.9
+                && ($body['retryPolicy'] ?? null) === 'ALLOW_THREE_IN_SEVEN_DAYS';
+        });
+    }
 }

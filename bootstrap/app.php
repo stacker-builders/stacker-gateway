@@ -237,6 +237,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('versell:reconcile-infractions --hours=72')->everyFiveMinutes()->withoutOverlapping(10);
         $schedule->command('versell:reconcile-pix-auto --limit=80')->everyFiveMinutes()->withoutOverlapping(10);
         $schedule->command('linaopenx:reconcile-pix-auto --limit=80')->everyFiveMinutes()->withoutOverlapping(10);
+        $schedule->command('asaas:reconcile-pix-auto --limit=80')->everyFiveMinutes()->withoutOverlapping(10);
         $schedule->command('settlement:release')->everyFiveMinutes();
         $schedule->command('schedule:heartbeat')->everyMinute();
         $schedule->command('push:process-schedule')->everyMinute();
