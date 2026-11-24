@@ -85,29 +85,7 @@ class SubscriptionReminderService
             return false;
         }
 
-        $daysLeft = (int) $today->diffInDays($periodEnd, false);
-        $renewalUrl = rtrim(PublicAppUrl::base(), '/').'/renovar/'.$subscription->renewal_token;
-        $planName = e($plan->name);
-        $productName = e($subscription->product?->name ?? 'seu produto');
-
-        if ($daysLeft > 0) {
-            $subject = 'Lembrete: sua assinatura de '.($subscription->product?->name ?? 'seu produto').' vence em '.$daysLeft.' dia(s)';
-            $headline = '<p>Sua assinatura de <strong>'.$productName.'</strong> (plano '.$planName.') vence em <strong>'.$daysLeft.' dia(s)</strong>.</p>';
-        } elseif ($daysLeft === 0) {
-            $subject = 'Atenção: sua assinatura de '.($subscription->product?->name ?? 'seu produto').' vence hoje';
-            $headline = '<p>Sua assinatura de <strong>'.$productName.'</strong> (plano '.$planName.') <strong>vence hoje</strong>.</p>';
-        } else {
-            $daysOverdue = abs($daysLeft);
-            $subject = 'Sua assinatura de '.($subscription->product?->name ?? 'seu produto').' está vencida';
-            $headline = '<p>Sua assinatura de <strong>'.$productName.'</strong> (plano '.$planName.') está vencida há <strong>'.$daysOverdue.' dia(s)</strong>.</p>';
-        }
-
-        $greeting = '<p>Olá'.($user->name ? ', '.e($user->name) : '').'!</p>';
-        $body = $greeting;
-        $body .= $headline;
-        $body .= '<p>Para renovar e manter seu acesso, use o link abaixo:</p>';
-        $body .= '<p><a href="'.e($renewalUrl).'" style="display:inline-block;padding:12px 24px;background:#0ea5e9;color:#fff;text-decoration:none;border-radius:8px;">Renovar agora</a></p>';
-        $body .= '<p>Ou copie e cole no navegador: '.e($renewalUrl).'</p>';
+        [$subject, $body] = $this->reminderMessage($subscription, $today);
 
         try {
             $this->sendMail((int) $subscription->tenant_id, $user->email, $subject, $body);
@@ -122,6 +100,83 @@ class SubscriptionReminderService
         }
 
         return true;
+    }
+
+    /**
+     * Reenvio pedido pelo infoprodutor. Não usa a trava diária do lembrete automático.
+     */
+    public function sendManualReminder(Subscription $subscription): void
+    {
+        $subscription->loadMissing(['user', 'product', 'subscriptionPlan']);
+        if (! in_array($subscription->status, [Subscription::STATUS_ACTIVE, Subscription::STATUS_PAST_DUE], true)) {
+            throw new \RuntimeException('Esta assinatura não pode receber uma cobrança de renovação.');
+        }
+
+        $plan = $subscription->subscriptionPlan;
+        if (! $plan || $plan->isLifetime()) {
+            throw new \RuntimeException('Este plano não tem cobrança de renovação.');
+        }
+
+        $user = $subscription->user;
+        if (! $user || ! filter_var($user->email, FILTER_VALIDATE_EMAIL)) {
+            throw new \RuntimeException('O assinante não tem um e-mail válido.');
+        }
+
+        $lockKey = 'subscription_reminder_manual:'.$subscription->id;
+        if (! Cache::add($lockKey, 1, now()->addMinute())) {
+            throw new \RuntimeException('Aguarde um minuto para reenviar a cobrança.');
+        }
+
+        if (empty($subscription->renewal_token)) {
+            $subscription->renewal_token = Subscription::generateRenewalToken();
+            $subscription->save();
+        }
+
+        try {
+            [$subject, $body] = $this->reminderMessage($subscription, Carbon::today());
+            $this->sendMail((int) $subscription->tenant_id, $user->email, $subject, $body);
+        } catch (\Throwable $e) {
+            Cache::forget($lockKey);
+            throw $e;
+        }
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    private function reminderMessage(Subscription $subscription, Carbon $today): array
+    {
+        $subscription->loadMissing(['user', 'product', 'subscriptionPlan']);
+        $plan = $subscription->subscriptionPlan;
+        $user = $subscription->user;
+        $periodEnd = $subscription->current_period_end
+            ? Carbon::parse($subscription->current_period_end)->startOfDay()
+            : $today->copy();
+        $daysLeft = (int) $today->copy()->startOfDay()->diffInDays($periodEnd, false);
+        $renewalUrl = rtrim(PublicAppUrl::base(), '/').'/renovar/'.$subscription->renewal_token;
+        $planName = e($plan?->name ?? 'assinatura');
+        $productName = e($subscription->product?->name ?? 'seu produto');
+        $productLabel = $subscription->product?->name ?? 'seu produto';
+
+        if ($daysLeft > 0) {
+            $subject = 'Lembrete: sua assinatura de '.$productLabel.' vence em '.$daysLeft.' dia(s)';
+            $headline = '<p>Sua assinatura de <strong>'.$productName.'</strong> (plano '.$planName.') vence em <strong>'.$daysLeft.' dia(s)</strong>.</p>';
+        } elseif ($daysLeft === 0) {
+            $subject = 'Atenção: sua assinatura de '.$productLabel.' vence hoje';
+            $headline = '<p>Sua assinatura de <strong>'.$productName.'</strong> (plano '.$planName.') <strong>vence hoje</strong>.</p>';
+        } else {
+            $daysOverdue = abs($daysLeft);
+            $subject = 'Sua assinatura de '.$productLabel.' está vencida';
+            $headline = '<p>Sua assinatura de <strong>'.$productName.'</strong> (plano '.$planName.') está vencida há <strong>'.$daysOverdue.' dia(s)</strong>.</p>';
+        }
+
+        $greeting = '<p>Olá'.($user?->name ? ', '.e($user->name) : '').'!</p>';
+        $body = $greeting.$headline;
+        $body .= '<p>Para renovar e manter seu acesso, use o link abaixo:</p>';
+        $body .= '<p><a href="'.e($renewalUrl).'" style="display:inline-block;padding:12px 24px;background:#0ea5e9;color:#fff;text-decoration:none;border-radius:8px;">Renovar agora</a></p>';
+        $body .= '<p>Ou copie e cole no navegador: '.e($renewalUrl).'</p>';
+
+        return [$subject, $body];
     }
 
     public function stageForDaysLeft(int $daysLeft): string
