@@ -33,9 +33,10 @@ class DemoPlatformData
         $ticketMedio = $quantidadeVendas > 0 ? round($vendasTotais / $quantidadeVendas, 2) : 0.0;
 
         $taxasCobradas = round($vendasTotais * 0.034, 2);
+        $taxasSaques = round(640 + ($seed % 120), 2);
         $custoAdqVendas = round($vendasTotais * 0.012, 2);
         $custoAdqSaques = round(850 + ($seed % 200), 2);
-        $faturamentoLiquido = round($taxasCobradas - $custoAdqVendas - $custoAdqSaques, 2);
+        $faturamentoLiquido = round($taxasCobradas + $taxasSaques - $custoAdqVendas - $custoAdqSaques, 2);
 
         $novosInfoprodutores = 8 + ($seed % 9);
         $novosCompradores = 40 + ($seed % 25);
@@ -59,6 +60,7 @@ class DemoPlatformData
                 'withdrawals_pending_count' => 3 + ($seed % 4),
                 'infoprodutores_count' => 128 + ($seed % 15),
                 'faturamento_taxas_cobradas' => $taxasCobradas,
+                'faturamento_taxas_saque' => $taxasSaques,
                 'faturamento_custo_adquirente_vendas' => $custoAdqVendas,
                 'faturamento_custo_adquirente_saques' => $custoAdqSaques,
                 'faturamento_liquido' => $faturamentoLiquido,

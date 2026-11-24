@@ -17,6 +17,7 @@ class PlatformRevenueKpis
     /**
      * @return array{
      *     faturamento_taxas_cobradas: float,
+     *     faturamento_taxas_saque: float,
      *     faturamento_custo_adquirente_vendas: float,
      *     faturamento_custo_adquirente_saques: float,
      *     faturamento_liquido: float
@@ -55,6 +56,7 @@ class PlatformRevenueKpis
             });
 
         $custoSaques = 0.0;
+        $taxasSaques = 0.0;
         if (Schema::hasTable('withdrawals')) {
             $wdQ = Withdrawal::query()->where('status', MerchantWithdrawalService::STATUS_PAID);
             if ($start && $end) {
@@ -64,12 +66,19 @@ class PlatformRevenueKpis
             } elseif ($end) {
                 $wdQ->where('created_at', '<=', $end);
             }
+            $hasFeeAmount = Schema::hasColumn('withdrawals', 'fee_amount');
             $wdSelect = ['id', 'payout_provider', 'net_amount', 'tenant_id'];
+            if ($hasFeeAmount) {
+                $wdSelect[] = 'fee_amount';
+            }
             if (Schema::hasColumn('withdrawals', 'payout_meta')) {
                 $wdSelect[] = 'payout_meta';
             }
-            $wdQ->select($wdSelect)->chunkById(500, function ($rows) use (&$custoSaques) {
+            $wdQ->select($wdSelect)->chunkById(500, function ($rows) use (&$custoSaques, &$taxasSaques, $hasFeeAmount) {
                 foreach ($rows as $w) {
+                    if ($hasFeeAmount) {
+                        $taxasSaques += (float) ($w->fee_amount ?? 0);
+                    }
                     $slug = $w->payout_provider;
                     if ($slug === null || $slug === '') {
                         $slug = PlatformPayoutGateway::activeSlug();
@@ -89,12 +98,14 @@ class PlatformRevenueKpis
         }
 
         $taxasCobradas = round($taxasCobradas, 2);
+        $taxasSaques = round($taxasSaques, 2);
         $custoVendas = round($custoVendas, 2);
         $custoSaques = round($custoSaques, 2);
-        $liquido = round($taxasCobradas - $custoVendas - $custoSaques, 2);
+        $liquido = round($taxasCobradas + $taxasSaques - $custoVendas - $custoSaques, 2);
 
         return [
             'faturamento_taxas_cobradas' => $taxasCobradas,
+            'faturamento_taxas_saque' => $taxasSaques,
             'faturamento_custo_adquirente_vendas' => $custoVendas,
             'faturamento_custo_adquirente_saques' => $custoSaques,
             'faturamento_liquido' => $liquido,
@@ -102,12 +113,13 @@ class PlatformRevenueKpis
     }
 
     /**
-     * @return array{faturamento_taxas_cobradas: float, faturamento_custo_adquirente_vendas: float, faturamento_custo_adquirente_saques: float, faturamento_liquido: float}
+     * @return array{faturamento_taxas_cobradas: float, faturamento_taxas_saque: float, faturamento_custo_adquirente_vendas: float, faturamento_custo_adquirente_saques: float, faturamento_liquido: float}
      */
     private static function zeros(): array
     {
         return [
             'faturamento_taxas_cobradas' => 0.0,
+            'faturamento_taxas_saque' => 0.0,
             'faturamento_custo_adquirente_vendas' => 0.0,
             'faturamento_custo_adquirente_saques' => 0.0,
             'faturamento_liquido' => 0.0,
