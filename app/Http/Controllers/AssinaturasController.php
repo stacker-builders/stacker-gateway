@@ -6,7 +6,9 @@ use App\Events\SubscriptionCancelled;
 use App\Http\Controllers\Concerns\LogsSellerActivity;
 use App\Models\Order;
 use App\Models\Subscription;
+use App\Models\SubscriptionPlan;
 use App\Services\SellerActivityLogService;
+use App\Services\SubscriptionReminderService;
 use App\Services\TeamAccessService;
 use App\Support\SubscriptionChargeSummary;
 use Illuminate\Http\RedirectResponse;
@@ -31,6 +33,10 @@ class AssinaturasController extends Controller
     {
         $tenantId = auth()->user()->tenant_id;
         $statusFilter = $this->normalizeStatusFilter($request->query('status'));
+        $emailFilter = trim((string) $request->query('email', ''));
+        if (mb_strlen($emailFilter) > 190) {
+            $emailFilter = mb_substr($emailFilter, 0, 190);
+        }
 
         $baseQuery = Subscription::with(['user', 'product', 'subscriptionPlan'])
             ->forTenant($tenantId);
@@ -57,6 +63,12 @@ class AssinaturasController extends Controller
         $listQuery = clone $baseQuery;
         if ($statusFilter !== 'all') {
             $listQuery->where('status', $statusFilter);
+        }
+        if ($emailFilter !== '') {
+            $like = '%'.addcslashes($emailFilter, '%_\\').'%';
+            $listQuery->whereHas('user', function ($query) use ($like) {
+                $query->where('email', 'like', $like);
+            });
         }
 
         $page = $listQuery->orderByDesc('subscriptions.current_period_end')
@@ -96,6 +108,7 @@ class AssinaturasController extends Controller
             ],
             'assinaturas' => $assinaturas,
             'status_filter' => $statusFilter,
+            'email_filter' => $emailFilter,
         ]);
     }
 
@@ -110,7 +123,6 @@ class AssinaturasController extends Controller
             ->where('tenant_id', $subscription->tenant_id)
             ->where('user_id', $subscription->user_id)
             ->where('product_id', $subscription->product_id)
-            ->where('subscription_plan_id', $subscription->subscription_plan_id)
             ->where('status', 'completed')
             ->count();
 
@@ -118,7 +130,6 @@ class AssinaturasController extends Controller
             ->where('tenant_id', $subscription->tenant_id)
             ->where('user_id', $subscription->user_id)
             ->where('product_id', $subscription->product_id)
-            ->where('subscription_plan_id', $subscription->subscription_plan_id)
             ->orderByDesc('id')
             ->limit(15)
             ->get()
@@ -170,8 +181,81 @@ class AssinaturasController extends Controller
                 'automatic_charges_count' => $summary['automatic_charges_count'] ?? 0,
             ],
             'recent_orders' => $recentOrders,
+            'available_plans' => SubscriptionPlan::query()
+                ->where('product_id', $subscription->product_id)
+                ->orderBy('position')
+                ->orderBy('id')
+                ->get()
+                ->map(fn (SubscriptionPlan $item) => [
+                    'id' => $item->id,
+                    'name' => $item->name,
+                    'interval' => $item->interval,
+                    'interval_label' => SubscriptionPlan::intervalLabels()[$item->interval] ?? $item->interval,
+                    'price' => (float) $item->price,
+                    'currency' => $item->getCurrencyOrDefault(),
+                ])
+                ->values()
+                ->all(),
             'cancel_grace_days' => (int) config('getfy.subscriptions.cancel_grace_days_after_period_end', 14),
         ]);
+    }
+
+    public function changePlan(Request $request, Subscription $subscription): RedirectResponse
+    {
+        $this->authorizeSubscription($subscription);
+
+        if (! in_array($subscription->status, [Subscription::STATUS_ACTIVE, Subscription::STATUS_PAST_DUE], true)) {
+            return redirect()->back()->with('error', 'Só é possível trocar o plano de uma assinatura ativa ou em atraso.');
+        }
+
+        $validated = $request->validate([
+            'subscription_plan_id' => ['required', 'integer'],
+        ]);
+        $plan = SubscriptionPlan::query()
+            ->where('product_id', $subscription->product_id)
+            ->whereKey($validated['subscription_plan_id'])
+            ->first();
+        if ($plan === null) {
+            return redirect()->back()->with('error', 'Escolha um plano deste produto.');
+        }
+        if ((int) $plan->id === (int) $subscription->subscription_plan_id) {
+            return redirect()->back()->with('error', 'A assinatura já está neste plano.');
+        }
+
+        $previousPlanId = $subscription->subscription_plan_id;
+        $subscription->update(['subscription_plan_id' => $plan->id]);
+
+        $this->logSellerActivity(SellerActivityLogService::SUBSCRIPTION_PLAN_CHANGED, $subscription, [
+            'product_id' => $subscription->product_id,
+            'from_plan_id' => $previousPlanId,
+            'to_plan_id' => $plan->id,
+            'plan_name' => $plan->name,
+        ]);
+
+        $message = 'Plano alterado para '.$plan->name.'. Nenhuma cobrança foi gerada.';
+        if (trim((string) $subscription->gateway_subscription_id) !== '') {
+            $message .= ' O débito automático já autorizado no banco continua no valor antigo até uma nova autorização.';
+        }
+
+        return redirect()->route('assinaturas.show', $subscription)->with('success', $message);
+    }
+
+    public function resendReminder(Request $request, Subscription $subscription): RedirectResponse
+    {
+        $this->authorizeSubscription($subscription);
+
+        try {
+            app(SubscriptionReminderService::class)->sendManualReminder($subscription);
+        } catch (\Throwable $e) {
+            return redirect()->back()->with('error', $e->getMessage() ?: 'Não foi possível reenviar a cobrança.');
+        }
+
+        $this->logSellerActivity(SellerActivityLogService::SUBSCRIPTION_REMINDER_SENT, $subscription, [
+            'product_id' => $subscription->product_id,
+            'email' => $subscription->user?->email,
+        ]);
+
+        return redirect()->route('assinaturas.show', $subscription)->with('success', 'E-mail de renovação enviado para o assinante.');
     }
 
     public function cancel(Request $request, Subscription $subscription): RedirectResponse

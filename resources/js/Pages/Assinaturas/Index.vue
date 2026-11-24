@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { router } from '@inertiajs/vue3';
 import LayoutInfoprodutor from '@/Layouts/LayoutInfoprodutor.vue';
 import VendasTabs from '@/components/vendas/VendasTabs.vue';
@@ -14,7 +14,10 @@ const props = defineProps({
     stats: { type: Object, default: () => ({ ativas: 0, clientes: 0, mrr: 0 }) },
     assinaturas: { type: [Array, Object], default: () => [] },
     status_filter: { type: String, default: 'active' },
+    email_filter: { type: String, default: '' },
 });
+
+const emailDraft = ref(props.email_filter || '');
 
 const assinaturasList = computed(() => props.assinaturas?.data ?? (Array.isArray(props.assinaturas) ? props.assinaturas : []));
 
@@ -25,8 +28,21 @@ const statusTabs = computed(() => [
     { value: 'all', label: t('subscriptions.filter_all', 'Todas') },
 ]);
 
+function listQuery(extra = {}) {
+    const email = emailDraft.value.trim();
+    return {
+        status: props.status_filter,
+        ...(email ? { email } : {}),
+        ...extra,
+    };
+}
+
 function filterStatus(status) {
-    router.get('/vendas/assinaturas', { status }, { preserveState: true, replace: true });
+    router.get('/vendas/assinaturas', listQuery({ status }), { preserveState: true, replace: true });
+}
+
+function searchByEmail() {
+    router.get('/vendas/assinaturas', listQuery(), { preserveState: true, replace: true });
 }
 
 function openSubscription(id) {
@@ -119,6 +135,32 @@ function statusBadgeLabel(status) {
                     }}
                 </p>
             </div>
+
+            <form class="flex flex-wrap items-center gap-2 border-b border-zinc-200 px-4 py-3 dark:border-zinc-700" @submit.prevent="searchByEmail">
+                <label class="sr-only" for="assinaturas-email">E-mail do assinante</label>
+                <input
+                    id="assinaturas-email"
+                    v-model="emailDraft"
+                    type="search"
+                    autocomplete="off"
+                    placeholder="Pesquisar pelo e-mail do assinante"
+                    class="min-w-[16rem] flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[var(--color-primary)] focus:outline-none dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
+                />
+                <button
+                    type="submit"
+                    class="rounded-lg bg-[var(--color-primary)] px-3 py-2 text-sm font-medium text-white"
+                >
+                    Buscar
+                </button>
+                <button
+                    v-if="email_filter"
+                    type="button"
+                    class="rounded-lg px-3 py-2 text-sm font-medium text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                    @click="emailDraft = ''; searchByEmail()"
+                >
+                    Limpar
+                </button>
+            </form>
 
             <div class="flex flex-wrap gap-2 border-b border-zinc-200 px-4 py-3 dark:border-zinc-700">
                 <button
@@ -290,7 +332,9 @@ function statusBadgeLabel(status) {
             </nav>
             <div v-else-if="assinaturasList.length === 0" class="p-8 text-center">
                 <Repeat class="mx-auto h-14 w-14 text-zinc-300 dark:text-zinc-600" />
-                <p class="mt-3 font-medium text-zinc-600 dark:text-zinc-400">{{ t('subscriptions.empty', 'Nenhuma assinatura ainda') }}</p>
+                <p class="mt-3 font-medium text-zinc-600 dark:text-zinc-400">
+                    {{ email_filter ? 'Nenhuma assinatura com esse e-mail' : t('subscriptions.empty', 'Nenhuma assinatura ainda') }}
+                </p>
                 <p class="mt-1 text-sm text-zinc-500 dark:text-zinc-500">
                     {{ t('subscriptions.empty_hint', 'Os produtos configurados como "Assinatura" com planos aparecerão aqui quando houver assinantes ativos.') }}
                 </p>

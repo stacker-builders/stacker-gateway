@@ -1171,6 +1171,12 @@ Route::middleware(['auth', 'admin.tenant', 'seller.panel', 'stacker.license', 'r
         Route::post('/vendas/assinaturas/{subscription}/cancel', [\App\Http\Controllers\AssinaturasController::class, 'cancel'])
             ->name('assinaturas.cancel')
             ->whereNumber('subscription');
+        Route::post('/vendas/assinaturas/{subscription}/plano', [\App\Http\Controllers\AssinaturasController::class, 'changePlan'])
+            ->name('assinaturas.change-plan')
+            ->whereNumber('subscription');
+        Route::post('/vendas/assinaturas/{subscription}/reenviar-cobranca', [\App\Http\Controllers\AssinaturasController::class, 'resendReminder'])
+            ->name('assinaturas.resend-reminder')
+            ->whereNumber('subscription');
     });
     Route::get('/relatorios', [\App\Http\Controllers\RelatoriosController::class, 'index'])
         ->middleware('team.permission:relatorios.view')

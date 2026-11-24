@@ -263,6 +263,10 @@ class SellerActivityLogService
 
     public const SUBSCRIPTION_CANCELLED = 'subscription.cancelled';
 
+    public const SUBSCRIPTION_PLAN_CHANGED = 'subscription.plan_changed';
+
+    public const SUBSCRIPTION_REMINDER_SENT = 'subscription.reminder_sent';
+
     /**
      * @var array<string, array{group: string, label: string}>
      */
@@ -380,6 +384,8 @@ class SellerActivityLogService
         self::DISPUTE_DEFENSE_SUBMITTED => ['group' => self::GROUP_DISPUTE, 'label' => 'Enviou defesa de disputa MED'],
         self::DISPUTE_DOSSIER_GENERATED => ['group' => self::GROUP_DISPUTE, 'label' => 'Gerou dossiê de disputa MED'],
         self::SUBSCRIPTION_CANCELLED => ['group' => self::GROUP_SUBSCRIPTION, 'label' => 'Cancelou assinatura'],
+        self::SUBSCRIPTION_PLAN_CHANGED => ['group' => self::GROUP_SUBSCRIPTION, 'label' => 'Trocou o plano da assinatura'],
+        self::SUBSCRIPTION_REMINDER_SENT => ['group' => self::GROUP_SUBSCRIPTION, 'label' => 'Reenviou a cobrança de renovação'],
     ];
 
     /**
