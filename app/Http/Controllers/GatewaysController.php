@@ -150,7 +150,7 @@ class GatewaysController extends Controller
             $webhookHelp = 'Cadastre esta URL HTTPS no Stripe Dashboard (Developers → Webhooks), no mesmo modo da Secret Key (teste ou live). Evento: payment_intent.succeeded. Depois cole o signing secret (whsec_…) no campo Webhook Secret abaixo.';
         } elseif ($slug === 'asaas') {
             $webhookUrl = GatewayWebhookUrl::forGateway('asaas');
-            $webhookHelp = 'Cadastre esta URL HTTPS no painel Asaas (Integrações → Webhooks), método POST. Eventos: PAYMENT_RECEIVED, PAYMENT_CONFIRMED, PAYMENT_REFUNDED, PAYMENT_DELETED e PAYMENT_CHARGEBACK_REQUESTED. No cadastro do webhook, defina um token de autenticação e cole o mesmo valor no campo Token de autenticação do webhook abaixo. A Asaas envia esse token no header asaas-access-token.';
+            $webhookHelp = 'Cadastre esta URL HTTPS no painel Asaas (Integrações → Webhooks), método POST. Eventos de cobrança: PAYMENT_CREATED, PAYMENT_RECEIVED, PAYMENT_CONFIRMED, PAYMENT_REFUNDED, PAYMENT_DELETED e PAYMENT_CHARGEBACK_REQUESTED. PIX automático: PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED, REFUSED, CANCELLED e EXPIRED. No cadastro do webhook, defina um token de autenticação e cole o mesmo valor no campo Token de autenticação do webhook abaixo. A Asaas envia esse token no header asaas-access-token.';
         } elseif ($slug === 'paypal') {
             $webhookUrl = GatewayWebhookUrl::forGateway('paypal');
             $webhookHelp = 'Cadastre esta URL HTTPS no PayPal Developer Dashboard (Webhooks) do mesmo app REST. Eventos: PAYMENT.CAPTURE.COMPLETED, PAYMENT.CAPTURE.DENIED, PAYMENT.CAPTURE.REFUNDED. Depois cole o Webhook ID no campo abaixo. Não altera PIX/cartão das outras adquirentes.';

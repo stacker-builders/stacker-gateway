@@ -100,6 +100,67 @@ class AsaasWebhookChargePaidTest extends TestCase
         $this->assertSame('pending', $order->fresh()->status);
     }
 
+    public function test_pix_auto_authorization_activated_marks_order(): void
+    {
+        $this->seedAsaas();
+        $order = $this->createPendingOrder('');
+        $order->update([
+            'payment_method' => 'pix_auto',
+            'gateway_id' => null,
+            'metadata' => ['asaas_pix_auto_authorization_id' => 'auth-activated'],
+        ]);
+
+        $this->withHeaders(['asaas-access-token' => 'asaas-auth-token-32-chars-minimum'])
+            ->postJson('/webhooks/gateways/asaas', [
+                'event' => 'PIX_AUTOMATIC_RECURRING_AUTHORIZATION_ACTIVATED',
+                'authorization' => [
+                    'id' => 'auth-activated',
+                    'status' => 'ACTIVE',
+                ],
+            ])
+            ->assertOk();
+
+        $this->assertSame('ACTIVE', $order->fresh()->metadata['asaas_pix_auto_status']);
+        $this->assertSame('pending', $order->fresh()->status);
+    }
+
+    public function test_pix_auto_payment_received_links_order_by_customer(): void
+    {
+        $this->seedAsaas();
+        Http::fake([
+            'api-sandbox.asaas.com/v3/lean/payments/pay_linked' => Http::response([
+                'id' => 'pay_linked',
+                'status' => 'RECEIVED',
+            ], 200),
+        ]);
+        $order = $this->createPendingOrder('');
+        $order->update([
+            'payment_method' => 'pix_auto',
+            'gateway_id' => null,
+            'metadata' => [
+                'asaas_pix_auto_authorization_id' => 'auth-pay',
+                'asaas_customer_id' => 'cus_auto',
+                'asaas_pix_auto_status' => 'ACTIVE',
+            ],
+        ]);
+
+        $this->withHeaders(['asaas-access-token' => 'asaas-auth-token-32-chars-minimum'])
+            ->postJson('/webhooks/gateways/asaas', [
+                'event' => 'PAYMENT_RECEIVED',
+                'payment' => [
+                    'id' => 'pay_linked',
+                    'customer' => 'cus_auto',
+                    'status' => 'RECEIVED',
+                    'pixAutomaticAuthorizationId' => 'auth-pay',
+                ],
+            ])
+            ->assertOk();
+
+        $fresh = $order->fresh();
+        $this->assertSame('pay_linked', $fresh->gateway_id);
+        $this->assertSame('completed', $fresh->status);
+    }
+
     public function test_webhook_cancels_pending_order_on_payment_deleted(): void
     {
         $this->seedAsaas();

@@ -67,7 +67,7 @@ class PlatformAcquirerWalletBalanceTest extends TestCase
 
         $rows = app(AcquirerWalletBalanceService::class)->list();
         $this->assertSame(
-            ['cajupay', 'efi', 'woovi', 'mercadopago', 'stripe', 'versell', 'xflow', 'okto', 'xpag'],
+            ['cajupay', 'efi', 'woovi', 'mercadopago', 'asaas', 'stripe', 'versell', 'xflow', 'okto', 'xpag'],
             collect($rows)->pluck('slug')->all()
         );
         $this->assertTrue(collect($rows)->every(fn (array $row) => $row['status'] === 'inactive'));
@@ -303,6 +303,30 @@ class PlatformAcquirerWalletBalanceTest extends TestCase
 
         $this->assertSame('ok', $bySlug['woovi']['status']);
         $this->assertSame(1294.3, $bySlug['woovi']['available']);
+    }
+
+    public function test_asaas_reads_finance_balance(): void
+    {
+        $this->seedCredential('asaas', [
+            'api_key' => '$aact_hmlg_test',
+            'sandbox' => true,
+        ]);
+
+        Http::fake([
+            'api-sandbox.asaas.com/v3/finance/balance' => Http::response(['balance' => 5210.96], 200),
+        ]);
+
+        $bySlug = collect(app(AcquirerWalletBalanceService::class)->list())->keyBy('slug');
+
+        $this->assertSame('ok', $bySlug['asaas']['status']);
+        $this->assertSame(5210.96, $bySlug['asaas']['available']);
+        $this->assertSame('BRL', $bySlug['asaas']['currency']);
+
+        Http::assertSent(function ($request) {
+            return $request->method() === 'GET'
+                && str_contains($request->url(), '/v3/finance/balance')
+                && ($request->header('access_token')[0] ?? null) === '$aact_hmlg_test';
+        });
     }
 
     public function test_xflow_uses_balance_endpoint_in_cents(): void

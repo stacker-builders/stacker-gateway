@@ -45,6 +45,7 @@ use App\Services\Shipping\ShippingQuoteService;
 use App\Services\StorageService;
 use App\Services\Checkout\CheckoutAbuseGuard;
 use App\Services\CouponCheckoutService;
+use App\Services\Asaas\AsaasPixAutoService;
 use App\Services\LinaOpenx\LinaOpenxCheckoutService;
 use App\Services\LinaOpenx\LinaOpenxPixAutoService;
 use Illuminate\Support\Facades\Schema;
@@ -1635,6 +1636,102 @@ class CheckoutController extends Controller
                     }
 
                     return back()->with('error', $e->getMessage() ?: 'Não foi possível gerar o PIX automático. Tente novamente.');
+                }
+            }
+
+            if ($gatewaySlug === 'asaas') {
+                $credential = GatewayCredential::resolveForPayment($tenantId, 'asaas');
+                $credentials = $credential?->getDecryptedCredentials() ?? [];
+                if ($credential === null || trim((string) ($credentials['api_key'] ?? '')) === '') {
+                    $message = 'Asaas não configurada para PIX automático.';
+                    if ($request->expectsJson()) {
+                        return response()->json(['message' => $message], 422);
+                    }
+
+                    return back()->withErrors(['payment_method' => $message]);
+                }
+                if ($plan === null || $plan->isLifetime()) {
+                    $message = 'PIX automático da Asaas exige um plano com recorrência.';
+                    if ($request->expectsJson()) {
+                        return response()->json(['message' => $message], 422);
+                    }
+
+                    return back()->withErrors(['payment_method' => $message]);
+                }
+
+                $order = $createOrderAndItems(array_merge($orderPayload, [
+                    'status' => 'pending',
+                    'gateway' => null,
+                    'gateway_id' => null,
+                    'payment_method' => 'pix_auto',
+                    'metadata' => array_merge($orderMetadata, ['checkout_payment_method' => 'pix_auto']),
+                ]));
+                $order->load(['orderItems', 'product']);
+                event(new OrderPending($order));
+
+                try {
+                    $consumer = CheckoutPaymentConsumer::build($validated, $order->id);
+                    $created = app(AsaasPixAutoService::class)->createCheckoutAuthorization(
+                        $credentials,
+                        $consumer,
+                        $order,
+                        $plan,
+                        (float) $totalAmount,
+                        $periodEnd
+                    );
+                    $order->update([
+                        'gateway' => 'asaas',
+                        'gateway_id' => $created['payment_id'],
+                        'metadata' => array_merge($order->metadata ?? [], [
+                            'asaas_pix_auto_authorization_id' => $created['authorization_id'],
+                            'asaas_pix_auto_status' => $created['status'],
+                            'asaas_customer_id' => $created['customer_id'],
+                        ]),
+                    ]);
+                    $updateCheckoutSession($order);
+                    event(new PixGenerated($order, [
+                        'qrcode' => $created['qrcode'],
+                        'copy_paste' => $created['copy_paste'] ?? '',
+                        'transaction_id' => $created['payment_id'] ?? $created['authorization_id'],
+                    ]));
+
+                    if ($request->expectsJson()) {
+                        return $this->idempotencyReturn($idempotencyKey, response()->json([
+                            'success' => true,
+                            'payment_method' => 'pix_auto',
+                            'order_id' => $order->id,
+                            'qrcode' => $created['qrcode'],
+                            'copy_paste' => $created['copy_paste'] ?? '',
+                            'transaction_id' => $created['payment_id'] ?? $created['authorization_id'],
+                        ]));
+                    }
+                    $redirectUrl = $product->checkout_config['redirect_after_purchase'] ?? null;
+                    $redirectUrl = ! empty($redirectUrl) && is_string($redirectUrl) ? $redirectUrl : null;
+                    $pixToken = Str::random(32);
+                    session()->put('pix_display.'.$pixToken, [
+                        'order_id' => $order->id,
+                        'checkout_session_token' => $validated['checkout_session_token'] ?? null,
+                        'qrcode' => $created['qrcode'],
+                        'copy_paste' => $created['copy_paste'] ?? '',
+                        'amount' => $totalAmount,
+                        'product_name' => $product->name,
+                        'checkout_slug' => $checkoutSlug,
+                        'redirect_after_purchase' => $redirectUrl,
+                        'customer_name' => $validated['name'] ?? null,
+                        'customer_email' => $validated['email'] ?? null,
+                        'customer_phone' => $validated['phone'] ?? null,
+                        'created_at' => time(),
+                    ]);
+
+                    return $this->idempotencyReturn($idempotencyKey, redirect()->route('checkout.pix', ['token' => $pixToken]));
+                } catch (\Throwable $e) {
+                    $this->rollbackFailedOrder($order, $e);
+                    $message = $e->getMessage() ?: 'Não foi possível gerar o PIX automático. Tente novamente.';
+                    if ($request->expectsJson()) {
+                        return response()->json(['success' => false, 'message' => $message], 422);
+                    }
+
+                    return back()->with('error', $message);
                 }
             }
 

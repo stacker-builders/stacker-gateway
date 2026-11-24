@@ -57,6 +57,7 @@ export const gatewayMethodComponents = {
         pix: DefaultMethodCard,
         card: DefaultMethodCard,
         boleto: DefaultMethodCard,
+        pix_auto: DefaultMethodCard,
     },
     pagarme: {
         pix: DefaultMethodCard,

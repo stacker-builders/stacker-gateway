@@ -17,6 +17,7 @@ use App\Support\CajuPayCheckoutMetadata;
 use App\Support\GatewayPaymentCredentials;
 use App\Support\MercadoPagoCredentialCandidates;
 use App\Services\EfiPixRecorrenteService;
+use App\Services\Asaas\AsaasPixAutoRenewalService;
 use App\Services\Versell\VersellPixAutoRenewalService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -391,6 +392,8 @@ class ProcessPaymentWebhook implements ShouldQueue
                 $createExtra['gateway_subscription_id'] = $metadata['pushinpay_subscription_id'];
             } elseif (isset($metadata['linaopenx_pix_auto_consent_id']) && $this->gatewaySlug === 'linaopenx') {
                 $createExtra['gateway_subscription_id'] = $metadata['linaopenx_pix_auto_consent_id'];
+            } elseif (isset($metadata['asaas_pix_auto_authorization_id']) && $this->gatewaySlug === 'asaas' && ($metadata['asaas_pix_auto_status'] ?? null) !== 'REFUSED') {
+                $createExtra['gateway_subscription_id'] = $metadata['asaas_pix_auto_authorization_id'];
             }
 
             $sync = app(\App\Services\SubscriptionRenewalService::class)->syncFromPaidOrder($order, $createExtra);
@@ -400,6 +403,8 @@ class ProcessPaymentWebhook implements ShouldQueue
                     $this->scheduleVersellPixAutoNextCobr($order, $subscription);
                 } elseif (! empty($sync['renewed']) && $this->gatewaySlug === 'linaopenx' && $order->payment_method === 'pix_auto') {
                     $this->scheduleLinaOpenxPixAutoNextPayment($order, $subscription);
+                } elseif ((! empty($sync['renewed']) || ! empty($sync['created'])) && $this->gatewaySlug === 'asaas' && $order->payment_method === 'pix_auto' && ($metadata['asaas_pix_auto_status'] ?? null) === 'ACTIVE') {
+                    $this->scheduleAsaasPixAutoNextPayment($order, $subscription);
                 } elseif (! empty($sync['created']) && ! empty($createExtra['gateway_subscription_id'])) {
                     $plan = $order->subscriptionPlan ?? $subscription->subscriptionPlan;
                     if ($this->gatewaySlug === 'efi' && $plan) {
@@ -652,6 +657,19 @@ class ProcessPaymentWebhook implements ShouldQueue
             Log::warning('ProcessPaymentWebhook: falha ao criar cobr PIX automático Versell', [
                 'order_id' => $order->id,
                 'idRec' => $subscription->gateway_subscription_id,
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function scheduleAsaasPixAutoNextPayment(Order $order, Subscription $subscription): void
+    {
+        try {
+            app(AsaasPixAutoRenewalService::class)->ensureNextPayment($subscription, $order);
+        } catch (\Throwable $e) {
+            Log::warning('ProcessPaymentWebhook: falha ao agendar PIX automático Asaas', [
+                'order_id' => $order->id,
+                'authorization_id' => $subscription->gateway_subscription_id,
                 'message' => $e->getMessage(),
             ]);
         }
