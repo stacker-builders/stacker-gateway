@@ -12,6 +12,7 @@ import {
     resetPagarmeTokenizeScriptState,
 } from '@/composables/usePagarmeTokenizecard.js';
 import { requestCieloPaymentToken, formatCieloSopHolderName } from '@/composables/useCieloSilentOrderPost.js';
+import { encryptPagBankCard } from '@/composables/usePagBankEncryptCard.js';
 
 defineOptions({ layout: null });
 
@@ -40,6 +41,8 @@ const props = defineProps({
     card_pagarme_public_key: { type: String, default: '' },
     /** Base da API v5 para tokenização (igual config/services.pagarme.base_url). */
     card_pagarme_api_base_url: { type: String, default: 'https://api.pagar.me/core/v5' },
+    card_pagbank_public_key: { type: String, default: '' },
+    billing_address_required: { type: Boolean, default: false },
     turnstile: { type: Object, default: () => ({ enabled: false, site_key: '', mode: 'pix_boleto' }) },
 });
 
@@ -158,7 +161,51 @@ const pixAutoForm = useForm({
 const boletoForm = useForm({
     session_token: props.session_token,
     payment_method: 'boleto',
+    address_zipcode: '',
+    address_street: '',
+    address_number: '',
+    address_neighborhood: '',
+    address_city: '',
+    address_state: '',
 });
+const billing = ref({
+    address_zipcode: '',
+    address_street: '',
+    address_number: '',
+    address_neighborhood: '',
+    address_city: '',
+    address_state: '',
+});
+function billingFields() {
+    return {
+        address_zipcode: (billing.value.address_zipcode || '').replace(/\D/g, '').slice(0, 8),
+        address_street: (billing.value.address_street || '').trim(),
+        address_number: (billing.value.address_number || '').trim(),
+        address_neighborhood: (billing.value.address_neighborhood || '').trim(),
+        address_city: (billing.value.address_city || '').trim(),
+        address_state: (billing.value.address_state || '').trim().slice(0, 2).toUpperCase(),
+    };
+}
+function billingReady() {
+    const fields = billingFields();
+    return fields.address_zipcode.length >= 8
+        && fields.address_street.length >= 2
+        && fields.address_number.length >= 1
+        && fields.address_neighborhood.length >= 2
+        && fields.address_city.length >= 2
+        && fields.address_state.length === 2;
+}
+function submitBoleto() {
+    error.value = null;
+    if (props.billing_address_required && !billingReady()) {
+        error.value = 'Preencha o endereço de cobrança completo.';
+        return;
+    }
+    Object.assign(boletoForm, billingFields());
+    if (withCheckoutSecurity(boletoForm)) {
+        boletoForm.post('/api-checkout/pay', { preserveScroll: true, onError });
+    }
+}
 
 const error = ref(null);
 function onError(errors) {
@@ -168,8 +215,9 @@ function onError(errors) {
 const canPayWithStripe = computed(() => props.card_gateway_slug === 'stripe' && (props.card_stripe_publishable_key || '').trim() !== '');
 const canPayWithEfi = computed(() => props.card_gateway_slug === 'efi' && (props.card_efi_payee_code || '').trim() !== '');
 const canPayWithPagarme = computed(() => props.card_gateway_slug === 'pagarme' && (props.card_pagarme_public_key || '').trim() !== '');
+const canPayWithPagbank = computed(() => props.card_gateway_slug === 'pagbank' && (props.card_pagbank_public_key || '').trim() !== '');
 const canPayWithCielo = computed(() => props.card_gateway_slug === 'cielo' && props.product_id != null && String(props.product_id) !== '');
-const canPayWithCard = computed(() => props.available_methods?.includes('card') && (canPayWithStripe.value || canPayWithEfi.value || canPayWithPagarme.value || canPayWithCielo.value));
+const canPayWithCard = computed(() => props.available_methods?.includes('card') && (canPayWithStripe.value || canPayWithEfi.value || canPayWithPagarme.value || canPayWithPagbank.value || canPayWithCielo.value));
 const cieloExpirationDate = computed(() => {
     const digits = (efiCardExp.value || '').replace(/\D/g, '');
     const month = digits.slice(0, 2);
@@ -407,6 +455,58 @@ async function submitCard(ev) {
                 payment_method: 'card',
                 payment_token: JSON.stringify({ card_token: tokenId, installments: 1 }),
                 card_mask: last4 ? `**** ${last4}` : '',
+            }, {
+                preserveScroll: true,
+                onError: (err) => {
+                    onError(err);
+                    cardSubmitting.value = false;
+                },
+                onFinish: () => { cardSubmitting.value = false; },
+            });
+            return;
+        }
+
+        if (canPayWithPagbank.value) {
+            const numberDigits = (efiCardNumber.value || '').replace(/\D/g, '');
+            const expDigits = (efiCardExp.value || '').replace(/\D/g, '');
+            const month = expDigits.slice(0, 2);
+            let year = expDigits.slice(2);
+            if (year.length === 2) {
+                year = `20${year}`;
+            }
+            const cvv = (efiCardCvv.value || '').replace(/\D/g, '').slice(0, 4);
+            if (numberDigits.length < 13 || numberDigits.length > 19 || month.length !== 2 || year.length !== 4 || cvv.length < 3) {
+                error.value = 'Preencha todos os dados do cartão corretamente.';
+                cardSubmitting.value = false;
+                return;
+            }
+            if (props.billing_address_required && !billingReady()) {
+                error.value = 'Preencha o endereço de cobrança completo.';
+                cardSubmitting.value = false;
+                return;
+            }
+            let encrypted;
+            try {
+                encrypted = await encryptPagBankCard({
+                    publicKey: props.card_pagbank_public_key,
+                    holder: name,
+                    number: numberDigits,
+                    expMonth: month,
+                    expYear: year,
+                    securityCode: cvv,
+                });
+            } catch (encryptError) {
+                error.value = encryptError?.message || 'Não foi possível criptografar o cartão.';
+                cardSubmitting.value = false;
+                return;
+            }
+            const last4 = numberDigits.slice(-4);
+            router.post('/api-checkout/pay', {
+                session_token: props.session_token,
+                payment_method: 'card',
+                payment_token: JSON.stringify({ encrypted_card: encrypted, installments: 1 }),
+                card_mask: last4 ? `**** ${last4}` : '',
+                ...(props.billing_address_required ? billingFields() : {}),
             }, {
                 preserveScroll: true,
                 onError: (err) => {
@@ -743,13 +843,15 @@ async function submitCard(ev) {
                                         v-model="turnstileToken"
                                     />
                                 </div>
-                                <form
-                                    @submit.prevent="
-                                        if (withCheckoutSecurity(boletoForm)) {
-                                            boletoForm.post('/api-checkout/pay', { preserveScroll: true, onError });
-                                        }
-                                    "
-                                >
+                                <form @submit.prevent="submitBoleto">
+                                    <div v-if="billing_address_required" class="mb-4 grid gap-3 sm:grid-cols-2">
+                                        <input v-model="billing.address_zipcode" type="text" inputmode="numeric" placeholder="CEP" class="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm" />
+                                        <input v-model="billing.address_state" type="text" maxlength="2" placeholder="UF" class="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm uppercase" />
+                                        <input v-model="billing.address_city" type="text" placeholder="Cidade" class="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm sm:col-span-2" />
+                                        <input v-model="billing.address_neighborhood" type="text" placeholder="Bairro" class="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm" />
+                                        <input v-model="billing.address_number" type="text" placeholder="Número" class="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm" />
+                                        <input v-model="billing.address_street" type="text" placeholder="Rua" class="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm sm:col-span-2" />
+                                    </div>
                                     <div class="flex gap-2">
                                         <button
                                             type="button"
@@ -868,7 +970,7 @@ async function submitCard(ev) {
                                         </div>
                                     </div>
                                 </template>
-                                <template v-else-if="canPayWithEfi || canPayWithCielo">
+                                <template v-else-if="canPayWithEfi || canPayWithCielo || canPayWithPagbank">
                                     <template v-if="canPayWithCielo">
                                         <input type="hidden" class="bp-sop-cardholdername" :value="formatCieloSopHolderName(cardHolderName)" />
                                         <input type="hidden" class="bp-sop-cardnumber" :value="(efiCardNumber || '').replace(/\D/g, '')" />
@@ -876,6 +978,14 @@ async function submitCard(ev) {
                                         <input type="hidden" class="bp-sop-cardcvv bp-sop-cardcvvc" :value="(efiCardCvv || '').replace(/\D/g, '')" />
                                         <input type="hidden" class="bp-sop-cardtype" value="creditCard" />
                                     </template>
+                                    <div v-if="canPayWithPagbank" class="grid gap-3 sm:grid-cols-2 sm:col-span-2">
+                                        <input v-model="billing.address_zipcode" type="text" inputmode="numeric" placeholder="CEP" class="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm" />
+                                        <input v-model="billing.address_state" type="text" maxlength="2" placeholder="UF" class="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm uppercase" />
+                                        <input v-model="billing.address_city" type="text" placeholder="Cidade" class="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm" />
+                                        <input v-model="billing.address_neighborhood" type="text" placeholder="Bairro" class="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm" />
+                                        <input v-model="billing.address_street" type="text" placeholder="Rua" class="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm" />
+                                        <input v-model="billing.address_number" type="text" placeholder="Número" class="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm" />
+                                    </div>
                                     <div>
                                         <label for="card-number-efi" class="mb-2 block text-sm font-medium text-zinc-700">Número do cartão</label>
                                         <input

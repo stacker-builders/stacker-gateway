@@ -8,7 +8,7 @@ const props = defineProps({
 /** Cobrança PIX + saque PIX (plataforma). */
 const SLUGS_PIX_IN_OUT = new Set(['cajupay', 'spacepag', 'woovi', 'onlyup', 'versell', 'xflow', 'okto', 'xpag']);
 /** Só cobrança PIX (sem payout automático destes adquirentes nesta integração). */
-const SLUGS_PIX_IN_ONLY = new Set(['efi', 'mercadopago', 'pagarme']);
+const SLUGS_PIX_IN_ONLY = new Set(['efi', 'mercadopago', 'pagarme', 'pagbank']);
 
 const s = computed(() => (props.slug || '').toLowerCase());
 

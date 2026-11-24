@@ -11,6 +11,7 @@ import {
     resetPagarmeTokenizeScriptState,
 } from '@/composables/usePagarmeTokenizecard.js';
 import { requestCieloPaymentToken, formatCieloSopHolderName } from '@/composables/useCieloSilentOrderPost.js';
+import { encryptPagBankCard } from '@/composables/usePagBankEncryptCard.js';
 
 const RENEWAL_PAGARME_TOKENIZE_FORM_ID = 'renewal-pagarme-tokenize-form';
 
@@ -35,6 +36,7 @@ const props = defineProps({
     card_mercadopago_sandbox: { type: Boolean, default: false },
     card_pagarme_public_key: { type: String, default: '' },
     card_pagarme_api_base_url: { type: String, default: 'https://api.pagar.me/core/v5' },
+    card_pagbank_public_key: { type: String, default: '' },
     card_installments_enabled: { type: Boolean, default: false },
     card_max_installments: { type: Number, default: 1 },
     customer_cpf: { type: String, default: '' },
@@ -70,9 +72,10 @@ const amountFormatted = computed(() => {
 const canPayWithStripe = computed(() => props.card_gateway_slug === 'stripe' && (props.card_stripe_publishable_key || '').trim() !== '');
 const canPayWithEfi = computed(() => props.card_gateway_slug === 'efi' && (props.card_payee_code || '').trim() !== '');
 const canPayWithPagarme = computed(() => props.card_gateway_slug === 'pagarme' && (props.card_pagarme_public_key || '').trim() !== '');
+const canPayWithPagbank = computed(() => props.card_gateway_slug === 'pagbank' && (props.card_pagbank_public_key || '').trim() !== '');
 const canPayWithMercadopago = computed(() => props.card_gateway_slug === 'mercadopago' && (props.card_mercadopago_public_key || '').trim() !== '');
 const canPayWithCielo = computed(() => props.card_gateway_slug === 'cielo' && props.product?.id != null && String(props.product.id) !== '');
-const canPayWithCard = computed(() => methods.value.some((m) => m.id === 'card') && (canPayWithStripe.value || canPayWithEfi.value || canPayWithPagarme.value || canPayWithMercadopago.value || canPayWithCielo.value));
+const canPayWithCard = computed(() => methods.value.some((m) => m.id === 'card') && (canPayWithStripe.value || canPayWithEfi.value || canPayWithPagarme.value || canPayWithPagbank.value || canPayWithMercadopago.value || canPayWithCielo.value));
 const cieloExpirationDate = computed(() => {
     const digits = (efiCardExp.value || '').replace(/\D/g, '');
     const month = digits.slice(0, 2);
@@ -269,6 +272,29 @@ async function tokenizeAndSubmitCard() {
             const last4 = numberDigits.slice(-4);
             form.payment_token = JSON.stringify({ card_token: tokenId, installments: 1 });
             form.card_mask = last4 ? `**** ${last4}` : '';
+        } else if (canPayWithPagbank.value) {
+            const numberDigits = (efiCardNumber.value || '').replace(/\D/g, '');
+            const expDigits = (efiCardExp.value || '').replace(/\D/g, '');
+            const month = expDigits.slice(0, 2);
+            let year = expDigits.slice(2);
+            if (year.length === 2) year = `20${year}`;
+            const cvv = (efiCardCvv.value || '').replace(/\D/g, '').slice(0, 4);
+            if (numberDigits.length < 13 || numberDigits.length > 19 || month.length !== 2 || year.length !== 4 || cvv.length < 3) {
+                cardError.value = 'Preencha todos os dados do cartão corretamente.';
+                cardSubmitting.value = false;
+                return;
+            }
+            const encrypted = await encryptPagBankCard({
+                publicKey: props.card_pagbank_public_key,
+                holder: name,
+                number: numberDigits,
+                expMonth: month,
+                expYear: year,
+                securityCode: cvv,
+            });
+            const last4 = numberDigits.slice(-4);
+            form.payment_token = JSON.stringify({ encrypted_card: encrypted, installments: 1 });
+            form.card_mask = last4 ? `**** ${last4}` : '';
         } else if (canPayWithCielo.value) {
             const numberDigits = (efiCardNumber.value || '').replace(/\D/g, '');
             const expDigits = (efiCardExp.value || '').replace(/\D/g, '');
@@ -462,7 +488,7 @@ function submitRenewal() {
                                 </div>
                             </div>
                         </template>
-                        <template v-else-if="canPayWithEfi || canPayWithCielo">
+                        <template v-else-if="canPayWithEfi || canPayWithCielo || canPayWithPagbank">
                             <template v-if="canPayWithCielo">
                                 <input type="hidden" class="bp-sop-cardholdername" :value="formatCieloSopHolderName(cardHolderName)" />
                                 <input type="hidden" class="bp-sop-cardnumber" :value="(efiCardNumber || '').replace(/\D/g, '')" />

@@ -28,6 +28,7 @@ final class GatewayWebhookUrl
             'pushinpay' => '/webhooks/gateways/pushinpay',
             'mercadopago' => '/webhooks/gateways/mercadopago',
             'pagarme' => '/webhooks/gateways/pagarme',
+            'pagbank' => '/webhooks/gateways/pagbank',
             'cielo' => '/webhooks/gateways/cielo',
             'xflow' => '/webhooks/gateways/xflow',
             'xflow.payout' => '/webhooks/gateways/xflow/payout',

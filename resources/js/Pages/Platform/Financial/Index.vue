@@ -133,7 +133,7 @@ const ACQUIRER_GROUPS = [
     {
         id: 'psp',
         title: 'PSP — Provedor de Serviços de Pagamento',
-        slugs: ['cajupay', 'efi', 'woovi', 'mercadopago', 'pagarme' /* , 'spacepag' */],
+        slugs: ['cajupay', 'efi', 'woovi', 'mercadopago', 'pagarme', 'pagbank' /* , 'spacepag' */],
         dotClass: 'bg-emerald-500',
     },
     {

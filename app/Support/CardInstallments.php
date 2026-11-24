@@ -16,7 +16,7 @@ final class CardInstallments
     public const MAX_MERCADOPAGO = 18;
 
     /** @var list<string> */
-    public const GATEWAY_SLUGS = ['pagarme', 'efi', 'asaas', 'cielo', 'cajupay', 'mercadopago'];
+    public const GATEWAY_SLUGS = ['pagarme', 'pagbank', 'efi', 'asaas', 'cielo', 'cajupay', 'mercadopago'];
 
     public static function gatewaySupports(?string $slug): bool
     {

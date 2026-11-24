@@ -19,6 +19,7 @@ import {
     resetPagarmeTokenizeScriptState,
 } from '@/composables/usePagarmeTokenizecard.js';
 import { requestCieloPaymentToken, formatCieloSopHolderName } from '@/composables/useCieloSilentOrderPost.js';
+import { encryptPagBankCard } from '@/composables/usePagBankEncryptCard.js';
 import { loadCajuPaySdk } from '@/composables/useCajuPaySdk';
 import { isValidCpf } from '@/utils/brazilianDocuments.js';
 import { navigateAfterCheckout } from '@/lib/checkoutRedirect.js';
@@ -444,9 +445,12 @@ const showCpf = computed(() => {
     if (form.payment_method === 'open_finance' || pixUsesStripe.value || isLinaOpenxPixAuto.value) {
         return true;
     }
+    if (currentMethodGatewaySlug.value === 'pagbank' && ['pix', 'card', 'boleto'].includes(form.payment_method)) {
+        return props.displayCurrency === 'BRL';
+    }
     return customerFields.value.cpf === true && props.displayCurrency === 'BRL';
 });
-const showPhone = computed(() => customerFields.value.phone === true);
+const showPhone = computed(() => customerFields.value.phone === true || currentMethodGatewaySlug.value === 'pagbank');
 const showCouponByConfig = computed(() => customerFields.value.coupon === true);
 const showCouponField = computed(() => showCouponByConfig.value || Boolean(props.prefillCoupon));
 const orderBumpColor = computed(() => props.config?.appearance?.order_bump_color || '#F59E0B');
@@ -477,6 +481,7 @@ const isCardGatewayEfi = computed(() => isCardMethodSelected.value && currentMet
 const isCardGatewayMercadopago = computed(() => isCardMethodSelected.value && currentMethodGatewaySlug.value === 'mercadopago');
 const isCardGatewayAsaas = computed(() => isCardMethodSelected.value && currentMethodGatewaySlug.value === 'asaas');
 const isCardGatewayPagarme = computed(() => isCardMethodSelected.value && currentMethodGatewaySlug.value === 'pagarme');
+const isCardGatewayPagbank = computed(() => isCardMethodSelected.value && currentMethodGatewaySlug.value === 'pagbank');
 const isCardGatewayCielo = computed(() => isCardMethodSelected.value && currentMethodGatewaySlug.value === 'cielo');
 const isCardGatewayCajupay = computed(() => isCardMethodSelected.value && currentMethodGatewaySlug.value === 'cajupay');
 const isCardPaymentFamily = computed(() => ['card', 'apple_pay', 'google_pay'].includes(form.payment_method));
@@ -545,6 +550,10 @@ const cardPagarmePublicKey = computed(() => {
     const k = props.cardGatewayKeys?.pagarme;
     return (k && typeof k.public_key === 'string' ? k.public_key : '').trim();
 });
+const cardPagbankPublicKey = computed(() => {
+    const k = props.cardGatewayKeys?.pagbank;
+    return (k && typeof k.public_key === 'string' ? k.public_key : '').trim();
+});
 /** Base da API v5 para POST /tokens (alinhada a config/services.pagarme.base_url no backend). */
 const cardPagarmeApiBaseUrl = computed(() => {
     const k = props.cardGatewayKeys?.pagarme;
@@ -558,7 +567,7 @@ const showDeliveryAddressBlock = computed(() => props.requiresShipping);
 const showBillingAddressBlock = computed(
     () =>
         !props.requiresShipping &&
-        (form.payment_method === 'boleto' || isCardGatewayPagarme.value)
+        (form.payment_method === 'boleto' || isCardGatewayPagarme.value || isCardGatewayPagbank.value)
 );
 
 const pagarmeTokenizeFormId = CHECKOUT_PAGARME_TOKENIZE_FORM_ID;
@@ -938,7 +947,7 @@ watch(
     (count) => {
         if (count > 0 && (form.payment_method === 'pix' || form.payment_method === 'pix_auto' || form.payment_method === 'boleto'
             || form.payment_method === 'open_finance' || form.payment_method === 'paypal'
-            || isCardGatewayPagarme.value)) {
+            || isCardGatewayPagarme.value || isCardGatewayPagbank.value)) {
             showEditForm.value = true;
         }
     }
@@ -1228,7 +1237,7 @@ const cardBrandImage = computed(() => {
 
 const cardNumberComplete = computed(() => {
     const d = cardNumberDigits.value;
-    if (isCardGatewayPagarme.value) {
+    if (isCardGatewayPagarme.value || isCardGatewayPagbank.value) {
         return pagarmePanLengthComplete(d);
     }
 
@@ -1241,13 +1250,13 @@ const cardNumberMasked = computed(() => {
 });
 
 function onCardNumberInput(e) {
-    const maxPan = isCardGatewayPagarme.value ? 19 : 16;
+    const maxPan = isCardGatewayPagarme.value || isCardGatewayPagbank.value ? 19 : 16;
     const v = (e.target.value || '').replace(/\D/g, '').slice(0, maxPan);
     cardNumberDigits.value = v;
     const parts = [];
     for (let i = 0; i < v.length; i += 4) parts.push(v.slice(i, i + 4));
     cardNumberDisplay.value = parts.join(' ');
-    const panComplete = isCardGatewayPagarme.value ? pagarmePanLengthComplete(v) : v.length === 16;
+    const panComplete = isCardGatewayPagarme.value || isCardGatewayPagbank.value ? pagarmePanLengthComplete(v) : v.length === 16;
     if (panComplete) {
         showFullCardNumber.value = false;
         nextTick(() => {
@@ -1263,7 +1272,7 @@ function reopenCardNumberEdit() {
 }
 function onCardNumberBlur() {
     const d = cardNumberDigits.value;
-    if (isCardGatewayPagarme.value) {
+    if (isCardGatewayPagarme.value || isCardGatewayPagbank.value) {
         if (pagarmePanLengthComplete(d)) showFullCardNumber.value = false;
     } else if (d.length === 16) {
         showFullCardNumber.value = false;
@@ -1293,7 +1302,7 @@ function onCardExpInput(e, part) {
     }
 }
 function onCardCvvInput(e) {
-    const max = isCardGatewayPagarme.value ? 4 : 3;
+    const max = isCardGatewayPagarme.value || isCardGatewayPagbank.value ? 4 : 3;
     cardCvv.value = (e.target.value || '').replace(/\D/g, '').slice(0, max);
 }
 
@@ -2418,6 +2427,27 @@ async function getPagarmePaymentToken() {
     }
 }
 
+async function getPagBankPaymentToken() {
+    const pk = cardPagbankPublicKey.value;
+    if (!pk) {
+        throw new Error('Chave pública da PagBank não configurada.');
+    }
+    const encrypted = await encryptPagBankCard({
+        publicKey: pk,
+        holder: (cardHolderName.value || form.name || '').trim(),
+        number: cardNumberDigits.value,
+        expMonth: cardExpMonth.value,
+        expYear: cardExpYear.value,
+        securityCode: cardCvv.value,
+    });
+    const installments = currentInstallments();
+    const last4 = cardNumberDigits.value.length >= 4 ? cardNumberDigits.value.slice(-4) : '';
+    return {
+        payment_token: JSON.stringify({ encrypted_card: encrypted, installments }),
+        card_mask: last4 ? `****${last4}` : '',
+    };
+}
+
 async function getCieloPaymentToken() {
     await nextTick();
     return requestCieloPaymentToken({
@@ -2581,8 +2611,9 @@ function submit() {
                 cardFormError.value = 'Aguarde o formulário do cartão carregar.';
                 return;
             }
-        } else if (isCardGatewayPagarme.value) {
-            if (!cardPagarmePublicKey.value) {
+        } else if (isCardGatewayPagarme.value || isCardGatewayPagbank.value) {
+            const publicKeyOk = isCardGatewayPagbank.value ? cardPagbankPublicKey.value : cardPagarmePublicKey.value;
+            if (!publicKeyOk) {
                 cardFormError.value = props.t('checkout.card_not_configured') || 'Pagamento por cartão não está configurado.';
                 return;
             }
@@ -2636,9 +2667,11 @@ function submit() {
             ? getStripePaymentMethod()
             : isCardGatewayPagarme.value
                 ? getPagarmePaymentToken()
-                : isCardGatewayCielo.value
-                    ? getCieloPaymentToken()
-                    : getEfiPaymentToken();
+                : isCardGatewayPagbank.value
+                    ? getPagBankPaymentToken()
+                    : isCardGatewayCielo.value
+                        ? getCieloPaymentToken()
+                        : getEfiPaymentToken();
         getTokenPromise
             .then(({ payment_token, card_mask }) => {
                 const payload = {
@@ -2653,7 +2686,7 @@ function submit() {
                     card_mask: card_mask || undefined,
                     installments: currentInstallments(),
                 };
-                if (isCardGatewayPagarme.value) {
+                if (isCardGatewayPagarme.value || isCardGatewayPagbank.value) {
                     payload.address_zipcode = (form.address_zipcode || '').replace(/\D/g, '').slice(0, 8);
                     payload.address_street = (form.address_street || '').trim();
                     payload.address_number = (form.address_number || '').trim();
@@ -3665,7 +3698,11 @@ function submit() {
                     </p>
                 </div>
                 <!-- Efí / Cielo: campos manuais (Cielo tokeniza via Silent Order Post, sem PAN no backend) -->
-                <div v-else-if="isCardGatewayEfi || isCardGatewayCielo" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div v-else-if="isCardGatewayEfi || isCardGatewayCielo || isCardGatewayPagbank" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <p v-if="isCardGatewayPagbank && !cardPagbankPublicKey" class="sm:col-span-2 rounded-xl border-2 border-amber-200 bg-amber-50/80 px-4 py-3 text-sm font-medium text-amber-800">
+                        Configure a chave pública do cartão nas credenciais da PagBank.
+                    </p>
+                    <template v-else>
                     <template v-if="isCardGatewayCielo">
                         <input type="hidden" class="bp-sop-cardholdername" :value="formatCieloSopHolderName(cardHolderName || form.name)" />
                         <input type="hidden" class="bp-sop-cardnumber" :value="cardNumberDigits" />
@@ -3756,7 +3793,7 @@ function submit() {
                                         type="text"
                                         inputmode="numeric"
                                         autocomplete="cc-csc"
-                                        maxlength="3"
+                                        :maxlength="isCardGatewayPagbank ? 4 : 3"
                                         class="w-11 border-0 bg-transparent py-3.5 px-0 text-center text-base font-medium text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0"
                                         placeholder="CVV"
                                         @input="onCardCvvInput"
@@ -3765,6 +3802,7 @@ function submit() {
                             </template>
                         </div>
                     </div>
+                    </template>
                 </div>
                 <!-- Parcelas (Pagar.me, Efí e Cielo; Stripe/MP/Asaas/CajuPay têm UI própria) -->
                 <div
