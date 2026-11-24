@@ -676,13 +676,21 @@ class CheckoutController extends Controller
         $firstPixAutoGateway = $paymentMethodForRules === 'pix_auto'
             ? $paymentService->getFirstAvailableGatewayForMethod($product->tenant_id, 'pix_auto', $product)
             : null;
+        $firstBoletoGateway = $paymentMethodForRules === 'boleto'
+            ? $paymentService->getFirstAvailableGatewayForMethod($product->tenant_id, 'boleto', $product)
+            : null;
+        $pagbankSelected = $firstCardGatewayForRules === 'pagbank'
+            || ($paymentMethodForRules === 'pix' && $firstPixGateway === 'pagbank')
+            || ($paymentMethodForRules === 'boleto' && $firstBoletoGateway === 'pagbank');
         $requireCpf = (($customerFields['cpf'] ?? false) && $displayCurrency === 'BRL')
             || ($firstCardGatewayForRules === 'pagarme' && $displayCurrency === 'BRL')
+            || ($pagbankSelected && $displayCurrency === 'BRL')
             || $paymentMethodForRules === 'open_finance'
             || $firstPixAutoGateway === 'linaopenx'
             || ($paymentMethodForRules === 'pix' && $firstPixGateway === 'stripe');
         $phoneRequiredForCheckout = ($customerFields['phone'] ?? false)
-            || ($paymentMethodForRules === 'pix' && $firstPixGateway === 'pagarme');
+            || ($paymentMethodForRules === 'pix' && $firstPixGateway === 'pagarme')
+            || $pagbankSelected;
 
         $rules = [
             'product_id' => ['required', 'exists:products,id'],
@@ -729,7 +737,7 @@ class CheckoutController extends Controller
                 $rules['address_neighborhood'] = ['required', 'string', 'max:255'];
                 $rules['address_city'] = ['required', 'string', 'max:255'];
                 $rules['address_state'] = ['required', 'string', 'max:2'];
-            } elseif ($firstCardGateway === 'pagarme') {
+            } elseif ($firstCardGateway === 'pagarme' || $firstCardGateway === 'pagbank') {
                 $rules['payment_token'] = ['required', 'string', 'max:10000'];
                 $rules['address_zipcode'] = ['required', 'string', 'max:9'];
                 $rules['address_street'] = ['required', 'string', 'max:255'];

@@ -325,11 +325,18 @@ class PaymentService
                     (string) $order->id,
                     $notificationUrl
                 );
-                $order->update([
+                $boletoPatch = [
                     'gateway' => $gatewaySlug,
                     'gateway_id' => $result['transaction_id'] ?? null,
                     'cajupay_account_id' => $gatewaySlug === 'cajupay' ? ($resolved['cajupay_account_id'] ?? null) : $order->cajupay_account_id,
-                ]);
+                ];
+                if (isset($result['metadata']) && is_array($result['metadata']) && $result['metadata'] !== []) {
+                    $boletoPatch['metadata'] = array_merge(
+                        is_array($order->metadata) ? $order->metadata : [],
+                        $result['metadata']
+                    );
+                }
+                $order->update($boletoPatch);
                 return [
                     'transaction_id' => $result['transaction_id'] ?? '',
                     'gateway' => $gatewaySlug,

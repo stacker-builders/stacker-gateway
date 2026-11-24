@@ -99,6 +99,7 @@ class ApiCheckoutController extends Controller
         $cardEfiPayeeCode = '';
         $cardEfiSandbox = false;
         $cardPagarmePublicKey = '';
+        $cardPagbankPublicKey = '';
         $efiHasCertificate = false;
 
         if ($cardGatewaySlug === 'stripe') {
@@ -131,6 +132,15 @@ class ApiCheckoutController extends Controller
                 $cardPagarmePublicKey = (string) ($creds['public_key'] ?? '');
             }
             if (trim($cardPagarmePublicKey) === '') {
+                $firstCardGateway = null;
+            }
+        } elseif ($cardGatewaySlug === 'pagbank') {
+            $cred = GatewayCredential::resolveForPayment($tenantId, 'pagbank');
+            if ($cred) {
+                $creds = $cred->getDecryptedCredentials();
+                $cardPagbankPublicKey = (string) ($creds['public_key'] ?? '');
+            }
+            if (trim($cardPagbankPublicKey) === '') {
                 $firstCardGateway = null;
             }
         } elseif ($cardGatewaySlug === 'cielo') {
@@ -213,6 +223,8 @@ class ApiCheckoutController extends Controller
             'card_efi_sandbox' => $cardEfiSandbox,
             'card_pagarme_public_key' => $cardPagarmePublicKey,
             'card_pagarme_api_base_url' => rtrim((string) config('services.pagarme.base_url', 'https://api.pagar.me/core/v5'), '/'),
+            'card_pagbank_public_key' => $cardPagbankPublicKey,
+            'billing_address_required' => $cardGatewaySlug === 'pagbank' || $firstBoletoGateway === 'pagbank',
             'turnstile' => CheckoutTurnstileSettings::publicConfig(),
         ]);
     }
@@ -392,6 +404,34 @@ class ApiCheckoutController extends Controller
             $pixGw = $paymentService->getFirstAvailableGatewayForMethod($tenantId, 'pix', $product, $gatewayConfig);
             if ($pixGw === 'pagarme' && trim((string) ($customer['phone'] ?? '')) === '') {
                 return redirect()->back()->with('error', 'Telefone do comprador é obrigatório para PIX (Pagar.me). Inclua phone ao criar a sessão de checkout.');
+            }
+        }
+
+        if ($availableGateway === 'pagbank') {
+            if (strlen($rawDoc) < 11) {
+                return redirect()->back()->with('error', 'CPF ou CNPJ do comprador é obrigatório para a PagBank. Inclua cpf ao criar a sessão de checkout.');
+            }
+            $consumer['document'] = $rawDoc;
+            if (trim((string) ($consumer['phone'] ?? '')) === '') {
+                return redirect()->back()->with('error', 'Telefone do comprador é obrigatório para a PagBank. Inclua phone ao criar a sessão de checkout.');
+            }
+            if (in_array($method, ['card', 'boleto'], true)) {
+                $address = $request->validate([
+                    'address_zipcode' => ['required', 'string', 'max:9'],
+                    'address_street' => ['required', 'string', 'max:255'],
+                    'address_number' => ['required', 'string', 'max:20'],
+                    'address_neighborhood' => ['required', 'string', 'max:255'],
+                    'address_city' => ['required', 'string', 'max:255'],
+                    'address_state' => ['required', 'string', 'max:2'],
+                ]);
+                $consumer['address'] = [
+                    'zip_code' => substr(preg_replace('/\D/', '', (string) $address['address_zipcode']) ?? '', 0, 8),
+                    'street_name' => trim((string) $address['address_street']),
+                    'street_number' => trim((string) $address['address_number']),
+                    'neighborhood' => trim((string) $address['address_neighborhood']),
+                    'city' => trim((string) $address['address_city']),
+                    'federal_unit' => strtoupper(substr(trim((string) $address['address_state']), 0, 2)),
+                ];
             }
         }
 

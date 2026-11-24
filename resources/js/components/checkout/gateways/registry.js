@@ -63,6 +63,11 @@ export const gatewayMethodComponents = {
         card: DefaultMethodCard,
         boleto: DefaultMethodCard,
     },
+    pagbank: {
+        pix: DefaultMethodCard,
+        card: DefaultMethodCard,
+        boleto: DefaultMethodCard,
+    },
     cielo: {
         pix: DefaultMethodCard,
         card: DefaultMethodCard,

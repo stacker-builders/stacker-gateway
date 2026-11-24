@@ -222,6 +222,7 @@ Route::middleware(['throttle:60,1', \App\Http\Middleware\LogInboundGatewayWebhoo
     Route::post('/webhooks/gateways/pushinpay', [\App\Http\Controllers\Webhooks\PushinPayWebhookController::class, 'handle'])->name('webhooks.pushinpay');
     Route::post('/webhooks/gateways/asaas', [\App\Http\Controllers\Webhooks\AsaasWebhookController::class, 'handle'])->name('webhooks.asaas');
     Route::post('/webhooks/gateways/pagarme', [\App\Http\Controllers\Webhooks\PagarmeWebhookController::class, 'handle'])->name('webhooks.pagarme');
+    Route::post('/webhooks/gateways/pagbank', [\App\Http\Controllers\Webhooks\PagBankWebhookController::class, 'handle'])->name('webhooks.pagbank');
     Route::post('/webhooks/gateways/cielo', [\App\Http\Controllers\Webhooks\CieloWebhookController::class, 'handle'])->name('webhooks.cielo');
     Route::post('/webhooks/gateways/cajupay/checkout', [\App\Http\Controllers\Webhooks\CajuPayCheckoutWebhookController::class, 'handle'])->name('webhooks.cajupay.checkout');
     Route::post('/webhooks/gateways/cajupay', [\App\Http\Controllers\Webhooks\CajuPayCheckoutWebhookController::class, 'handle'])->name('webhooks.cajupay');

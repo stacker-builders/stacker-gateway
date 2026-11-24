@@ -22,6 +22,7 @@ final class GatewayApiCredentials
             'mercadopago' => trim((string) ($credentials['access_token'] ?? '')) !== '',
             'stripe' => trim((string) ($credentials['secret_key'] ?? '')) !== '',
             'pagarme' => trim((string) ($credentials['secret_key'] ?? '')) !== '',
+            'pagbank' => trim((string) ($credentials['token'] ?? '')) !== '',
             'asaas' => trim((string) ($credentials['api_key'] ?? '')) !== '',
             'efi' => trim((string) ($credentials['client_id'] ?? '')) !== ''
                 && trim((string) ($credentials['client_secret'] ?? '')) !== '',

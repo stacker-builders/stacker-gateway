@@ -104,6 +104,7 @@ class RenewalController extends Controller
             'card_mercadopago_sandbox' => false,
             'card_pagarme_public_key' => '',
             'card_pagarme_api_base_url' => rtrim((string) config('services.pagarme.base_url', 'https://api.pagar.me/core/v5'), '/'),
+            'card_pagbank_public_key' => '',
             'card_gateway_keys' => [],
             'card_installments_enabled' => $resolvedInstallments['enabled'],
             'card_max_installments' => $resolvedInstallments['max'],
@@ -167,6 +168,17 @@ class RenewalController extends Controller
                     $creds = $cred->getDecryptedCredentials();
                     $payload['card_gateway_slug'] = 'pagarme';
                     $payload['card_pagarme_public_key'] = (string) ($creds['public_key'] ?? '');
+                }
+                break;
+            }
+        }
+        foreach ($availablePaymentMethods as $m) {
+            if (($m['id'] ?? '') === 'card' && ($m['gateway_slug'] ?? '') === 'pagbank') {
+                $cred = GatewayCredential::resolveForTenantOrGlobal($tenantId, 'pagbank');
+                if ($cred) {
+                    $creds = $cred->getDecryptedCredentials();
+                    $payload['card_gateway_slug'] = 'pagbank';
+                    $payload['card_pagbank_public_key'] = (string) ($creds['public_key'] ?? '');
                 }
                 break;
             }
@@ -387,12 +399,7 @@ class RenewalController extends Controller
             event(new OrderPending($order));
             try {
                 $paymentService = app(PaymentService::class);
-                $fake = FakeConsumerData::getForGateway($order->id);
-                $consumer = [
-                    'name' => $user->name ?? $user->email,
-                    'document' => $fake['document'],
-                    'email' => $user->email,
-                ];
+                $consumer = $this->renewalConsumer($user, $order->id);
                 $pixResult = $paymentService->createPixPayment($order, $product, $consumer);
                 event(new PixGenerated($order, [
                     'qrcode' => $pixResult['qrcode'] ?? null,
@@ -433,13 +440,7 @@ class RenewalController extends Controller
             event(new OrderPending($order));
             try {
                 $paymentService = app(PaymentService::class);
-                $fake = FakeConsumerData::getForGateway($order->id);
-                $consumer = [
-                    'name' => $user->name ?? $user->email,
-                    'document' => $fake['document'],
-                    'email' => $user->email,
-                    'phone' => '',
-                ];
+                $consumer = $this->renewalConsumer($user, $order->id);
                 $boletoResult = $paymentService->createBoletoPayment($order, $product, $consumer);
                 $boletoData = [
                     'amount' => $boletoResult['amount'] ?? $amount,
@@ -489,14 +490,7 @@ class RenewalController extends Controller
             event(new OrderPending($order));
             try {
                 $paymentService = app(PaymentService::class);
-                $fake = FakeConsumerData::getForGateway($order->id);
-                $rawDoc = preg_replace('/\D/', '', (string) ($user->document ?? ''));
-                $consumer = [
-                    'name' => $user->name ?? $user->email,
-                    'document' => strlen($rawDoc) >= 11 ? $rawDoc : $fake['document'],
-                    'email' => $user->email,
-                    'phone' => '',
-                ];
+                $consumer = $this->renewalConsumer($user, $order->id);
                 $card['currency'] = strtolower($currency);
                 $checkoutSlug = (string) ($plan->checkout_slug ?? $product->checkout_slug ?? '');
                 if ($checkoutSlug !== '') {
@@ -534,5 +528,37 @@ class RenewalController extends Controller
 
         return redirect()->route('renewal.show', $request->input('token'))
             ->with('success', 'Renovação concluída. Seu acesso foi estendido.');
+    }
+
+    /**
+     * @return array{name: string, document: string, email: string, phone: string, address?: array<string, string>}
+     */
+    private function renewalConsumer(\App\Models\User $user, int|string $seed): array
+    {
+        $fake = FakeConsumerData::getForGateway($seed);
+        $rawDoc = preg_replace('/\D/', '', (string) ($user->document ?? '')) ?? '';
+        $consumer = [
+            'name' => trim((string) ($user->name ?: $user->email ?: $fake['name'])),
+            'document' => strlen($rawDoc) >= 11 ? $rawDoc : (string) $fake['document'],
+            'email' => (string) $user->email,
+            'phone' => trim((string) ($user->phone ?? '')),
+        ];
+        $zip = preg_replace('/\D/', '', (string) ($user->address_zip ?? '')) ?? '';
+        $street = trim((string) ($user->address_street ?? ''));
+        $city = trim((string) ($user->address_city ?? ''));
+        $uf = strtoupper(substr(trim((string) ($user->address_state ?? '')), 0, 2));
+        if (strlen($zip) >= 8 && $street !== '' && $city !== '' && strlen($uf) === 2) {
+            $consumer['address'] = [
+                'zip_code' => substr($zip, 0, 8),
+                'street_name' => $street,
+                'street_number' => trim((string) ($user->address_number ?? '')) ?: 'S/N',
+                'neighborhood' => trim((string) ($user->address_neighborhood ?? '')) ?: 'Centro',
+                'city' => $city,
+                'federal_unit' => $uf,
+                'complement' => trim((string) ($user->address_complement ?? '')),
+            ];
+        }
+
+        return $consumer;
     }
 }
