@@ -394,5 +394,69 @@ class PlatformDashboardRevenueTest extends TestCase
         $kpis = PlatformRevenueKpis::compute(null, null);
 
         $this->assertSame(2.5, $kpis['faturamento_custo_adquirente_saques']);
+        $this->assertSame(0.0, $kpis['faturamento_taxas_saque']);
+    }
+
+    public function test_liquido_adds_paid_withdrawal_fee_and_subtracts_payout_cost(): void
+    {
+        if (! Schema::hasTable('withdrawals') || ! Schema::hasTable('cajupay_accounts')) {
+            $this->markTestSkipped('withdrawals/cajupay tables');
+        }
+
+        Carbon::setTestNow(Carbon::parse('2026-04-13 14:00:00'));
+
+        $account = CajuPayAccount::create([
+            'name' => 'Payout account',
+            'is_default' => true,
+            'is_connected' => true,
+            'is_enabled' => true,
+        ]);
+        $account->setEncryptedCredentials([
+            'public_key' => 'gpk_fee',
+            'secret_key' => 'gsk_fee',
+            'cajupay_admin_fee_payout_brl' => '2,50',
+            'cajupay_admin_fee_payout_percent' => '0',
+        ]);
+        $account->save();
+
+        $seller = User::factory()->create(['role' => User::ROLE_INFOPRODUTOR]);
+        $seller->forceFill([
+            'tenant_id' => $seller->id,
+            'cajupay_account_id' => $account->id,
+        ])->save();
+
+        $paid = [
+            'tenant_id' => $seller->id,
+            'user_id' => $seller->id,
+            'bucket' => 'pix',
+            'currency' => 'BRL',
+            'payout_provider' => 'cajupay',
+            'payout_meta' => ['cajupay_account_id' => $account->id],
+        ];
+
+        Withdrawal::query()->create($paid + [
+            'amount' => 105.00,
+            'fee_amount' => 5.00,
+            'net_amount' => 100.00,
+            'status' => MerchantWithdrawalService::STATUS_PAID,
+        ]);
+        Withdrawal::query()->create($paid + [
+            'amount' => 52.00,
+            'fee_amount' => 2.00,
+            'net_amount' => 50.00,
+            'status' => MerchantWithdrawalService::STATUS_PENDING,
+        ]);
+        Withdrawal::query()->create($paid + [
+            'amount' => 31.00,
+            'fee_amount' => 1.00,
+            'net_amount' => 30.00,
+            'status' => MerchantWithdrawalService::STATUS_REJECTED,
+        ]);
+
+        $kpis = PlatformRevenueKpis::compute(null, null);
+
+        $this->assertSame(5.0, $kpis['faturamento_taxas_saque']);
+        $this->assertSame(2.5, $kpis['faturamento_custo_adquirente_saques']);
+        $this->assertSame(2.5, $kpis['faturamento_liquido']);
     }
 }

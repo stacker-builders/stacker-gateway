@@ -34,6 +34,7 @@ class PlatformDashboardAnalytics
         $revenue = PlatformRevenueKpis::compute($start, $end);
         $prevRevenue = $compare ? PlatformRevenueKpis::compute($prevStart, $prevEnd) : [
             'faturamento_taxas_cobradas' => 0.0,
+            'faturamento_taxas_saque' => 0.0,
             'faturamento_custo_adquirente_vendas' => 0.0,
             'faturamento_custo_adquirente_saques' => 0.0,
             'faturamento_liquido' => 0.0,
@@ -56,6 +57,7 @@ class PlatformDashboardAnalytics
             'withdrawals_pending_count' => $withdrawals['pending_count'],
             'infoprodutores_count' => $growth['infoprodutores_total'],
             'faturamento_taxas_cobradas' => $revenue['faturamento_taxas_cobradas'],
+            'faturamento_taxas_saque' => $revenue['faturamento_taxas_saque'],
             'faturamento_custo_adquirente_vendas' => $revenue['faturamento_custo_adquirente_vendas'],
             'faturamento_custo_adquirente_saques' => $revenue['faturamento_custo_adquirente_saques'],
             'faturamento_liquido' => $revenue['faturamento_liquido'],

@@ -47,6 +47,7 @@ const props = defineProps({
             withdrawals_pending_count: 0,
             infoprodutores_count: 0,
             faturamento_taxas_cobradas: 0,
+            faturamento_taxas_saque: 0,
             faturamento_custo_adquirente_vendas: 0,
             faturamento_custo_adquirente_saques: 0,
             faturamento_liquido: 0,
@@ -512,7 +513,9 @@ const paymentMax = computed(() => Math.max(1, ...props.payment_methods.map((m) =
                         {{ displayCurrency(kpis.faturamento_liquido) }}
                     </p>
                     <p class="mt-1 text-xs leading-relaxed text-zinc-500">
-                        Taxas {{ displayCurrency(kpis.faturamento_taxas_cobradas) }}
+                        Taxas vendas {{ displayCurrency(kpis.faturamento_taxas_cobradas) }}
+                        <span class="hidden sm:inline"> · </span>
+                        <span class="block sm:inline">Taxas saques {{ displayCurrency(kpis.faturamento_taxas_saque) }}</span>
                         <span class="hidden sm:inline"> · </span>
                         <span class="block sm:inline">Adq. vendas {{ displayCurrency(kpis.faturamento_custo_adquirente_vendas) }}</span>
                         <span class="hidden sm:inline"> · </span>
