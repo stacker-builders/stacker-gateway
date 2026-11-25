@@ -1046,6 +1046,17 @@ Route::middleware(['auth', 'admin.tenant', 'seller.panel', 'stacker.license', 'r
             Route::post('/frete/lojas/{store}/regras/reorder', [\App\Http\Controllers\ShippingController::class, 'reorderRules'])->name('frete.rules.reorder');
         });
         Route::get('/produtos', [\App\Http\Controllers\ProdutosController::class, 'index'])->name('produtos.index');
+        Route::post('/produtos/pastas', [\App\Http\Controllers\ProductFolderController::class, 'store'])
+            ->middleware('throttle:30,1')
+            ->name('produtos.folders.store');
+        Route::put('/produtos/pastas/{folder}', [\App\Http\Controllers\ProductFolderController::class, 'update'])
+            ->middleware('throttle:30,1')
+            ->whereNumber('folder')
+            ->name('produtos.folders.update');
+        Route::delete('/produtos/pastas/{folder}', [\App\Http\Controllers\ProductFolderController::class, 'destroy'])
+            ->middleware('throttle:30,1')
+            ->whereNumber('folder')
+            ->name('produtos.folders.destroy');
         Route::get('/produtos/afiliados', [\App\Http\Controllers\AffiliateProductPanelController::class, 'index'])->name('produtos.afiliados.index');
         Route::get('/produtos/afiliados/dashboard', \App\Http\Controllers\AffiliateDashboardController::class)->name('produtos.afiliados.dashboard');
         Route::get('/produtos/afiliados/vendas', [\App\Http\Controllers\AffiliateSalesController::class, 'index'])->name('produtos.afiliados.vendas');
