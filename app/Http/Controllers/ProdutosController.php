@@ -15,6 +15,7 @@ use App\Models\GatewayCredential;
 use App\Models\Product;
 use App\Models\ProductAffiliateEnrollment;
 use App\Models\ProductCoproducer;
+use App\Models\ProductFolder;
 use App\Models\ProductOffer;
 use App\Models\ProductOrderBump;
 use App\Models\ShippingStore;
@@ -37,6 +38,7 @@ use App\Support\CardInstallments;
 use App\Support\EmailLogoImage;
 use App\Support\HtmlSanitizer;
 use App\Support\MarketplaceSettings;
+use App\Support\SellerProductListing;
 use App\Support\WhatsappPhoneNormalizer;
 use Illuminate\Validation\ValidationException;
 use App\Support\MoneyDecimal;
@@ -105,37 +107,14 @@ class ProdutosController extends Controller
         $user = auth()->user();
         $tenantId = $user->tenant_id;
         $rates = config('products.rates', ['brl_eur' => 0.16, 'brl_usd' => 0.18]);
-        $query = Product::forTenant($tenantId)->orderBy('name');
-        if ($user->isTeam()) {
-            $allowed = app(TeamAccessService::class)->allowedProductIdsFor($user);
-            $query->whereIn('id', $allowed ?: ['__none__']);
-        }
+        $listing = SellerProductListing::forUser($user);
+        $query = $listing['query'];
+        $coproPercents = $listing['coproduction_percents'];
 
-        $coproIds = [];
-        $coproPercents = [];
-        if (! $user->isTeam()) {
-            ProductCoproducer::expireOverdue();
-            $coproRows = ProductCoproducer::query()
-                ->where('co_producer_user_id', $user->id)
-                ->where('status', ProductCoproducer::STATUS_ACTIVE)
-                ->where(function ($q) {
-                    $q->whereNull('starts_at')->orWhere('starts_at', '<=', now());
-                })
-                ->where(function ($q) {
-                    $q->whereNull('ends_at')->orWhere('ends_at', '>', now());
-                })
-                ->get(['product_id', 'commission_percent']);
-            $coproIds = $coproRows->pluck('product_id')->map(fn ($id) => (string) $id)->unique()->values()->all();
-            foreach ($coproRows as $row) {
-                $coproPercents[(string) $row->product_id] = (float) $row->commission_percent;
-            }
-        }
-
-        if ($coproIds !== []) {
-            $ownIds = (clone $query)->pluck('id')->map(fn ($id) => (string) $id)->all();
-            $allIds = array_values(array_unique(array_merge($ownIds, $coproIds)));
-            $query = Product::query()->whereIn('id', $allIds ?: ['__none__'])->orderBy('name');
-        }
+        $folderOptions = (clone $query)->get(['id', 'name']);
+        $visibleIds = $folderOptions->map(fn (Product $product) => (string) $product->id)->all();
+        $productFolders = ProductFolder::payloadForUser($user, $visibleIds);
+        $activeFolder = ProductFolder::findOwned($user, (string) $request->query('folder', ''));
 
         $category = '';
         if (Schema::hasColumn('products', 'category')) {
@@ -143,6 +122,12 @@ class ProdutosController extends Controller
             if ($category !== '') {
                 $query->ofCategory($category);
             }
+        }
+
+        if ($activeFolder instanceof ProductFolder) {
+            $match = collect($productFolders)->firstWhere('id', (int) $activeFolder->id);
+            $folderProductIds = is_array($match) ? ($match['product_ids'] ?? []) : [];
+            $query->whereIn('id', $folderProductIds !== [] ? $folderProductIds : ['__none__']);
         }
 
         $products = $query->paginate(20)->withQueryString()->through(function (Product $p) use ($rates, $tenantId, $coproPercents) {
@@ -187,8 +172,14 @@ class ProdutosController extends Controller
             'productTypes' => $productTypes,
             'billingTypes' => $billingTypes,
             'productCategories' => Product::categoriesForSelect(),
+            'productFolders' => $productFolders,
+            'folderProducts' => $folderOptions->map(fn (Product $product) => [
+                'id' => (string) $product->id,
+                'name' => $product->name,
+            ])->values()->all(),
             'filters' => [
                 'category' => $category !== '' ? $category : null,
+                'folder' => $activeFolder instanceof ProductFolder ? (int) $activeFolder->id : null,
             ],
             'exchange_rates' => $rates,
             'plugin_card_actions' => [],

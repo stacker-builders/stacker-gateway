@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { Link, router } from '@inertiajs/vue3';
+import { Link, router, useForm } from '@inertiajs/vue3';
 import LayoutInfoprodutor from '@/Layouts/LayoutInfoprodutor.vue';
 import Button from '@/components/ui/Button.vue';
 import ProdutosTabs from '@/components/produtos/ProdutosTabs.vue';
@@ -10,7 +10,7 @@ import AuroraPageHeader from '@/components/aurora/AuroraPageHeader.vue';
 import AuroraPageSection from '@/components/aurora/AuroraPageSection.vue';
 import { useI18n } from '@/composables/useI18n';
 import { usePanelThemeClasses } from '@/composables/usePanelThemeClasses';
-import { LayoutGrid, LayoutList, Package } from 'lucide-vue-next';
+import { FolderPlus, LayoutGrid, LayoutList, Package, Pencil, Trash2 } from 'lucide-vue-next';
 import { htmlToText } from '@/lib/sanitizeHtml';
 
 defineOptions({ layout: LayoutInfoprodutor });
@@ -77,6 +77,8 @@ const props = defineProps({
     productTypes: { type: Array, default: () => [] },
     billingTypes: { type: Array, default: () => [] },
     productCategories: { type: Array, default: () => [] },
+    productFolders: { type: Array, default: () => [] },
+    folderProducts: { type: Array, default: () => [] },
     exchange_rates: { type: Object, default: () => ({ brl_eur: 0.16, brl_usd: 0.18 }) },
     plugin_card_actions: { type: Object, default: () => ({}) },
     plugin_form_sections: { type: Array, default: () => [] },
@@ -94,6 +96,19 @@ const props = defineProps({
 
 const produtosList = computed(() => props.produtos?.data ?? (Array.isArray(props.produtos) ? props.produtos : []));
 const selectedCategory = computed(() => props.filters?.category || '');
+const selectedFolder = computed(() => (props.filters?.folder ? String(props.filters.folder) : ''));
+const selectedFolderRecord = computed(() => (
+    props.productFolders.find((folder) => String(folder.id) === selectedFolder.value) || null
+));
+
+function listingParams({ category, folder } = {}) {
+    const params = {};
+    const nextCategory = category !== undefined ? category : selectedCategory.value;
+    const nextFolder = folder !== undefined ? folder : selectedFolder.value;
+    if (nextCategory) params.category = nextCategory;
+    if (nextFolder) params.folder = nextFolder;
+    return params;
+}
 
 const categorySelectClass = computed(() => {
     const base = 'h-9 max-w-full rounded-xl border px-3 text-sm font-medium shadow-sm';
@@ -105,7 +120,16 @@ const categorySelectClass = computed(() => {
 
 function setCategory(event) {
     const value = String(event.target.value || '');
-    router.get('/produtos', value ? { category: value } : {}, {
+    router.get('/produtos', listingParams({ category: value }), {
+        preserveState: true,
+        preserveScroll: true,
+        replace: true,
+    });
+}
+
+function setFolder(event) {
+    const value = String(event.target.value || '');
+    router.get('/produtos', listingParams({ folder: value }), {
         preserveState: true,
         preserveScroll: true,
         replace: true,
@@ -115,6 +139,103 @@ function setCategory(event) {
 const sidebarOpen = ref(false);
 const openMenuId = ref(null);
 const productToDelete = ref(null);
+const folderModalOpen = ref(false);
+const editingFolder = ref(null);
+const folderToDelete = ref(null);
+const folderProductQuery = ref('');
+const folderForm = useForm({
+    name: '',
+    product_ids: [],
+    return_category: '',
+});
+
+const filteredFolderProducts = computed(() => {
+    const query = folderProductQuery.value.trim().toLowerCase();
+    if (!query) return props.folderProducts;
+    return props.folderProducts.filter((product) => String(product.name || '').toLowerCase().includes(query));
+});
+
+function openCreateFolder() {
+    editingFolder.value = null;
+    folderProductQuery.value = '';
+    folderForm.clearErrors();
+    folderForm.name = '';
+    folderForm.product_ids = [];
+    folderModalOpen.value = true;
+}
+
+function openEditFolder() {
+    const folder = selectedFolderRecord.value;
+    if (!folder) return;
+    const visible = new Set(props.folderProducts.map((product) => String(product.id)));
+    editingFolder.value = folder;
+    folderProductQuery.value = '';
+    folderForm.clearErrors();
+    folderForm.name = folder.name;
+    folderForm.product_ids = (folder.product_ids || []).map(String).filter((id) => visible.has(id));
+    folderModalOpen.value = true;
+}
+
+function closeFolderModal() {
+    if (folderForm.processing) return;
+    folderModalOpen.value = false;
+    editingFolder.value = null;
+}
+
+function isFolderProductSelected(id) {
+    return folderForm.product_ids.map(String).includes(String(id));
+}
+
+function toggleFolderProduct(id) {
+    const key = String(id);
+    const current = folderForm.product_ids.map(String);
+    folderForm.product_ids = current.includes(key)
+        ? current.filter((item) => item !== key)
+        : [...current, key];
+}
+
+function selectFilteredFolderProducts() {
+    const current = new Set(folderForm.product_ids.map(String));
+    for (const product of filteredFolderProducts.value) {
+        current.add(String(product.id));
+    }
+    folderForm.product_ids = [...current];
+}
+
+function clearFolderProducts() {
+    folderForm.product_ids = [];
+}
+
+function submitFolder() {
+    folderForm.return_category = selectedCategory.value || '';
+    const options = {
+        preserveScroll: true,
+        onSuccess: () => {
+            folderModalOpen.value = false;
+            editingFolder.value = null;
+        },
+    };
+    if (editingFolder.value) {
+        folderForm.put(`/produtos/pastas/${editingFolder.value.id}`, options);
+        return;
+    }
+    folderForm.post('/produtos/pastas', options);
+}
+
+function confirmDestroyFolder() {
+    const folder = folderToDelete.value;
+    if (!folder) return;
+    const category = selectedCategory.value;
+    const url = category
+        ? `/produtos/pastas/${folder.id}?category=${encodeURIComponent(category)}`
+        : `/produtos/pastas/${folder.id}`;
+    router.delete(url, {
+        preserveScroll: true,
+        onSuccess: () => {
+            folderToDelete.value = null;
+        },
+    });
+}
 
 function openSidebar() {
     sidebarOpen.value = true;
@@ -140,12 +261,29 @@ function handleClickOutside(event) {
     }
 }
 
+function onEscape(event) {
+    if (event.key !== 'Escape') return;
+    if (folderModalOpen.value) {
+        closeFolderModal();
+        return;
+    }
+    if (folderToDelete.value) {
+        folderToDelete.value = null;
+        return;
+    }
+    if (productToDelete.value) {
+        closeDeleteModal();
+    }
+}
+
 onMounted(() => {
     document.addEventListener('click', handleClickOutside);
+    document.addEventListener('keydown', onEscape);
 });
 
 onUnmounted(() => {
     document.removeEventListener('click', handleClickOutside);
+    document.removeEventListener('keydown', onEscape);
 });
 
 function formatBRL(value) {
@@ -238,10 +376,51 @@ function pluginActions(productId) {
                         {{ cat.label }}
                     </option>
                 </select>
+                <label class="sr-only" for="produtos-folder-filter">Pasta</label>
+                <select
+                    id="produtos-folder-filter"
+                    :value="selectedFolder"
+                    :class="categorySelectClass"
+                    aria-label="Filtrar por pasta"
+                    @change="setFolder"
+                >
+                    <option value="">Todas as pastas</option>
+                    <option
+                        v-for="folder in productFolders"
+                        :key="folder.id"
+                        :value="String(folder.id)"
+                    >
+                        {{ folder.name }} ({{ folder.products_count }})
+                    </option>
+                </select>
+                <button
+                    v-if="selectedFolderRecord"
+                    type="button"
+                    class="inline-flex h-9 items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                    @click="openEditFolder"
+                >
+                    <Pencil class="h-4 w-4" aria-hidden="true" />
+                    Editar pasta
+                </button>
+                <button
+                    v-if="selectedFolderRecord"
+                    type="button"
+                    class="inline-flex h-9 items-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 text-sm font-medium text-red-600 shadow-sm hover:bg-red-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-red-400 dark:hover:bg-red-950/40"
+                    @click="folderToDelete = selectedFolderRecord"
+                >
+                    <Trash2 class="h-4 w-4" aria-hidden="true" />
+                    Excluir
+                </button>
                 </div>
-                <Button class="self-start sm:self-auto" @click="openSidebar">
-                    Novo produto
-                </Button>
+                <div class="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                    <Button variant="outline" @click="openCreateFolder">
+                        <FolderPlus class="h-4 w-4" aria-hidden="true" />
+                        Criar pasta
+                    </Button>
+                    <Button @click="openSidebar">
+                        Novo produto
+                    </Button>
+                </div>
             </div>
 
             <div
@@ -526,7 +705,9 @@ function pluginActions(productId) {
                 :class="isAurora ? 'border-[var(--aurora-border)]' : isKawaii ? 'border-[var(--kawaii-border)]' : isNoir ? 'border-[var(--noir-border)]' : 'border-zinc-300 dark:border-zinc-700'"
             >
                 <Package class="h-14 w-14 text-zinc-400 dark:text-zinc-500" />
-                <p v-if="selectedCategory" class="mt-3 text-zinc-600 dark:text-zinc-400">Nenhum produto nesta categoria.</p>
+                <p v-if="selectedFolder && selectedCategory" class="mt-3 text-zinc-600 dark:text-zinc-400">Nenhum produto nesta pasta com a categoria selecionada.</p>
+                <p v-else-if="selectedFolder" class="mt-3 text-zinc-600 dark:text-zinc-400">Nenhum produto nesta pasta.</p>
+                <p v-else-if="selectedCategory" class="mt-3 text-zinc-600 dark:text-zinc-400">Nenhum produto nesta categoria.</p>
                 <template v-else>
                     <p class="mt-3 text-zinc-600 dark:text-zinc-400">Nenhum produto ainda.</p>
                     <Button class="mt-4" @click="openSidebar">
@@ -561,6 +742,158 @@ function pluginActions(productId) {
             />
         </nav>
     </div>
+
+    <Teleport to="body">
+        <div
+            v-if="folderModalOpen"
+            class="fixed inset-0 z-[100002] flex items-center justify-center p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="folder-modal-title"
+        >
+            <div
+                class="fixed inset-0 bg-zinc-900/60 dark:bg-zinc-950/70"
+                aria-hidden="true"
+                @click="closeFolderModal"
+            />
+            <form
+                class="relative flex max-h-[min(40rem,calc(100vh-2rem))] w-full max-w-lg flex-col rounded-xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-800"
+                @submit.prevent="submitFolder"
+            >
+                <div class="border-b border-zinc-200 px-5 py-4 dark:border-zinc-700">
+                    <h2 id="folder-modal-title" class="text-lg font-semibold text-zinc-900 dark:text-white">
+                        {{ editingFolder ? 'Editar pasta' : 'Criar pasta' }}
+                    </h2>
+                    <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                        Dê um nome e escolha os produtos. O filtro de pasta mostra só o que estiver dentro dela.
+                    </p>
+                </div>
+                <div class="space-y-4 overflow-y-auto px-5 py-4">
+                    <div>
+                        <label for="folder-name" class="mb-1.5 block text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                            Nome da pasta
+                        </label>
+                        <input
+                            id="folder-name"
+                            v-model="folderForm.name"
+                            type="text"
+                            maxlength="80"
+                            required
+                            placeholder="Ex.: Lançamento de novembro"
+                            class="h-10 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 shadow-sm outline-none ring-[var(--color-primary)] focus:ring-2 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
+                        />
+                        <p v-if="folderForm.errors.name" class="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                            {{ folderForm.errors.name }}
+                        </p>
+                    </div>
+                    <div>
+                        <div class="mb-1.5 flex items-center justify-between gap-2">
+                            <p class="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+                                Produtos na pasta
+                                <span class="font-normal text-zinc-500">({{ folderForm.product_ids.length }})</span>
+                            </p>
+                            <div class="flex items-center gap-2 text-xs">
+                                <button
+                                    type="button"
+                                    class="font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                                    @click="selectFilteredFolderProducts"
+                                >
+                                    Marcar visíveis
+                                </button>
+                                <button
+                                    type="button"
+                                    class="font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
+                                    @click="clearFolderProducts"
+                                >
+                                    Limpar
+                                </button>
+                            </div>
+                        </div>
+                        <input
+                            v-model="folderProductQuery"
+                            type="search"
+                            placeholder="Buscar produto"
+                            class="mb-2 h-9 w-full rounded-xl border border-zinc-200 bg-white px-3 text-sm text-zinc-900 shadow-sm outline-none ring-[var(--color-primary)] focus:ring-2 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
+                        />
+                        <div class="max-h-64 overflow-y-auto rounded-xl border border-zinc-200 dark:border-zinc-700">
+                            <p
+                                v-if="!folderProducts.length"
+                                class="px-3 py-6 text-center text-sm text-zinc-500"
+                            >
+                                Você ainda não tem produtos para colocar na pasta.
+                            </p>
+                            <p
+                                v-else-if="!filteredFolderProducts.length"
+                                class="px-3 py-6 text-center text-sm text-zinc-500"
+                            >
+                                Nenhum produto com esse nome.
+                            </p>
+                            <label
+                                v-for="product in filteredFolderProducts"
+                                :key="product.id"
+                                class="flex cursor-pointer items-center gap-3 border-b border-zinc-100 px-3 py-2.5 last:border-b-0 hover:bg-zinc-50 dark:border-zinc-700/80 dark:hover:bg-zinc-700/40"
+                            >
+                                <input
+                                    type="checkbox"
+                                    class="h-4 w-4 rounded border-zinc-300 text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
+                                    :checked="isFolderProductSelected(product.id)"
+                                    @change="toggleFolderProduct(product.id)"
+                                />
+                                <span class="min-w-0 flex-1 truncate text-sm text-zinc-800 dark:text-zinc-100">
+                                    {{ product.name }}
+                                </span>
+                            </label>
+                        </div>
+                        <p v-if="folderForm.errors.product_ids" class="mt-1.5 text-sm text-red-600 dark:text-red-400">
+                            {{ folderForm.errors.product_ids }}
+                        </p>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 border-t border-zinc-200 px-5 py-4 dark:border-zinc-700">
+                    <Button type="button" variant="outline" :disabled="folderForm.processing" @click="closeFolderModal">
+                        Cancelar
+                    </Button>
+                    <Button type="submit" :disabled="folderForm.processing || !folderForm.name.trim()">
+                        {{ editingFolder ? 'Salvar pasta' : 'Criar pasta' }}
+                    </Button>
+                </div>
+            </form>
+        </div>
+    </Teleport>
+
+    <Teleport to="body">
+        <div
+            v-if="folderToDelete"
+            class="fixed inset-0 z-[100002] flex items-center justify-center p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-folder-modal-title"
+        >
+            <div
+                class="fixed inset-0 bg-zinc-900/60 dark:bg-zinc-950/70"
+                aria-hidden="true"
+                @click="folderToDelete = null"
+            />
+            <div class="relative w-full max-w-sm rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-700 dark:bg-zinc-800">
+                <h2 id="delete-folder-modal-title" class="text-lg font-semibold text-zinc-900 dark:text-white">
+                    Excluir pasta?
+                </h2>
+                <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                    A pasta
+                    <strong class="text-zinc-900 dark:text-white">"{{ folderToDelete?.name }}"</strong>
+                    sai da sua organização. Os produtos continuam na conta.
+                </p>
+                <div class="mt-5 flex justify-end gap-3">
+                    <Button variant="outline" @click="folderToDelete = null">
+                        Cancelar
+                    </Button>
+                    <Button variant="destructive" @click="confirmDestroyFolder">
+                        Excluir pasta
+                    </Button>
+                </div>
+            </div>
+        </div>
+    </Teleport>
 
     <!-- Modal de confirmação de exclusão -->
     <Teleport to="body">
