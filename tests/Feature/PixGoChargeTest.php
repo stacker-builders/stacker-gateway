@@ -172,4 +172,54 @@ class PixGoChargeTest extends TestCase
         $this->assertEqualsWithDelta(1.0, (float) ($meta['percent_applied'] ?? 0), 0.0001);
         $this->assertEqualsWithDelta(0.50, (float) ($meta['fixed_applied'] ?? 0), 0.0001);
     }
+
+    public function test_admin_can_enable_pixgo_for_one_seller_while_global_stays_off(): void
+    {
+        PixGoAccess::setEnabled(false);
+
+        $admin = User::factory()->create([
+            'role' => User::ROLE_PLATFORM_ADMIN,
+            'tenant_id' => null,
+        ]);
+        $enabled = $this->approvedSeller();
+        $other = $this->approvedSeller();
+
+        $this->actingAs($admin)
+            ->put(route('plataforma.usuarios.update', $enabled), [
+                'name' => $enabled->name,
+                'email' => $enabled->email,
+                'pixgo_mode' => 'enabled',
+            ])
+            ->assertRedirect();
+
+        $this->assertTrue(PixGoAccess::effectiveForTenant((int) $enabled->id));
+        $this->assertFalse(PixGoAccess::effectiveForTenant((int) $other->id));
+        $this->assertFalse(PixGoAccess::globalEnabled());
+
+        $this->actingAs($admin)
+            ->get(route('plataforma.usuarios.edit', $enabled))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('merchant.pixgo_mode', PixGoAccess::MODE_ENABLED)
+                ->where('platform_pixgo_enabled', false)
+            );
+
+        $this->actingAs($enabled)->get('/pixgo')->assertOk();
+        $this->actingAs($enabled)
+            ->get('/dashboard')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->where('pixgo_enabled_effective', true));
+        $this->actingAs($other)->get('/pixgo')->assertNotFound();
+
+        $this->actingAs($admin)
+            ->put(route('plataforma.usuarios.update', $enabled), [
+                'name' => $enabled->name,
+                'email' => $enabled->email,
+                'pixgo_mode' => 'inherit',
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(PixGoAccess::MODE_INHERIT, PixGoAccess::tenantMode((int) $enabled->id));
+        $this->actingAs($enabled)->get('/pixgo')->assertNotFound();
+    }
 }

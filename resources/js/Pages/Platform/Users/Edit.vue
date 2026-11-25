@@ -20,6 +20,7 @@ const props = defineProps({
     platform_referral_commission_percent: { type: Number, default: 20 },
     platform_charge_limits: { type: Object, default: () => ({ api_pix_minimum_charge_brl: 0.01, platform_minimum_charge_brl: 0 }) },
     platform_api_pix_enabled: { type: Boolean, default: true },
+    platform_pixgo_enabled: { type: Boolean, default: false },
     platform_integrations_enabled: { type: Object, default: () => ({}) },
     platform_integrations: { type: Array, default: () => [] },
     cajupay_accounts: { type: Array, default: () => [] },
@@ -129,6 +130,7 @@ const gatewayDirty = ref(false);
 const cajupayDirty = ref(false);
 const limitsDirty = ref(false);
 const apiPixDirty = ref(false);
+const pixgoDirty = ref(false);
 const integrationsDirty = ref(false);
 const initialGatewayPrimary = ref({});
 const feePercentRefs = {};
@@ -215,7 +217,7 @@ const form = useForm({
     address_neighborhood: '', address_city: '', address_state: '', monthly_revenue_range: '',
     admin_withdrawal_blocked: false, admin_blocked_amount: '', admin_block_until: '', admin_block_note: '',
     merchant_fees: defaultFees(), merchant_settlement_overrides: defaultSettlement(),
-    referral_commission_percent: '', api_pix_mode: 'inherit', integration_modes: defaultIntegrationModes(), med_zero_enabled: false,
+    referral_commission_percent: '', api_pix_mode: 'inherit', pixgo_mode: 'inherit', integration_modes: defaultIntegrationModes(), med_zero_enabled: false,
     api_pix_minimum_charge_brl: '', platform_minimum_charge_brl: '',
     use_platform_api_pix_minimum: true, use_platform_platform_minimum: true, cajupay_account_id: '',
 });
@@ -240,7 +242,7 @@ watch(() => form.errors, (errors) => {
     if (!errors || !Object.keys(errors).length) return;
     const has = (keys) => keys.some((key) => errors[key]);
     if (has(['name', 'email', 'phone', 'password', 'account_status', 'birth_date', 'document', 'company_name', 'trade_name', 'legal_representative_cpf', 'address_zip', 'address_street', 'address_number', 'address_complement', 'address_neighborhood', 'address_city', 'address_state', 'monthly_revenue_range'])) setActiveTab('dados');
-    else if (has(['admin_blocked_amount', 'admin_block_until', 'admin_block_note', 'api_pix_mode', 'med_zero_enabled', 'api_pix_minimum_charge_brl', 'platform_minimum_charge_brl', 'cajupay_account_id', 'merchant_gateway_order'])) setActiveTab('financeiro');
+    else if (has(['admin_blocked_amount', 'admin_block_until', 'admin_block_note', 'api_pix_mode', 'pixgo_mode', 'med_zero_enabled', 'api_pix_minimum_charge_brl', 'platform_minimum_charge_brl', 'cajupay_account_id', 'merchant_gateway_order'])) setActiveTab('financeiro');
     else if (has(['referral_commission_percent', 'merchant_fees', 'merchant_settlement_overrides'])) setActiveTab('taxas');
     else if (has(['integration_modes'])) setActiveTab('integracoes');
 }, { deep: true });
@@ -307,6 +309,7 @@ function initialize() {
         merchant_settlement_overrides: mergeSettlement(merchant.merchant_settlement_overrides),
         referral_commission_percent: merchant.referral_commission_percent != null ? String(merchant.referral_commission_percent) : '',
         api_pix_mode: merchant.api_pix_mode || 'inherit',
+        pixgo_mode: merchant.pixgo_mode || 'inherit',
         integration_modes: { ...defaultIntegrationModes(), ...(merchant.integration_modes || {}) },
         med_zero_enabled: Boolean(merchant.med_zero_enabled),
         api_pix_minimum_charge_brl: limits.api_pix_minimum_charge_brl != null ? String(limits.api_pix_minimum_charge_brl) : '',
@@ -389,6 +392,11 @@ const feeComparison = computed(() => {
 const showCajuPay = computed(() => ['pix', 'card'].some((method) => gatewaysFor(method).some((gateway) => gateway.slug === 'cajupay')));
 const showPixAuto = computed(() => gatewaysFor('pix_auto').length > 0);
 const effectiveApiMinimum = computed(() => form.use_platform_api_pix_minimum ? Number(props.platform_charge_limits.api_pix_minimum_charge_brl) || 0 : Number(form.api_pix_minimum_charge_brl) || 0);
+const pixgoEffectiveEnabled = computed(() => {
+    if (form.pixgo_mode === 'enabled') return true;
+    if (form.pixgo_mode === 'disabled') return false;
+    return Boolean(props.platform_pixgo_enabled);
+});
 const effectivePlatformMinimum = computed(() => form.use_platform_platform_minimum ? Number(props.platform_charge_limits.platform_minimum_charge_brl) || 0 : Number(form.platform_minimum_charge_brl) || 0);
 function formatBRL(value) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value) || 0);
@@ -413,6 +421,7 @@ function submit() {
         if (settlementDirty.value) payload.merchant_settlement_overrides = normalizeMerchantSettlementOverridesForSubmit(data.merchant_settlement_overrides); else delete payload.merchant_settlement_overrides;
         if (gatewayDirty.value) payload.merchant_gateway_order = Object.keys(order).length ? order : null; else delete payload.merchant_gateway_order;
         if (!apiPixDirty.value) { delete payload.api_pix_mode; delete payload.med_zero_enabled; }
+        if (!pixgoDirty.value) delete payload.pixgo_mode;
         if (!integrationsDirty.value) { delete payload.integration_modes; }
         if (limitsDirty.value) {
             if (data.use_platform_api_pix_minimum) payload.api_pix_minimum_charge_brl = '';
@@ -655,6 +664,22 @@ function submit() {
                     <div><label class="text-sm">Ticket mínimo API PIX</label><input v-model="form.api_pix_minimum_charge_brl" type="number" min="0" step="0.01" :disabled="form.use_platform_api_pix_minimum" class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800" @input="limitsDirty = true" /><label class="mt-1 flex gap-2 text-xs"><input v-model="form.use_platform_api_pix_minimum" type="checkbox" @change="limitsDirty = true" /> Usar padrão (efetivo: {{ formatBRL(effectiveApiMinimum) }})</label></div>
                     <div><label class="text-sm">Ticket mínimo plataforma</label><input v-model="form.platform_minimum_charge_brl" type="number" min="0" step="0.01" :disabled="form.use_platform_platform_minimum" class="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-800" @input="limitsDirty = true" /><label class="mt-1 flex gap-2 text-xs"><input v-model="form.use_platform_platform_minimum" type="checkbox" @change="limitsDirty = true" /> Usar padrão (efetivo: {{ formatBRL(effectivePlatformMinimum) }})</label></div>
                 </div></div>
+            </section>
+
+            <section class="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+                <h2 class="font-semibold">PixGo</h2>
+                <p class="mt-1 text-xs text-zinc-500">
+                    Padrão global: {{ platform_pixgo_enabled ? 'habilitado' : 'desabilitado' }}.
+                    Herdar segue a plataforma. Habilitada liga o PixGo só para este infoprodutor, mesmo com o global desligado.
+                </p>
+                <select v-model="form.pixgo_mode" class="mt-3 w-full max-w-sm rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-600 dark:bg-zinc-800" @change="pixgoDirty = true">
+                    <option value="inherit">Herdar plataforma</option>
+                    <option value="enabled">Habilitada</option>
+                    <option value="disabled">Desabilitada</option>
+                </select>
+                <p class="mt-2 text-xs text-zinc-500">
+                    Efetivo para este seller: {{ pixgoEffectiveEnabled ? 'habilitado' : 'desabilitado' }}.
+                </p>
             </section>
             </div>
 

@@ -21,6 +21,7 @@ use App\Services\AccountManagerAssignmentService;
 use App\Services\EffectiveMerchantFees;
 use App\Services\MinimumChargeService;
 use App\Services\ApiPixAccess;
+use App\Services\PixGoAccess;
 use App\Services\SellerIntegrationVisibility;
 use App\Services\Med\MedPolicyService;
 use App\Services\Platform\MerchantRevenueBreakdownService;
@@ -372,6 +373,7 @@ class UsersController extends Controller
             'merchant_gateway_order' => $user->merchant_gateway_order ?? [],
             'cajupay_account_id' => $user->cajupay_account_id,
             'api_pix_mode' => $tenantId > 0 ? ApiPixAccess::tenantMode($tenantId) : ApiPixAccess::MODE_INHERIT,
+            'pixgo_mode' => $tenantId > 0 ? PixGoAccess::tenantMode($tenantId) : PixGoAccess::MODE_INHERIT,
             'integration_modes' => $tenantId > 0 ? SellerIntegrationVisibility::tenantModes($tenantId) : SellerIntegrationVisibility::tenantModes(null),
             'med_zero_enabled' => $tenantId > 0 ? app(MedPolicyService::class)->medZeroForTenant($tenantId) : false,
             'charge_limits' => $tenantId > 0 ? $this->chargeLimitsPayloadForTenant($tenantId) : $this->emptyChargeLimitsPayload(),
@@ -401,6 +403,7 @@ class UsersController extends Controller
                 'platform_minimum_charge_brl' => $this->minimumChargeService->platformMinimumBrl(),
             ],
             'platform_api_pix_enabled' => ApiPixAccess::globalEnabled(),
+            'platform_pixgo_enabled' => PixGoAccess::globalEnabled(),
             'platform_integrations_enabled' => SellerIntegrationVisibility::globalMap(),
             'platform_integrations' => SellerIntegrationVisibility::catalog(),
             'cajupay_accounts' => CajuPayAccount::query()
@@ -953,6 +956,7 @@ class UsersController extends Controller
             'admin_block_until' => ['nullable', 'date'],
             'admin_block_note' => ['nullable', 'string', 'max:500'],
             'api_pix_mode' => ['nullable', 'string', 'in:inherit,enabled,disabled'],
+            'pixgo_mode' => ['nullable', 'string', 'in:inherit,enabled,disabled'],
             'integration_modes' => ['nullable', 'array'],
             'integration_modes.*' => ['nullable', 'string', 'in:inherit,enabled,disabled'],
             'med_zero_enabled' => ['nullable', 'boolean'],
@@ -1062,6 +1066,20 @@ class UsersController extends Controller
                 if ($prevMode !== $newMode) {
                     ApiPixAccess::setTenantMode($tenantId, $newMode);
                     PlatformAuditService::log('platform.merchant.api_pix_mode', [
+                        'merchant_user_id' => $user->id,
+                        'tenant_id' => $tenantId,
+                        'from' => $prevMode,
+                        'to' => $newMode,
+                    ], $request);
+                }
+            }
+
+            if ($request->has('pixgo_mode') && isset($validated['pixgo_mode'])) {
+                $prevMode = PixGoAccess::tenantMode($tenantId);
+                $newMode = $validated['pixgo_mode'];
+                if ($prevMode !== $newMode) {
+                    PixGoAccess::setTenantMode($tenantId, $newMode);
+                    PlatformAuditService::log('platform.merchant.pixgo_mode', [
                         'merchant_user_id' => $user->id,
                         'tenant_id' => $tenantId,
                         'from' => $prevMode,
@@ -1474,6 +1492,7 @@ class UsersController extends Controller
         $recursos = [];
         if (Schema::hasTable('settings')) {
             $recursos[] = ['value' => 'api_pix', 'label' => 'API PIX'];
+            $recursos[] = ['value' => 'pixgo', 'label' => 'PixGo'];
             $recursos[] = ['value' => 'med_zero', 'label' => 'MED Zero'];
         }
 
@@ -1544,6 +1563,11 @@ class UsersController extends Controller
                 $usersQuery,
                 'api_pix_enabled',
                 ApiPixAccess::globalEnabled()
+            ),
+            'pixgo' => $this->whereEffectiveTenantSetting(
+                $usersQuery,
+                PixGoAccess::SETTING_ENABLED,
+                PixGoAccess::globalEnabled()
             ),
             'med_zero' => $this->whereEffectiveTenantSetting($usersQuery, MedPolicyService::SETTING_MED_ZERO, false),
             default => null,

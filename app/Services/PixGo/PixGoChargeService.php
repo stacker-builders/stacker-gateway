@@ -28,7 +28,7 @@ class PixGoChargeService
      */
     public function charge(int $tenantId, float $amountBrl, array $buyer = []): array
     {
-        if (! PixGoAccess::globalEnabled()) {
+        if (! PixGoAccess::effectiveForTenant($tenantId)) {
             abort(404);
         }
 

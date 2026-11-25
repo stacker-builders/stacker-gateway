@@ -356,7 +356,11 @@ class HandleInertiaRequests extends Middleware
                 ? ReferralProgramSettings::publicConfig()
                 : ['enabled' => false],
             'pixgo_enabled_effective' => $user && $user->canAccessSellerPanel()
-                ? \App\Services\PixGoAccess::globalEnabled()
+                ? \App\Services\PixGoAccess::effectiveForTenant(
+                    (int) ($user->tenant_id ?: $user->id) > 0
+                        ? (int) ($user->tenant_id ?: $user->id)
+                        : null
+                )
                 : false,
             'pixgo_sidebar_label' => $user && $user->canAccessSellerPanel()
                 ? \App\Services\PixGoAccess::sidebarLabel()

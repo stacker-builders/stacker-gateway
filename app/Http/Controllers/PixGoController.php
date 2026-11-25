@@ -126,13 +126,14 @@ class PixGoController extends Controller
 
     private function assertPixGoAvailable(Request $request): void
     {
-        if (! PixGoAccess::globalEnabled()) {
-            throw new NotFoundHttpException;
-        }
-
         $user = $request->user();
         if (! $user instanceof User) {
             abort(403);
+        }
+
+        $tenantId = (int) ($user->tenant_id ?: $user->id);
+        if (! PixGoAccess::effectiveForTenant($tenantId > 0 ? $tenantId : null)) {
+            throw new NotFoundHttpException;
         }
 
         MerchantOperationalGuard::assertCanOperateSellerPanel($user);
